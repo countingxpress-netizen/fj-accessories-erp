@@ -27,6 +27,8 @@ type PendingItem = {
   finalLbs: number;
   hasPrint: boolean;
   printColors: number;
+  ratePerColor: number;
+  ratePerInch: number;
   kg: number;
   bags: number;
   materialsNeeded: { name: string; qty: number }[];
@@ -48,6 +50,8 @@ export default function BookingForm({
   const [deliveryPoint, setDeliveryPoint] = useState("");
   const [hasPrint, setHasPrint] = useState(false);
   const [printColors, setPrintColors] = useState("");
+  const [ratePerColor, setRatePerColor] = useState("0.20");
+  const [ratePerInch, setRatePerInch] = useState("0.02");
   const [printLayoutNote, setPrintLayoutNote] = useState("");
 
   // Current item fields (Add Product চাপলে রিসেট হবে)
@@ -142,6 +146,8 @@ export default function BookingForm({
     } else {
       setHasPrint(false);
       setPrintColors("");
+      setRatePerColor("0.20");
+      setRatePerInch("0.02");
       setWarning("");
     }
   }
@@ -194,6 +200,8 @@ export default function BookingForm({
       materialType, quantity: qty, warehouseId, warehouseName,
       finalLbs: calculated.finalLbs, kg: calculated.kg, bags: calculated.bags,
       materialsNeeded, lengthCm, widthCm, hasPrint, printColors: parseInt(printColors) || 0,
+      ratePerColor: parseFloat(ratePerColor) || 0.20,
+      ratePerInch: parseFloat(ratePerInch) || 0.02,
     };
   }
 
@@ -318,6 +326,7 @@ export default function BookingForm({
           required_bags: Number(item.bags.toFixed(2)),
           delivery_point: deliveryPoint, print_layout_note: printLayoutNote,
           has_print: item.hasPrint, print_colors: item.printColors,
+          rate_per_color: item.ratePerColor, rate_per_inch: item.ratePerInch,
           customer_booking_ref: item.customerBookingRef || null,
           warehouse_id: item.warehouseId, status: "in_production",
         })
@@ -464,15 +473,31 @@ export default function BookingForm({
             <option value="custom">Custom (নিজের মতো লিখুন)</option>
           </select>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
           <label className="flex items-center gap-2 text-sm">
             <input type="checkbox" checked={hasPrint} onChange={(e) => setHasPrint(e.target.checked)} />
             Print আছে?
           </label>
           {hasPrint && (
-            <input type="number" min="0" placeholder="কয় Color" value={printColors} onChange={(e) => setPrintColors(e.target.value)} className="w-24 rounded-lg border px-3 py-2 text-sm" />
+            <>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">কয় Color</label>
+                <input type="number" min="0" value={printColors} onChange={(e) => setPrintColors(e.target.value)} className="w-24 rounded-lg border px-3 py-2 text-sm" />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Rate/Color/Pc</label>
+                <input type="number" step="0.01" value={ratePerColor} onChange={(e) => setRatePerColor(e.target.value)} className="w-28 rounded-lg border px-3 py-2 text-sm" />
+              </div>
+            </>
           )}
         </div>
+
+        {measurementType === "adhesive" && (
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Rate/Inch (Adhesive)</label>
+            <input type="number" step="0.001" value={ratePerInch} onChange={(e) => setRatePerInch(e.target.value)} className="w-28 rounded-lg border px-3 py-2 text-sm" />
+          </div>
+        )}
 
         {materialType === "custom" && (
           <div className="w-full rounded-lg border p-3 bg-gray-50 space-y-2">
