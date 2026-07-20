@@ -19,7 +19,9 @@ const statusColors: Record<string, string> = {
   cancelled: "bg-red-100 text-red-700",
 };
 
-export default function BookingRow({ booking }: { booking: any }) {
+export default function BookingRow({
+  booking, serial, isGroupStart, groupSize,
+}: { booking: any; serial?: number; isGroupStart?: boolean; groupSize?: number }) {
   const router = useRouter();
   const supabase = createClient();
 
@@ -68,12 +70,21 @@ export default function BookingRow({ booking }: { booking: any }) {
     router.refresh();
   }
 
+  const groupBg = groupSize && groupSize > 1 ? "bg-blue-50/40" : "";
+
   return (
-    <tr className="border-t">
-      <td className="px-4 py-2 font-medium">{booking.booking_no}</td>
+    <tr className={`border-t ${groupBg} ${isGroupStart && groupSize && groupSize > 1 ? "border-t-2 border-t-blue-200" : ""}`}>
+      <td className="px-4 py-2 text-gray-500">{serial ?? ""}</td>
+      <td className="px-4 py-2 font-medium">
+        {booking.booking_no}
+        {groupSize && groupSize > 1 && (
+          <span className="ml-1 text-xs text-blue-600">({groupSize}টি প্রোডাক্ট)</span>
+        )}
+      </td>
       <td className="px-4 py-2 text-gray-500">{formatDate(booking.booking_date)}</td>
       <td className="px-4 py-2">{booking.customers?.name ?? "-"}</td>
       <td className="px-4 py-2 text-gray-500">{booking.buyers?.name ?? "-"}</td>
+      <td className="px-4 py-2 text-gray-500">{booking.garments_name ?? "-"}</td>
       <td className="px-4 py-2">{booking.finished_goods?.product_name ?? "-"}</td>
       <td className="px-4 py-2 text-right">{booking.quantity_pcs?.toLocaleString()}</td>
       <td className="px-4 py-2 text-right">{booking.required_lbs?.toFixed(2)}</td>

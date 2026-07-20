@@ -46,6 +46,7 @@ export default function BookingForm({
   const [customerId, setCustomerId] = useState("");
   const [buyerName, setBuyerName] = useState("");
   const [merchantName, setMerchantName] = useState("");
+  const [garmentsName, setGarmentsName] = useState("");
   const [bookingDate, setBookingDate] = useState(new Date().toISOString().slice(0, 10));
   const [deliveryPoint, setDeliveryPoint] = useState("");
   const [hasPrint, setHasPrint] = useState(false);
@@ -247,6 +248,8 @@ export default function BookingForm({
 
     setLoading(true);
 
+    const groupId = crypto.randomUUID();
+
     // Buyer/Merchant upsert (একবারই, সব item শেয়ার করবে)
     let buyerId: string | null = null;
     if (buyerName.trim()) {
@@ -327,6 +330,7 @@ export default function BookingForm({
           delivery_point: deliveryPoint, print_layout_note: printLayoutNote,
           has_print: item.hasPrint, print_colors: item.printColors,
           rate_per_color: item.ratePerColor, rate_per_inch: item.ratePerInch,
+          garments_name: garmentsName || null, booking_group_id: groupId,
           customer_booking_ref: item.customerBookingRef || null,
           warehouse_id: item.warehouseId, status: "in_production",
         })
@@ -398,6 +402,10 @@ export default function BookingForm({
         <div className="flex-1 min-w-[180px]">
           <label className="block text-sm text-gray-600 mb-1">Merchant Name</label>
           <input value={merchantName} onChange={(e) => setMerchantName(e.target.value)} className="w-full rounded-lg border px-3 py-2 text-sm" placeholder="Merchant নাম" />
+        </div>
+        <div className="flex-1 min-w-[180px]">
+          <label className="block text-sm text-gray-600 mb-1">Garments</label>
+          <input value={garmentsName} onChange={(e) => setGarmentsName(e.target.value)} className="w-full rounded-lg border px-3 py-2 text-sm" placeholder="গার্মেন্টস নাম" />
         </div>
       </div>
 

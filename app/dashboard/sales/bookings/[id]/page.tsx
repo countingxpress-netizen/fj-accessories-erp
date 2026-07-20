@@ -53,6 +53,7 @@ export default async function BookingViewPage({ params }: { params: Promise<{ id
           <p><span className="text-gray-500">Customer:</span> {booking.customers?.name}</p>
           <p><span className="text-gray-500">Buyer:</span> {booking.buyers?.name ?? "-"}</p>
           <p><span className="text-gray-500">Merchant:</span> {booking.merchants?.name ?? "-"}</p>
+          <p><span className="text-gray-500">Garments:</span> {booking.garments_name ?? "-"}</p>
           <p><span className="text-gray-500">Style:</span> {booking.style ?? "-"}</p>
           <p><span className="text-gray-500">Customer Booking Ref:</span> {booking.customer_booking_ref ?? "-"}</p>
           <p><span className="text-gray-500">Booking Date:</span> {formatDate(booking.booking_date)}</p>
