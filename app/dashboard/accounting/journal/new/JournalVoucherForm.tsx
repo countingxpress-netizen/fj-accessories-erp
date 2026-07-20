@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { generateNextDocNo } from "@/lib/docNumber";
+import { createClient } from "@/lib/supabase/client";
 
 type Account = { id: string; account_code: string; account_name: string; account_type: string };
 type Line = { account_id: string; accountLabel: string; debit: string; credit: string; memo: string };
