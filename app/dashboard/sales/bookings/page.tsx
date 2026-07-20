@@ -1,3 +1,4 @@
+import React from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import BookingRow from "./BookingRow";
@@ -31,7 +32,7 @@ export default async function BookingsListPage() {
         </Link>
       </div>
 
-      <div className="overflow-hidden rounded-xl border bg-white shadow-sm">
+      <div className="rounded-xl border bg-white shadow-sm overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="bg-gray-50 text-left text-gray-600">
             <tr>
@@ -50,7 +51,7 @@ export default async function BookingsListPage() {
           </thead>
           <tbody>
             {groups.map((group, gi) => (
-              <>
+              <React.Fragment key={group.groupId}>
                 {group.items.map((b: any, i: number) => (
                   <BookingRow
                     key={b.id}
@@ -60,7 +61,7 @@ export default async function BookingsListPage() {
                     groupSize={group.items.length}
                   />
                 ))}
-              </>
+              </React.Fragment>
             ))}
             {(!bookings || bookings.length === 0) && (
               <tr><td colSpan={11} className="px-4 py-3 text-gray-400 italic">এখনো কোনো Booking নেই</td></tr>

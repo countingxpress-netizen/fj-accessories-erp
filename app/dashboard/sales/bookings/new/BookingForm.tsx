@@ -20,6 +20,7 @@ type PendingItem = {
   flapVal: number;
   gussetVal: number;
   thicknessMm: number;
+  productionThicknessMm: number;
   materialType: "pe_standard" | "pe_rld" | "pp" | "custom";
   quantity: number;
   warehouseId: string;
@@ -66,6 +67,7 @@ export default function BookingForm({
   const [flapVal, setFlapVal] = useState("");
   const [gussetVal, setGussetVal] = useState("");
   const [thicknessMm, setThicknessMm] = useState("");
+  const [productionThicknessMm, setProductionThicknessMm] = useState("");
   const [materialType, setMaterialType] = useState<"pe_standard" | "pe_rld" | "pp" | "custom">("pe_standard");
   const [customLines, setCustomLines] = useState<CustomLine[]>([
     { material_id: "", percentage: "" },
@@ -97,6 +99,7 @@ export default function BookingForm({
   const F = parseFloat(flapVal) || 0;
   const G = parseFloat(gussetVal) || 0;
   const T = parseFloat(thicknessMm) || 0;
+  const PT = parseFloat(productionThicknessMm) || 0;
   const qty = parseFloat(quantity) || 0;
 
   const { tube, cutting } = useMemo(() => {
@@ -106,10 +109,10 @@ export default function BookingForm({
   }, [measurementType, L, W, F, G]);
 
   const calculated = useMemo(() => {
-    if (!qty || !tube || !cutting || !T) return null;
+    if (!qty || !tube || !cutting || !T || !PT) return null;
     const tubeInch = unit === "cm" ? tube / CM_PER_INCH : tube;
     const cuttingInch = unit === "cm" ? cutting / CM_PER_INCH : cutting;
-    const baseLbs = (qty * tubeInch * cuttingInch * T) / 75000;
+    const baseLbs = (qty * tubeInch * cuttingInch * PT) / 75000;
     const finalLbs = baseLbs * 1.01;
 
     let lldpe = 0, ldpe = 0, pp = 0, rld = 0;
@@ -136,7 +139,7 @@ export default function BookingForm({
       bags: finalLbs / LBS_PER_BAG,
       lldpe, ldpe, pp, rld, customSplit,
     };
-  }, [qty, tube, cutting, T, unit, materialType, customLines]);
+  }, [qty, tube, cutting, T, PT, unit, materialType, customLines]);
 
   async function checkDuplicateStyle() {
     if (!customerId || !style) return;
@@ -164,6 +167,7 @@ export default function BookingForm({
     setFlapVal("");
     setGussetVal("");
     setThicknessMm("");
+    setProductionThicknessMm("");
     setMaterialType("pe_standard");
     setCustomLines([{ material_id: "", percentage: "" }, { material_id: "", percentage: "" }]);
     setQuantity("");
@@ -198,6 +202,7 @@ export default function BookingForm({
     return {
       style, customerBookingRef, productDetails,
       measurementType, unit, lengthVal: L, widthVal: W, flapVal: F, gussetVal: G, thicknessMm: T,
+      productionThicknessMm: PT,
       materialType, quantity: qty, warehouseId, warehouseName,
       finalLbs: calculated.finalLbs, kg: calculated.kg, bags: calculated.bags,
       materialsNeeded, lengthCm, widthCm, hasPrint, printColors: parseInt(printColors) || 0,
@@ -249,6 +254,7 @@ export default function BookingForm({
     setLoading(true);
 
     const groupId = crypto.randomUUID();
+    const sharedBookingNo = await generateNextDocNo(supabase, "bookings", "booking_no", "BK", "booking_date", bookingDate);
 
     // Buyer/Merchant upsert (একবারই, সব item শেয়ার করবে)
     let buyerId: string | null = null;
@@ -312,17 +318,16 @@ export default function BookingForm({
       }
       if (!productId) continue;
 
-      const bookingNo = await generateNextDocNo(supabase, "bookings", "booking_no", "BK", "booking_date", bookingDate);
-
-      const { data: booking } = await supabase
+      const { data: booking, error: bookingError } = await supabase
         .from("bookings")
         .insert({
-          booking_no: bookingNo, customer_id: customerId, buyer_id: buyerId, merchant_id: merchantId,
+          booking_no: sharedBookingNo, customer_id: customerId, buyer_id: buyerId, merchant_id: merchantId,
           style: item.style, product_details: item.productDetails, product_id: productId,
           measurement_type: item.measurementType, measurement_unit: item.unit,
           length_val: item.lengthVal, width_val: item.widthVal,
           flap_val: item.flapVal || null, gusset_val: item.gussetVal || null,
-          thickness_mm: item.thicknessMm, material_type: item.materialType,
+          thickness_mm: item.thicknessMm, production_thickness_mm: item.productionThicknessMm,
+          material_type: item.materialType,
           quantity_pcs: item.quantity, booking_date: bookingDate,
           required_lbs: Number(item.finalLbs.toFixed(2)),
           required_kg: Number(item.kg.toFixed(2)),
@@ -336,7 +341,11 @@ export default function BookingForm({
         })
         .select().single();
 
-      if (!booking) continue;
+      if (bookingError || !booking) {
+        setLoading(false);
+        setError(`"${item.style || item.productDetails || 'একটি প্রোডাক্ট'}" সেভ করতে ব্যর্থ হয়েছে: ${bookingError?.message ?? 'অজানা কারণ'}`);
+        return;
+      }
 
       const productionNo = await generateNextDocNo(supabase, "production_orders", "production_no", "PROD", "order_date", bookingDate);
       const { data: productionOrder } = await supabase
@@ -465,8 +474,12 @@ export default function BookingForm({
             </div>
           )}
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Thickness (mm, 0-30)</label>
+            <label className="block text-xs text-gray-500 mb-1">Order Thickness (mm, 0-30)</label>
             <input type="number" step="0.001" min="0" max="30" value={thicknessMm} onChange={(e) => setThicknessMm(e.target.value)} className="rounded-lg border px-3 py-2 text-sm w-28" />
+          </div>
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Production Thickness (mm)</label>
+            <input type="number" step="0.001" min="0" max="30" value={productionThicknessMm} onChange={(e) => setProductionThicknessMm(e.target.value)} className="rounded-lg border px-3 py-2 text-sm w-28" />
           </div>
         </div>
       </div>

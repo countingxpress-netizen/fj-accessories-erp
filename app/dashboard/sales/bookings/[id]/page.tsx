@@ -63,7 +63,21 @@ export default async function BookingViewPage({ params }: { params: Promise<{ id
           <p><span className="text-gray-500">Size:</span> {booking.finished_goods?.length_cm} × {booking.finished_goods?.width_cm} cm, thickness {booking.finished_goods?.thickness}</p>
           <p><span className="text-gray-500">Measurement Entry:</span> {booking.measurement_type} — L:{booking.length_val} W:{booking.width_val} {booking.flap_val ? `Flap:${booking.flap_val}` : ""} {booking.gusset_val ? `Gusset:${booking.gusset_val}` : ""} ({booking.measurement_unit})</p>
           <p><span className="text-gray-500">Quantity:</span> {booking.quantity_pcs} pcs</p>
-          <p><span className="text-gray-500">Print:</span> {booking.has_print ? `হ্যাঁ (${booking.print_colors} color)` : "না"}</p>
+          <p><span className="text-gray-500">Order Thickness:</span> {booking.thickness_mm} mm</p>
+          <p><span className="text-gray-500">Production Thickness:</span> {booking.production_thickness_mm} mm</p>
+          <p><span className="text-gray-500">Print:</span> {booking.has_print ? `হ্যাঁ (${booking.print_colors} color, Rate: ${booking.rate_per_color}/color/pc)` : "না"}</p>
+          {booking.has_print && (
+            <p className="text-green-700"><span className="text-gray-500">Print Charge:</span> {(booking.print_colors * booking.rate_per_color).toFixed(4)}/pc</p>
+          )}
+          {booking.measurement_type === "adhesive" && (
+            <>
+              <p><span className="text-gray-500">Adhesive Rate:</span> {booking.rate_per_inch}/inch</p>
+              <p className="text-green-700">
+                <span className="text-gray-500">Adhesive Charge:</span>{" "}
+                {(((booking.measurement_unit === "cm" ? booking.width_val / 2.54 : booking.width_val)) * booking.rate_per_inch).toFixed(4)}/pc
+              </p>
+            </>
+          )}
         </div>
         <div className="rounded-xl border bg-white p-4 shadow-sm space-y-1 text-sm">
           <p><span className="text-gray-500">Required:</span> {booking.required_lbs?.toFixed(2)} Lbs / {booking.required_kg?.toFixed(2)} Kg / {booking.required_bags?.toFixed(2)} Bags</p>
