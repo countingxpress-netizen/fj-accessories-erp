@@ -1,0 +1,307 @@
+"use client";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { createClient } from "@/lib/supabase/client";
+import { generateNextDocNo } from "@/lib/docNumber";
+
+type Supplier = { id: string; name: string };
+type Warehouse = { id: string; name: string };
+type Material = { id: string; material_name: string };
+type Line = { material_id: string; quantity: string; rate: string };
+
+// Material নাম অনুযায়ী Chart of Accounts কোড ম্যাপিং
+const materialAccountCode: Record<string, string> = {
+  "LLDPE": "1200",
+  "LDPE": "1201",
+  "PP": "1202",
+  "Recycled Chips": "1203",
+};
+
+export default function PurchaseEntryForm({
+  suppliers,
+  warehouses,
+  materials,
+}: {
+  suppliers: Supplier[];
+  warehouses: Warehouse[];
+  materials: Material[];
+}) {
+  const [supplierId, setSupplierId] = useState("");
+  const [warehouseId, setWarehouseId] = useState("");
+  const [entryDate, setEntryDate] = useState(new Date().toISOString().slice(0, 10));
+  const [invoiceNo, setInvoiceNo] = useState("");
+  const [lines, setLines] = useState<Line[]>([{ material_id: "", quantity: "", rate: "" }]);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+  const router = useRouter();
+  const supabase = createClient();
+
+  function updateLine(i: number, field: keyof Line, value: string) {
+    setLines((prev) => prev.map((l, idx) => (idx === i ? { ...l, [field]: value } : l)));
+  }
+  function addLine() {
+    setLines((prev) => [...prev, { material_id: "", quantity: "", rate: "" }]);
+  }
+  function removeLine(i: number) {
+    setLines((prev) => prev.filter((_, idx) => idx !== i));
+  }
+
+  const totalAmount = lines.reduce(
+    (sum, l) => sum + (parseFloat(l.quantity) || 0) * (parseFloat(l.rate) || 0),
+    0
+  );
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setError("");
+
+    const validLines = lines.filter((l) => l.material_id && parseFloat(l.quantity) > 0 && parseFloat(l.rate) > 0);
+    if (!supplierId || !warehouseId || validLines.length === 0) {
+      setError("Supplier, Warehouse এবং অন্তত ১টা সঠিক লাইন থাকতে হবে।");
+      return;
+    }
+
+    setLoading(true);
+
+    // ১. purchase_entries তৈরি (অটো entry number সহ)
+    const entryNo = await generateNextDocNo(supabase, "purchase_entries", "entry_no", "PE", "entry_date", entryDate);
+    const { data: entry, error: entryError } = await supabase
+      .from("purchase_entries")
+      .insert({ entry_no: entryNo, supplier_id: supplierId, entry_date: entryDate, invoice_no: invoiceNo })
+      .select()
+      .single();
+
+    if (entryError || !entry) {
+      setLoading(false);
+      setError(entryError?.message ?? "Purchase Entry তৈরি ব্যর্থ হয়েছে।");
+      return;
+    }
+
+    // ২. purchase_entry_items তৈরি
+    const itemsToInsert = validLines.map((l) => ({
+      entry_id: entry.id,
+      material_id: l.material_id,
+      quantity_lbs: parseFloat(l.quantity),
+      rate_per_lbs: parseFloat(l.rate),
+    }));
+    const { error: itemsError } = await supabase.from("purchase_entry_items").insert(itemsToInsert);
+    if (itemsError) {
+      setLoading(false);
+      setError(itemsError.message);
+      return;
+    }
+
+    // ৩. প্রতিটা material-এর জন্য raw_material_stock আপডেট + stock_ledger এন্ট্রি
+    for (const l of validLines) {
+      const qty = parseFloat(l.quantity);
+
+      const { data: existingStock } = await supabase
+        .from("raw_material_stock")
+        .select("*")
+        .eq("material_id", l.material_id)
+        .eq("warehouse_id", warehouseId)
+        .maybeSingle();
+
+      if (existingStock) {
+        await supabase
+          .from("raw_material_stock")
+          .update({ quantity_lbs: existingStock.quantity_lbs + qty, updated_at: new Date().toISOString() })
+          .eq("id", existingStock.id);
+      } else {
+        await supabase
+          .from("raw_material_stock")
+          .insert({ material_id: l.material_id, warehouse_id: warehouseId, quantity_lbs: qty });
+      }
+
+      await supabase.from("stock_ledger").insert({
+        item_type: "raw_material",
+        item_id: l.material_id,
+        warehouse_id: warehouseId,
+        txn_type: "in",
+        quantity: qty,
+        reference_type: "purchase",
+        reference_id: entry.id,
+        txn_date: entryDate,
+      });
+    }
+
+    // ৪. Accounts Payable অ্যাকাউন্ট খুঁজুন
+    const { data: apAccount } = await supabase
+      .from("chart_of_accounts")
+      .select("id")
+      .eq("account_code", "2000")
+      .single();
+
+    if (!apAccount) {
+      setLoading(false);
+      setError("Accounts Payable (কোড 2000) অ্যাকাউন্ট খুঁজে পাওয়া যায়নি।");
+      return;
+    }
+
+    // প্রতিটা material-এর Raw Material Inventory অ্যাকাউন্ট খুঁজুন
+    const debitLines: { account_id: string; amount: string; memo: string }[] = [];
+    for (const l of validLines) {
+      const material = materials.find((m) => m.id === l.material_id);
+      const code = material ? materialAccountCode[material.material_name] : undefined;
+      if (!code) continue;
+      const { data: acc } = await supabase.from("chart_of_accounts").select("id").eq("account_code", code).single();
+      if (acc) {
+        debitLines.push({
+          account_id: acc.id,
+          amount: (parseFloat(l.quantity) * parseFloat(l.rate)).toFixed(2),
+          memo: `${material?.material_name} - ${l.quantity} Lbs @ ${l.rate}`,
+        });
+      }
+    }
+
+    if (debitLines.length === 0) {
+      setLoading(false);
+      setError("কোনো Raw Material Inventory অ্যাকাউন্ট খুঁজে পাওয়া যায়নি — Journal Voucher তৈরি করা যায়নি (স্টক তবুও আপডেট হয়েছে)।");
+      router.push("/dashboard/purchase/entry");
+      router.refresh();
+      return;
+    }
+
+    const supplierName = suppliers.find((s) => s.id === supplierId)?.name ?? "";
+    const year = new Date(entryDate).getFullYear();
+    const { count } = await supabase
+      .from("journal_vouchers")
+      .select("*", { count: "exact", head: true })
+      .gte("voucher_date", `${year}-01-01`)
+      .lte("voucher_date", `${year}-12-31`);
+    const voucherNo = `JV-${year}-${String((count ?? 0) + 1).padStart(4, "0")}`;
+
+    const { data: voucher, error: voucherError } = await supabase
+      .from("journal_vouchers")
+      .insert({
+        voucher_no: voucherNo,
+        voucher_date: entryDate,
+        narration: `Purchase from ${supplierName}${invoiceNo ? ", Invoice " + invoiceNo : ""}`,
+      })
+      .select()
+      .single();
+
+    if (voucherError || !voucher) {
+      setLoading(false);
+      setError("Purchase Entry সেভ হয়েছে কিন্তু Journal Voucher তৈরি ব্যর্থ হয়েছে: " + (voucherError?.message ?? ""));
+      router.push("/dashboard/purchase/entry");
+      router.refresh();
+      return;
+    }
+
+    const jvLines = [
+      ...debitLines.map((d) => ({
+        voucher_id: voucher.id,
+        account_id: d.account_id,
+        debit: parseFloat(d.amount),
+        credit: 0,
+        memo: d.memo,
+      })),
+      {
+        voucher_id: voucher.id,
+        account_id: apAccount.id,
+        debit: 0,
+        credit: totalAmount,
+        memo: `Payable to ${supplierName}`,
+      },
+    ];
+
+    const { error: jvLinesError } = await supabase.from("journal_entry_lines").insert(jvLines);
+
+    setLoading(false);
+
+    if (jvLinesError) {
+      setError("Journal Voucher লাইন সেভ ব্যর্থ হয়েছে: " + jvLinesError.message);
+      return;
+    }
+
+    router.push("/dashboard/purchase/entry");
+    router.refresh();
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="rounded-xl border bg-white p-6 shadow-sm space-y-4">
+      <div className="flex flex-wrap gap-4">
+        <div>
+          <label className="block text-sm text-gray-600 mb-1">Supplier</label>
+          <select value={supplierId} onChange={(e) => setSupplierId(e.target.value)} className="rounded-lg border px-3 py-2 text-sm min-w-[180px]" required>
+            <option value="">-- বাছুন --</option>
+            {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="block text-sm text-gray-600 mb-1">Warehouse</label>
+          <select value={warehouseId} onChange={(e) => setWarehouseId(e.target.value)} className="rounded-lg border px-3 py-2 text-sm min-w-[180px]" required>
+            <option value="">-- বাছুন --</option>
+            {warehouses.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="block text-sm text-gray-600 mb-1">Entry Date</label>
+          <input type="date" value={entryDate} onChange={(e) => setEntryDate(e.target.value)} className="rounded-lg border px-3 py-2 text-sm" required />
+        </div>
+        <div>
+          <label className="block text-sm text-gray-600 mb-1">Invoice No</label>
+          <input value={invoiceNo} onChange={(e) => setInvoiceNo(e.target.value)} className="rounded-lg border px-3 py-2 text-sm" />
+        </div>
+      </div>
+
+      <div className="overflow-hidden rounded-lg border">
+        <table className="w-full text-sm">
+          <thead className="bg-gray-50 text-left text-gray-600">
+            <tr>
+              <th className="px-3 py-2">Material</th>
+              <th className="px-3 py-2 w-32">Quantity (Lbs)</th>
+              <th className="px-3 py-2 w-32">Rate/Lbs</th>
+              <th className="px-3 py-2 w-32">Amount</th>
+              <th className="px-3 py-2 w-16"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {lines.map((l, i) => (
+              <tr key={i} className="border-t">
+                <td className="px-3 py-2">
+                  <select value={l.material_id} onChange={(e) => updateLine(i, "material_id", e.target.value)} className="w-full rounded border px-2 py-1 text-sm">
+                    <option value="">-- বাছুন --</option>
+                    {materials.map((m) => <option key={m.id} value={m.id}>{m.material_name}</option>)}
+                  </select>
+                </td>
+                <td className="px-3 py-2">
+                  <input type="number" step="0.01" value={l.quantity} onChange={(e) => updateLine(i, "quantity", e.target.value)} className="w-full rounded border px-2 py-1 text-sm" />
+                </td>
+                <td className="px-3 py-2">
+                  <input type="number" step="0.01" value={l.rate} onChange={(e) => updateLine(i, "rate", e.target.value)} className="w-full rounded border px-2 py-1 text-sm" />
+                </td>
+                <td className="px-3 py-2 text-right">
+                  {((parseFloat(l.quantity) || 0) * (parseFloat(l.rate) || 0)).toFixed(2)}
+                </td>
+                <td className="px-3 py-2 text-right">
+                  {lines.length > 1 && (
+                    <button type="button" onClick={() => removeLine(i)} className="text-red-600 text-xs hover:underline">সরান</button>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+          <tfoot className="bg-gray-50 border-t font-medium">
+            <tr>
+              <td colSpan={3} className="px-3 py-2 text-right">Total</td>
+              <td className="px-3 py-2 text-right">{totalAmount.toFixed(2)}</td>
+              <td></td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+
+      <button type="button" onClick={addLine} className="rounded-lg border border-dashed px-3 py-2 text-sm text-gray-600 hover:bg-gray-50">
+        + আরেকটি লাইন যোগ করুন
+      </button>
+
+      {error && <p className="text-sm text-red-600">{error}</p>}
+
+      <button type="submit" disabled={loading} className="rounded-lg bg-gray-900 px-5 py-2 text-sm text-white disabled:opacity-40">
+        {loading ? "সেভ হচ্ছে..." : "Purchase Entry সেভ করুন"}
+      </button>
+    </form>
+  );
+}

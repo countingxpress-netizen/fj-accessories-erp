@@ -1,0 +1,113 @@
+import Link from "next/link";
+import { createClient } from "@/lib/supabase/server";
+import { notFound } from "next/navigation";
+
+const LBS_PER_BAG = 55;
+
+export default async function MaterialStatementPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const { id } = await params;
+  const supabase = await createClient();
+
+  const { data: material } = await supabase
+    .from("raw_materials")
+    .select("*")
+    .eq("id", id)
+    .single();
+
+  if (!material) return notFound();
+
+  const { data: entries } = await supabase
+    .from("stock_ledger")
+    .select("*, warehouses(name)")
+    .eq("item_type", "raw_material")
+    .eq("item_id", id);
+
+  const sorted = (entries ?? []).sort((a: any, b: any) => {
+    if (a.txn_date !== b.txn_date) return a.txn_date.localeCompare(b.txn_date);
+    return a.created_at.localeCompare(b.created_at);
+  });
+
+  let runningBalance = 0;
+  const rows = sorted.map((e: any) => {
+    runningBalance += e.txn_type === "in" ? e.quantity : -e.quantity;
+    return { ...e, runningBalance };
+  });
+
+  const totalIn = sorted.reduce((sum: number, e: any) => sum + (e.txn_type === "in" ? e.quantity : 0), 0);
+  const totalOut = sorted.reduce((sum: number, e: any) => sum + (e.txn_type === "out" ? e.quantity : 0), 0);
+
+  const referenceLabels: Record<string, string> = {
+    manual_adjustment: "Manual Adjustment",
+    purchase: "Purchase Entry",
+    production: "Production",
+    delivery: "Delivery",
+    wastage: "Wastage",
+  };
+
+  return (
+    <div>
+      <Link href="/dashboard/inventory/raw-material" className="text-sm text-gray-500 hover:underline">
+        ← সব Material-এর তালিকায় ফিরুন
+      </Link>
+
+      <h1 className="text-2xl font-semibold mt-2 mb-1">{material.material_name} — Stock Statement</h1>
+      <p className="text-sm text-gray-500 mb-4">
+        বর্তমান ব্যালেন্স: {runningBalance.toFixed(2)} Lbs
+        {" "}≈ {(runningBalance * 0.453592).toFixed(2)} Kg
+        {" "}≈ {(runningBalance / LBS_PER_BAG).toFixed(2)} Bags
+      </p>
+
+      <div className="overflow-hidden rounded-xl border bg-white shadow-sm">
+        <table className="w-full text-sm">
+          <thead className="bg-gray-50 text-left text-gray-600">
+            <tr>
+              <th className="px-4 py-2">Date</th>
+              <th className="px-4 py-2">Warehouse</th>
+              <th className="px-4 py-2">Reference</th>
+              <th className="px-4 py-2 text-right">In (Lbs)</th>
+              <th className="px-4 py-2 text-right">Out (Lbs)</th>
+              <th className="px-4 py-2 text-right">Balance (Lbs)</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((e: any) => (
+              <tr key={e.id} className="border-t">
+                <td className="px-4 py-2 text-gray-500">{e.txn_date}</td>
+                <td className="px-4 py-2">{e.warehouses?.name ?? "-"}</td>
+                <td className="px-4 py-2 text-gray-600">
+                  {referenceLabels[e.reference_type] ?? e.reference_type ?? "-"}
+                </td>
+                <td className="px-4 py-2 text-right">
+                  {e.txn_type === "in" ? e.quantity.toFixed(2) : ""}
+                </td>
+                <td className="px-4 py-2 text-right">
+                  {e.txn_type === "out" ? e.quantity.toFixed(2) : ""}
+                </td>
+                <td className="px-4 py-2 text-right font-medium">{e.runningBalance.toFixed(2)}</td>
+              </tr>
+            ))}
+            {rows.length === 0 && (
+              <tr>
+                <td colSpan={6} className="px-4 py-3 text-gray-400 italic">
+                  এই material-এ এখনো কোনো এন্ট্রি নেই
+                </td>
+              </tr>
+            )}
+          </tbody>
+          <tfoot className="border-t-2 font-semibold bg-gray-50">
+            <tr>
+              <td colSpan={3} className="px-4 py-3 text-right">Total</td>
+              <td className="px-4 py-3 text-right">{totalIn.toFixed(2)}</td>
+              <td className="px-4 py-3 text-right">{totalOut.toFixed(2)}</td>
+              <td className="px-4 py-3 text-right">{runningBalance.toFixed(2)}</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>
+  );
+}
