@@ -4,24 +4,30 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { formatDate } from "@/lib/formatDate";
 
-const statusLabels: Record<string, string> = {
-  open: "Open",
-  in_production: "In Production",
-  partially_delivered: "Partially Delivered",
-  completed: "Completed",
-  cancelled: "Cancelled",
-};
-const statusColors: Record<string, string> = {
-  open: "bg-gray-100 text-gray-700",
-  in_production: "bg-blue-100 text-blue-700",
-  partially_delivered: "bg-orange-100 text-orange-700",
-  completed: "bg-green-100 text-green-700",
-  cancelled: "bg-red-100 text-red-700",
-};
+function getStatusLabel(booking: any, deliveredQty: number) {
+  const po = booking.production_orders?.[0];
+
+  if (deliveredQty >= booking.quantity_pcs && booking.quantity_pcs > 0) {
+    return { label: "Delivery Done", color: "bg-green-100 text-green-700" };
+  }
+  if (deliveredQty > 0) {
+    return { label: "Partially Delivered", color: "bg-orange-100 text-orange-700" };
+  }
+  if (po?.cutting_completed_at) {
+    return { label: "Cutting OK", color: "bg-purple-100 text-purple-700" };
+  }
+  if (po?.printing_completed_at) {
+    return { label: "Printing OK", color: "bg-indigo-100 text-indigo-700" };
+  }
+  if (po?.blowing_completed_at) {
+    return { label: "Blowing OK", color: "bg-blue-100 text-blue-700" };
+  }
+  return { label: "Booking Received", color: "bg-gray-100 text-gray-700" };
+}
 
 export default function BookingRow({
-  booking, serial, isGroupStart, groupSize,
-}: { booking: any; serial?: number; isGroupStart?: boolean; groupSize?: number }) {
+  booking, serial, isGroupStart, groupSize, deliveredQty,
+}: { booking: any; serial?: number; isGroupStart?: boolean; groupSize?: number; deliveredQty: number }) {
   const router = useRouter();
   const supabase = createClient();
 
@@ -68,6 +74,8 @@ export default function BookingRow({
   }
 
   const groupBg = groupSize && groupSize > 1 ? "bg-blue-50/40" : "";
+  const status = getStatusLabel(booking, deliveredQty);
+  const groupKey = booking.booking_group_id ?? booking.id;
 
   return (
     <tr className={`border-t ${groupBg} ${isGroupStart && groupSize && groupSize > 1 ? "border-t-2 border-t-blue-200" : ""}`}>
@@ -86,9 +94,7 @@ export default function BookingRow({
       <td className="px-4 py-2 text-right">{booking.quantity_pcs?.toLocaleString()}</td>
       <td className="px-4 py-2 text-right">{booking.required_lbs?.toFixed(2)}</td>
       <td className="px-4 py-2">
-        <span className={`rounded-full px-2 py-0.5 text-xs ${statusColors[booking.status] ?? ""}`}>
-          {statusLabels[booking.status] ?? booking.status}
-        </span>
+        <span className={`rounded-full px-2 py-0.5 text-xs ${status.color}`}>{status.label}</span>
       </td>
       <td className="px-4 py-2 text-right">
         <details className="relative inline-block text-left">
@@ -100,11 +106,11 @@ export default function BookingRow({
             <Link href={`/dashboard/sales/bookings/${booking.id}/edit`} className="block px-3 py-1.5 text-xs hover:bg-gray-50">Edit</Link>
             <button onClick={handleDelete} className="block w-full text-left px-3 py-1.5 text-xs text-red-700 hover:bg-red-50">Delete</button>
             <div className="border-t my-1"></div>
-            <Link href={`/dashboard/sales/bookings/${booking.id}/schedule?type=blowing`} target="_blank" className="block px-3 py-1.5 text-xs hover:bg-gray-50">Blowing Schedule</Link>
+            <Link href={`/dashboard/production/schedule-group/${groupKey}?type=blowing`} target="_blank" className="block px-3 py-1.5 text-xs hover:bg-gray-50">Blowing Schedule</Link>
             {booking.has_print && (
-              <Link href={`/dashboard/sales/bookings/${booking.id}/schedule?type=printing`} target="_blank" className="block px-3 py-1.5 text-xs hover:bg-gray-50">Printing Schedule</Link>
+              <Link href={`/dashboard/production/schedule-group/${groupKey}?type=printing`} target="_blank" className="block px-3 py-1.5 text-xs hover:bg-gray-50">Printing Schedule</Link>
             )}
-            <Link href={`/dashboard/sales/bookings/${booking.id}/schedule?type=cutting`} target="_blank" className="block px-3 py-1.5 text-xs hover:bg-gray-50">Cutting Schedule</Link>
+            <Link href={`/dashboard/production/schedule-group/${groupKey}?type=cutting`} target="_blank" className="block px-3 py-1.5 text-xs hover:bg-gray-50">Cutting Schedule</Link>
           </div>
         </details>
       </td>

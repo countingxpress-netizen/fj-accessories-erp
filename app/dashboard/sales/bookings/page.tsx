@@ -1,4 +1,3 @@
-import React from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import BookingRow from "./BookingRow";
@@ -7,15 +6,25 @@ export default async function BookingsListPage() {
   const supabase = await createClient();
   const { data: bookings } = await supabase
     .from("bookings")
-    .select("*, customers(name), buyers(name), finished_goods(product_name)")
+    .select("*, customers(name), buyers(name), finished_goods(product_name), production_orders(id, stage, blowing_completed_at, printing_completed_at, cutting_completed_at)")
     .order("created_at", { ascending: false });
 
-  // booking_group_id অনুযায়ী গ্রুপ করুন (একই ব্যাচে তৈরি বুকিং একসাথে দেখাবে)
+  const { data: allChallanItems } = await supabase
+    .from("delivery_challan_items")
+    .select("quantity_pcs, delivery_challans(booking_id)");
+
+  const deliveredMap: Record<string, number> = {};
+  (allChallanItems ?? []).forEach((item: any) => {
+    const bId = item.delivery_challans?.booking_id;
+    if (!bId) return;
+    deliveredMap[bId] = (deliveredMap[bId] ?? 0) + item.quantity_pcs;
+  });
+
   const groups: { groupId: string; items: any[] }[] = [];
   const groupIndex: Record<string, number> = {};
 
   (bookings ?? []).forEach((b: any) => {
-    const key = b.booking_group_id ?? b.id; // group_id না থাকলে একাই একটা গ্রুপ
+    const key = b.booking_group_id ?? b.id;
     if (groupIndex[key] === undefined) {
       groupIndex[key] = groups.length;
       groups.push({ groupId: key, items: [] });
@@ -51,7 +60,7 @@ export default async function BookingsListPage() {
           </thead>
           <tbody>
             {groups.map((group, gi) => (
-              <React.Fragment key={group.groupId}>
+              <>
                 {group.items.map((b: any, i: number) => (
                   <BookingRow
                     key={b.id}
@@ -59,9 +68,10 @@ export default async function BookingsListPage() {
                     serial={i === 0 ? gi + 1 : undefined}
                     isGroupStart={i === 0}
                     groupSize={group.items.length}
+                    deliveredQty={deliveredMap[b.id] ?? 0}
                   />
                 ))}
-              </React.Fragment>
+              </>
             ))}
             {(!bookings || bookings.length === 0) && (
               <tr><td colSpan={11} className="px-4 py-3 text-gray-400 italic">এখনো কোনো Booking নেই</td></tr>
