@@ -20,9 +20,17 @@ export default async function CustomerLedgerDetailPage({ params }: { params: Pro
     .select("*")
     .eq("customer_id", id);
 
-  type Row = { date: string; type: "invoice" | "payment"; ref: string; desc: string; debit: number; credit: number };
+  type Row = { date: string; type: "opening" | "invoice" | "payment"; ref: string; desc: string; debit: number; credit: number };
 
   const rows: Row[] = [];
+
+  if (customer.opening_balance && customer.opening_balance !== 0) {
+    rows.push({
+      date: customer.opening_balance_date ?? customer.created_at?.slice(0, 10) ?? "2000-01-01",
+      type: "opening", ref: "Opening Balance", desc: "পূর্বের বাকি",
+      debit: customer.opening_balance, credit: 0,
+    });
+  }
 
   (invoices ?? []).forEach((inv: any) => {
     const amount = (inv.sales_invoice_items ?? []).reduce((s: number, i: any) => s + (i.amount || 0), 0);
@@ -42,8 +50,15 @@ export default async function CustomerLedgerDetailPage({ params }: { params: Pro
     return { ...r, balance: runningBalance };
   });
 
-  const totalSales = rows.reduce((s, r) => s + r.debit, 0);
-  const totalPayments = rows.reduce((s, r) => s + r.credit, 0);
+  const totalDebit = rows.reduce((s, r) => s + r.debit, 0);
+  const totalCredit = rows.reduce((s, r) => s + r.credit, 0);
+
+  const typeLabels: Record<string, string> = { opening: "Opening", invoice: "Invoice", payment: "Payment" };
+  const typeColors: Record<string, string> = {
+    opening: "bg-purple-100 text-purple-700",
+    invoice: "bg-blue-100 text-blue-700",
+    payment: "bg-green-100 text-green-700",
+  };
 
   return (
     <div>
@@ -59,7 +74,7 @@ export default async function CustomerLedgerDetailPage({ params }: { params: Pro
               <th className="px-4 py-2">Type</th>
               <th className="px-4 py-2">Reference</th>
               <th className="px-4 py-2">Description</th>
-              <th className="px-4 py-2 text-right">Invoice (Dr)</th>
+              <th className="px-4 py-2 text-right">Invoice/Opening (Dr)</th>
               <th className="px-4 py-2 text-right">Payment (Cr)</th>
               <th className="px-4 py-2 text-right">Due Balance</th>
             </tr>
@@ -69,8 +84,8 @@ export default async function CustomerLedgerDetailPage({ params }: { params: Pro
               <tr key={i} className="border-t">
                 <td className="px-4 py-2 text-gray-500">{formatDate(r.date)}</td>
                 <td className="px-4 py-2">
-                  <span className={`rounded-full px-2 py-0.5 text-xs ${r.type === "invoice" ? "bg-blue-100 text-blue-700" : "bg-green-100 text-green-700"}`}>
-                    {r.type === "invoice" ? "Invoice" : "Payment"}
+                  <span className={`rounded-full px-2 py-0.5 text-xs ${typeColors[r.type]}`}>
+                    {typeLabels[r.type]}
                   </span>
                 </td>
                 <td className="px-4 py-2">{r.ref}</td>
@@ -81,14 +96,14 @@ export default async function CustomerLedgerDetailPage({ params }: { params: Pro
               </tr>
             ))}
             {finalRows.length === 0 && (
-              <tr><td colSpan={7} className="px-4 py-3 text-gray-400 italic">এখনো কোনো Invoice/Payment নেই</td></tr>
+              <tr><td colSpan={7} className="px-4 py-3 text-gray-400 italic">এখনো কোনো Opening Balance/Invoice/Payment নেই</td></tr>
             )}
           </tbody>
           <tfoot className="border-t-2 font-semibold bg-gray-50">
             <tr>
               <td colSpan={4} className="px-4 py-3 text-right">Total</td>
-              <td className="px-4 py-3 text-right">{totalSales.toFixed(2)}</td>
-              <td className="px-4 py-3 text-right">{totalPayments.toFixed(2)}</td>
+              <td className="px-4 py-3 text-right">{totalDebit.toFixed(2)}</td>
+              <td className="px-4 py-3 text-right">{totalCredit.toFixed(2)}</td>
               <td className="px-4 py-3 text-right">{runningBalance.toFixed(2)} (বাকি)</td>
             </tr>
           </tfoot>

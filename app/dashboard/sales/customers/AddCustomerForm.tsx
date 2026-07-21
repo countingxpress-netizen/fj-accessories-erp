@@ -11,6 +11,8 @@ export default function AddCustomerForm() {
   const [pricePerLbs, setPricePerLbs] = useState("");
   const [defaultPrintRate, setDefaultPrintRate] = useState("0.20");
   const [defaultAdhesiveRate, setDefaultAdhesiveRate] = useState("0.02");
+  const [openingBalance, setOpeningBalance] = useState("0");
+  const [openingBalanceDate, setOpeningBalanceDate] = useState(new Date().toISOString().slice(0, 10));
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const router = useRouter();
@@ -28,6 +30,8 @@ export default function AddCustomerForm() {
       price_per_lbs: pricePerLbs ? parseFloat(pricePerLbs) : null,
       default_print_rate: parseFloat(defaultPrintRate) || 0.20,
       default_adhesive_rate: parseFloat(defaultAdhesiveRate) || 0.02,
+      opening_balance: parseFloat(openingBalance) || 0,
+      opening_balance_date: openingBalanceDate,
     });
     setLoading(false);
     if (error) {
@@ -36,6 +40,8 @@ export default function AddCustomerForm() {
     }
     setName(""); setAddress(""); setPhone(""); setEmail(""); setPricePerLbs("");
     setDefaultPrintRate("0.20"); setDefaultAdhesiveRate("0.02");
+    setOpeningBalance("0"); setOpeningBalanceDate(new Date().toISOString().slice(0, 10));
+    setOpeningBalance("0"); setOpeningBalanceDate(new Date().toISOString().slice(0, 10));
     router.refresh();
   }
 
@@ -60,6 +66,14 @@ export default function AddCustomerForm() {
         <div>
           <label className="block text-xs text-gray-500 mb-1">Default Adhesive Rate/Inch</label>
           <input type="number" step="0.001" value={defaultAdhesiveRate} onChange={(e) => setDefaultAdhesiveRate(e.target.value)} className="w-40 rounded-lg border px-3 py-2 text-sm" />
+        </div>
+        <div>
+          <label className="block text-xs text-gray-500 mb-1">Opening Balance (আগের বাকি)</label>
+          <input type="number" step="0.01" value={openingBalance} onChange={(e) => setOpeningBalance(e.target.value)} className="w-36 rounded-lg border px-3 py-2 text-sm" />
+        </div>
+        <div>
+          <label className="block text-xs text-gray-500 mb-1">Opening Balance Date</label>
+          <input type="date" value={openingBalanceDate} onChange={(e) => setOpeningBalanceDate(e.target.value)} className="rounded-lg border px-3 py-2 text-sm" />
         </div>
         <button type="submit" disabled={loading} className="rounded-lg bg-gray-900 px-4 py-2 text-sm text-white disabled:opacity-50">
           {loading ? "সেভ হচ্ছে..." : "যোগ করুন"}

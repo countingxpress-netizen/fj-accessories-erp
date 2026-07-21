@@ -5,13 +5,18 @@ import { formatDate } from "@/lib/formatDate";
 export default async function ReceivableStatementPage() {
   const supabase = await createClient();
 
-  const { data: customers } = await supabase.from("customers").select("id, name").order("name");
+  const { data: customers } = await supabase.from("customers").select("id, name, opening_balance").order("name");
   const { data: invoices } = await supabase
     .from("sales_invoices")
     .select("customer_id, invoice_no, invoice_date, sales_invoice_items(amount)");
   const { data: payments } = await supabase.from("customer_payments").select("customer_id, amount, payment_date");
 
   const customerData: Record<string, { invoiced: number; paid: number; lastInvoiceDate: string | null }> = {};
+  (customers ?? []).forEach((c: any) => {
+    if (c.opening_balance) {
+      customerData[c.id] = { invoiced: c.opening_balance, paid: 0, lastInvoiceDate: null };
+    }
+  });
 
   (invoices ?? []).forEach((inv: any) => {
     const amt = (inv.sales_invoice_items ?? []).reduce((s: number, i: any) => s + (i.amount || 0), 0);

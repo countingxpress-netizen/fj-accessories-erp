@@ -4,11 +4,14 @@ import { createClient } from "@/lib/supabase/server";
 export default async function OutstandingReportPage() {
   const supabase = await createClient();
 
-  const { data: customers } = await supabase.from("customers").select("id, name");
+  const { data: customers } = await supabase.from("customers").select("id, name, opening_balance");
   const { data: invoices } = await supabase.from("sales_invoices").select("customer_id, sales_invoice_items(amount)");
   const { data: customerPayments } = await supabase.from("customer_payments").select("customer_id, amount");
 
   const customerDue: Record<string, number> = {};
+  (customers ?? []).forEach((c: any) => {
+    if (c.opening_balance) customerDue[c.id] = (customerDue[c.id] ?? 0) + c.opening_balance;
+  });
   (invoices ?? []).forEach((inv: any) => {
     const amt = (inv.sales_invoice_items ?? []).reduce((s: number, i: any) => s + (i.amount || 0), 0);
     customerDue[inv.customer_id] = (customerDue[inv.customer_id] ?? 0) + amt;
