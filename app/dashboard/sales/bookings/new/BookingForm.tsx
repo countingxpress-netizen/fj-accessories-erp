@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { generateNextDocNo } from "@/lib/docNumber";
 
-type Customer = { id: string; name: string };
+type Customer = { id: string; name: string; default_print_rate: number | null; default_adhesive_rate: number | null };
 type Warehouse = { id: string; name: string };
 type Material = { id: string; material_name: string };
 type CustomLine = { material_id: string; percentage: string };
@@ -150,8 +150,6 @@ export default function BookingForm({
     } else {
       setHasPrint(false);
       setPrintColors("");
-      setRatePerColor("0.20");
-      setRatePerInch("0.02");
       setWarning("");
     }
   }
@@ -399,7 +397,21 @@ export default function BookingForm({
       <div className="flex flex-wrap gap-4">
         <div className="flex-1 min-w-[180px]">
           <label className="block text-sm text-gray-600 mb-1">Customer</label>
-          <select value={customerId} onChange={(e) => { setCustomerId(e.target.value); setWarning(""); }} className="w-full rounded-lg border px-3 py-2 text-sm" required>
+          <select
+            value={customerId}
+            onChange={(e) => {
+              const newCustomerId = e.target.value;
+              setCustomerId(newCustomerId);
+              setWarning("");
+              const selected = customers.find((c) => c.id === newCustomerId);
+              if (selected) {
+                setRatePerColor(String(selected.default_print_rate ?? 0.20));
+                setRatePerInch(String(selected.default_adhesive_rate ?? 0.02));
+              }
+            }}
+            className="w-full rounded-lg border px-3 py-2 text-sm"
+            required
+          >
             <option value="">-- বাছুন --</option>
             {customers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>

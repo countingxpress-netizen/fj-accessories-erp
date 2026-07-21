@@ -3,7 +3,7 @@ import BookingForm from "./BookingForm";
 
 export default async function NewBookingPage() {
   const supabase = await createClient();
-  const { data: customers } = await supabase.from("customers").select("id, name").order("name");
+  const { data: customers } = await supabase.from("customers").select("id, name, default_print_rate, default_adhesive_rate").order("name");
   const { data: warehouses } = await supabase.from("warehouses").select("id, name").order("name");
   const { data: materials } = await supabase.from("raw_materials").select("id, material_name").order("material_name");
 

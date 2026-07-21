@@ -9,6 +9,8 @@ export default function AddCustomerForm() {
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [pricePerLbs, setPricePerLbs] = useState("");
+  const [defaultPrintRate, setDefaultPrintRate] = useState("0.20");
+  const [defaultAdhesiveRate, setDefaultAdhesiveRate] = useState("0.02");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const router = useRouter();
@@ -24,6 +26,8 @@ export default function AddCustomerForm() {
       phone,
       email,
       price_per_lbs: pricePerLbs ? parseFloat(pricePerLbs) : null,
+      default_print_rate: parseFloat(defaultPrintRate) || 0.20,
+      default_adhesive_rate: parseFloat(defaultAdhesiveRate) || 0.02,
     });
     setLoading(false);
     if (error) {
@@ -31,6 +35,7 @@ export default function AddCustomerForm() {
       return;
     }
     setName(""); setAddress(""); setPhone(""); setEmail(""); setPricePerLbs("");
+    setDefaultPrintRate("0.20"); setDefaultAdhesiveRate("0.02");
     router.refresh();
   }
 
@@ -42,7 +47,20 @@ export default function AddCustomerForm() {
         <input placeholder="ঠিকানা" value={address} onChange={(e) => setAddress(e.target.value)} className="flex-1 min-w-[160px] rounded-lg border px-3 py-2 text-sm" />
         <input placeholder="ফোন" value={phone} onChange={(e) => setPhone(e.target.value)} className="w-36 rounded-lg border px-3 py-2 text-sm" />
         <input placeholder="ইমেইল" value={email} onChange={(e) => setEmail(e.target.value)} className="w-48 rounded-lg border px-3 py-2 text-sm" />
-        <input type="number" step="0.01" placeholder="Price/Lbs (ঐচ্ছিক)" value={pricePerLbs} onChange={(e) => setPricePerLbs(e.target.value)} className="w-40 rounded-lg border px-3 py-2 text-sm" />
+      </div>
+      <div className="flex flex-wrap gap-3 items-end">
+        <div>
+          <label className="block text-xs text-gray-500 mb-1">Price/Lbs (ঐচ্ছিক)</label>
+          <input type="number" step="0.01" value={pricePerLbs} onChange={(e) => setPricePerLbs(e.target.value)} className="w-40 rounded-lg border px-3 py-2 text-sm" />
+        </div>
+        <div>
+          <label className="block text-xs text-gray-500 mb-1">Default Print Rate/Color/Pc</label>
+          <input type="number" step="0.01" value={defaultPrintRate} onChange={(e) => setDefaultPrintRate(e.target.value)} className="w-40 rounded-lg border px-3 py-2 text-sm" />
+        </div>
+        <div>
+          <label className="block text-xs text-gray-500 mb-1">Default Adhesive Rate/Inch</label>
+          <input type="number" step="0.001" value={defaultAdhesiveRate} onChange={(e) => setDefaultAdhesiveRate(e.target.value)} className="w-40 rounded-lg border px-3 py-2 text-sm" />
+        </div>
         <button type="submit" disabled={loading} className="rounded-lg bg-gray-900 px-4 py-2 text-sm text-white disabled:opacity-50">
           {loading ? "সেভ হচ্ছে..." : "যোগ করুন"}
         </button>

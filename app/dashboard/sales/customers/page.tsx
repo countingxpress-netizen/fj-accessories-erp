@@ -22,6 +22,8 @@ export default async function CustomersPage() {
               <th className="px-4 py-2">Address</th>
               <th className="px-4 py-2">Phone</th>
               <th className="px-4 py-2">Price/Lbs</th>
+              <th className="px-4 py-2">Print Rate</th>
+              <th className="px-4 py-2">Adhesive Rate</th>
               <th className="px-4 py-2 text-right">Action</th>
             </tr>
           </thead>
