@@ -77,6 +77,11 @@ export default function BookingRow({
   const status = getStatusLabel(booking, deliveredQty);
   const groupKey = booking.booking_group_id ?? booking.id;
 
+  const piNo = (booking.pi_bookings ?? [])
+    .map((pb: any) => pb.proforma_invoices?.pi_no)
+    .filter(Boolean)
+    .join(", ") || "-";
+
   return (
     <tr className={`border-t ${groupBg} ${isGroupStart && groupSize && groupSize > 1 ? "border-t-2 border-t-blue-200" : ""}`}>
       <td className="px-4 py-2 text-gray-500">{serial ?? ""}</td>
@@ -89,6 +94,7 @@ export default function BookingRow({
       <td className="px-4 py-2 text-gray-500">{formatDate(booking.booking_date)}</td>
       <td className="px-4 py-2">{booking.customers?.name ?? "-"}</td>
       <td className="px-4 py-2 text-gray-500">{booking.buyers?.name ?? "-"}</td>
+      <td className="px-4 py-2 font-medium text-xs text-blue-700">{piNo}</td>
       <td className="px-4 py-2 text-gray-500">{booking.garments_name ?? "-"}</td>
       <td className="px-4 py-2">{booking.finished_goods?.product_name ?? "-"}</td>
       <td className="px-4 py-2 text-right">{booking.quantity_pcs?.toLocaleString()}</td>
