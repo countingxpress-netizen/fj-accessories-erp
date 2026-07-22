@@ -7,7 +7,7 @@ export default async function BookingsListPage() {
   const supabase = await createClient();
   const { data: bookings } = await supabase
     .from("bookings")
-    .select("*, customers(name), buyers(name), finished_goods(product_name), production_orders(id, stage, blowing_completed_at, printing_completed_at, cutting_completed_at), pi_bookings(proforma_invoices(pi_no))")
+    .select("*, customers(name), buyers(name), finished_goods(product_name), production_orders(id, stage, blowing_completed_at, printing_completed_at, cutting_completed_at), pi_bookings(proforma_invoices(id, pi_no))")
     .order("created_at", { ascending: false });
 
   const { data: allChallanItems } = await supabase
@@ -44,19 +44,19 @@ export default async function BookingsListPage() {
 
       <div className="rounded-xl border bg-white shadow-sm overflow-x-auto">
         <table className="w-full text-sm">
-          <thead className="bg-gray-50 text-left text-gray-600">
+          <thead className="sticky top-0 z-10 bg-gray-50 text-left text-gray-600 shadow-sm">
             <tr>
               <th className="px-4 py-2 w-12">SL</th>
               <th className="px-4 py-2">Booking No</th>
               <th className="px-4 py-2">Date</th>
               <th className="px-4 py-2">Customer</th>
               <th className="px-4 py-2">Buyer</th>
-              <th className="px-4 py-2">PI No</th>
               <th className="px-4 py-2">Garments</th>
-              <th className="px-4 py-2">Product</th>
+              <th className="px-4 py-2">Measurement</th>
               <th className="px-4 py-2 text-right">Qty (Pcs)</th>
               <th className="px-4 py-2 text-right">Required Lbs</th>
               <th className="px-4 py-2">Status</th>
+              <th className="px-4 py-2">PI No</th>
               <th className="px-4 py-2 text-right">Action</th>
             </tr>
           </thead>
