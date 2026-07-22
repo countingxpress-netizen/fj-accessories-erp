@@ -1,15 +1,12 @@
 "use client";
-import { useState } from "react";
-import { createClient } from "@/lib/supabase/client";
 
-const CM_PER_INCH = 2.54;
+import { useState, useEffect } from "react";
+import { createClient } from "@/lib/supabase/client";
 
 function formatMeasurement(b: any, forStage: "blowing" | "other") {
   const unit = b.measurement_unit;
   const L = b.length_val, W = b.width_val, F = b.flap_val, G = b.gusset_val;
-
   if (forStage === "blowing") {
-    // শুধু Tube dimension
     if (b.measurement_type === "simple") return `W-${W} ${unit}`;
     if (b.measurement_type === "gusset") return `W-${W} + G-${G} ${unit}`;
     if (b.measurement_type === "adhesive") {
@@ -17,7 +14,6 @@ function formatMeasurement(b: any, forStage: "blowing" | "other") {
       return `(L-${L} + F-${F}) = ${tube} ${unit}`;
     }
   } else {
-    // পূর্ণ measurement notation (Printing/Cutting-এর জন্য)
     if (b.measurement_type === "simple") return `L-${L} x W-${W} ${unit}`;
     if (b.measurement_type === "gusset") return `L-${L} x W-${W} + G-${G} ${unit}`;
     if (b.measurement_type === "adhesive") return `L-${L} + F-${F} x W-${W} ${unit}`;
@@ -32,35 +28,102 @@ const titles: Record<string, string> = {
 };
 
 export default function ScheduleGroupClient({
-  bookings, company, scheduleType,
-}: { bookings: any[]; company: any; scheduleType: "blowing" | "printing" | "cutting" }) {
+  bookings, company, groupId,
+}: { bookings: any[]; company: any; groupId: string }) {
+  const anyHasPrint = bookings.some((b) => b.has_print);
+  const [scheduleType, setScheduleType] = useState<"blowing" | "printing" | "cutting">("blowing");
   const [operatorName, setOperatorName] = useState("");
-  const [remarks, setRemarks] = useState<Record<string, string>>(() => {
-    const initial: Record<string, string> = {};
+  const [remarks, setRemarks] = useState<Record<string, Record<string, string>>>(() => {
+    const initial: Record<string, Record<string, string>> = { blowing: {}, printing: {}, cutting: {} };
     bookings.forEach((b) => {
-      const key = scheduleType === "blowing" ? "blowing_remark" : scheduleType === "printing" ? "printing_remark" : "cutting_remark";
-      initial[b.id] = b[key] ?? (scheduleType === "printing" && b.has_print ? `${b.print_colors} কালার` : "");
+      initial.blowing[b.id] = b.blowing_remark ?? "";
+      initial.printing[b.id] = b.printing_remark ?? (b.has_print ? `${b.print_colors} কালার` : "");
+      initial.cutting[b.id] = b.cutting_remark ?? "";
     });
     return initial;
   });
-  const [saved, setSaved] = useState(false);
+
+  const [currentUserRole, setCurrentUserRole] = useState<string | null>(null);
+  const [currentUserName, setCurrentUserName] = useState<string>("");
+  const [approvedRequest, setApprovedRequest] = useState<any>(null);
+  const [requestSent, setRequestSent] = useState(false);
+
   const supabase = createClient();
+
+  useEffect(() => {
+    async function fetchRoleAndRequest() {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data: appUser } = await supabase.from("app_users").select("role, full_name").eq("id", user.id).single();
+      setCurrentUserRole(appUser?.role ?? null);
+      setCurrentUserName(appUser?.full_name ?? "");
+
+      const { data: req } = await supabase
+        .from("print_reprint_requests")
+        .select("*")
+        .eq("booking_group_id", groupId)
+        .eq("schedule_type", scheduleType)
+        .eq("status", "approved")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      setApprovedRequest(req);
+
+      const { data: pendingReq } = await supabase
+        .from("print_reprint_requests")
+        .select("id")
+        .eq("booking_group_id", groupId)
+        .eq("schedule_type", scheduleType)
+        .eq("status", "pending")
+        .maybeSingle();
+      setRequestSent(!!pendingReq);
+    }
+    fetchRoleAndRequest();
+  }, [scheduleType]);
+
+  function updateRemark(bookingId: string, value: string) {
+    setRemarks((prev) => ({
+      ...prev,
+      [scheduleType]: { ...prev[scheduleType], [bookingId]: value },
+    }));
+  }
 
   const first = bookings[0];
   const productionNo = first.production_orders?.[0]?.production_no ?? "-";
   const now = new Date();
   const dateStr = now.toLocaleDateString("bn-BD", { day: "2-digit", month: "long", year: "numeric" });
   const timeStr = now.toLocaleTimeString("bn-BD", { hour: "2-digit", minute: "2-digit", hour12: true });
-
   const totalQty = bookings.reduce((s, b) => s + (b.quantity_pcs || 0), 0);
   const totalLbs = bookings.reduce((s, b) => s + (b.required_lbs || 0), 0);
 
+  const printedColumn = scheduleType === "blowing" ? "blowing_printed" : scheduleType === "printing" ? "printing_printed" : "cutting_printed";
+  const alreadyPrinted = bookings.some((b) => b[printedColumn]);
+  const isAdmin = currentUserRole === "admin";
+  const canPrint = !alreadyPrinted || isAdmin || !!approvedRequest;
+
+  async function handleRequestPermission() {
+    await supabase.from("print_reprint_requests").insert({
+      booking_group_id: groupId,
+      schedule_type: scheduleType,
+      requested_by_name: currentUserName,
+      status: "pending",
+    });
+    setRequestSent(true);
+  }
+
   async function handleSaveAndPrint() {
+    if (!canPrint) return;
     const remarkColumn = scheduleType === "blowing" ? "blowing_remark" : scheduleType === "printing" ? "printing_remark" : "cutting_remark";
     for (const b of bookings) {
-      await supabase.from("bookings").update({ [remarkColumn]: remarks[b.id] }).eq("id", b.id);
+      await supabase.from("bookings").update({
+        [remarkColumn]: remarks[scheduleType][b.id],
+        [printedColumn]: true,
+      }).eq("id", b.id);
     }
-    setSaved(true);
+    if (approvedRequest && !isAdmin) {
+      await supabase.from("print_reprint_requests").update({ status: "fulfilled" }).eq("id", approvedRequest.id);
+    }
     setTimeout(() => window.print(), 200);
   }
 
@@ -76,6 +139,19 @@ export default function ScheduleGroupClient({
 
       <div className="no-print mb-6 rounded-lg border bg-gray-50 p-4 space-y-3">
         <div>
+          <label className="block text-sm text-gray-600 mb-1">এখন কোন মেশিনে শিডিউল দিতে চান?</label>
+          <select
+            value={scheduleType}
+            onChange={(e) => setScheduleType(e.target.value as any)}
+            className="w-full max-w-xs rounded-lg border px-3 py-2 text-sm"
+          >
+            <option value="blowing">Blowing</option>
+            {anyHasPrint && <option value="printing">Printing</option>}
+            <option value="cutting">Cutting</option>
+          </select>
+        </div>
+
+        <div>
           <label className="block text-sm text-gray-600 mb-1">অপারেটরের নাম</label>
           <input
             value={operatorName}
@@ -84,25 +160,48 @@ export default function ScheduleGroupClient({
             placeholder="অপারেটরের নাম লিখুন"
           />
         </div>
+
         <div className="space-y-2">
           <p className="text-sm text-gray-600">প্রতিটা লাইনের Remark (প্রয়োজনে বদলান):</p>
           {bookings.map((b) => (
             <div key={b.id} className="flex items-center gap-2">
               <span className="text-xs text-gray-500 w-32 truncate">{b.style || b.product_details}</span>
               <input
-                value={remarks[b.id] ?? ""}
-                onChange={(e) => setRemarks((prev) => ({ ...prev, [b.id]: e.target.value }))}
+                value={remarks[scheduleType][b.id] ?? ""}
+                onChange={(e) => updateRemark(b.id, e.target.value)}
                 className="flex-1 rounded border px-2 py-1 text-sm"
               />
             </div>
           ))}
         </div>
+
+        {alreadyPrinted && !isAdmin && !approvedRequest && (
+          <div className="rounded-lg border border-orange-200 bg-orange-50 p-3 space-y-2">
+            <p className="text-xs text-orange-700">
+              ⚠ এই {titles[scheduleType]} আগে একবার প্রিন্ট হয়েছে। আবার প্রিন্ট করতে Admin-এর অনুমতি লাগবে।
+            </p>
+            {requestSent ? (
+              <p className="text-xs text-blue-700">✓ Admin-কে Request পাঠানো হয়েছে, অনুমোদনের অপেক্ষায় আছে।</p>
+            ) : (
+              <button onClick={handleRequestPermission} className="rounded bg-blue-600 px-3 py-1.5 text-xs text-white hover:bg-blue-700">
+                Admin-এর কাছে Permission Request পাঠান
+              </button>
+            )}
+          </div>
+        )}
+
+        {alreadyPrinted && approvedRequest && !isAdmin && (
+          <p className="text-xs text-green-700 bg-green-50 border border-green-200 rounded p-2">
+            ✅ Admin আপনাকে একবার প্রিন্ট করার অনুমতি দিয়েছেন।
+          </p>
+        )}
+
         <button
           onClick={handleSaveAndPrint}
-          disabled={!operatorName.trim()}
+          disabled={!operatorName.trim() || !canPrint}
           className="rounded-lg bg-gray-900 px-4 py-2 text-sm text-white disabled:opacity-40"
         >
-          Save করে Print করুন
+          {alreadyPrinted ? "আবার Print করুন" : "Save করে Print করুন"}
         </button>
         {!operatorName.trim() && <p className="text-xs text-orange-600">প্রিন্ট করার আগে অপারেটরের নাম দিন।</p>}
       </div>
@@ -112,16 +211,13 @@ export default function ScheduleGroupClient({
           <h1 className="text-xl font-bold">{company?.name}</h1>
           <p className="text-xs text-gray-600">{company?.address}</p>
         </div>
-
         <div className="flex justify-between items-baseline px-4 py-2 border-b-2 border-gray-800">
           <h2 className="text-lg font-bold underline">{titles[scheduleType]}</h2>
           <p className="text-sm">Date: <strong>{dateStr}</strong> সময়: <strong>{timeStr}</strong></p>
         </div>
-
         <div className="px-4 py-2 border-b border-gray-400 text-sm">
           অপারেটর: <strong>{operatorName || "________________"}</strong>
         </div>
-
         <div className="grid grid-cols-2 border-b-2 border-gray-800">
           <div className="px-4 py-2 border-r border-gray-400 text-sm">
             বুকিং নাম্বার: <strong>{first.booking_no}</strong><br />
@@ -132,11 +228,9 @@ export default function ScheduleGroupClient({
             <div>Buyer: <strong>{first.buyers?.name ?? "-"}</strong></div>
           </div>
         </div>
-
         {first.product_details && (
           <p className="text-center py-2 border-b border-gray-400 font-medium">{first.product_details}</p>
         )}
-
         <table className="w-full text-sm border-collapse">
           <thead>
             <tr className="bg-blue-500 text-white">
@@ -144,7 +238,7 @@ export default function ScheduleGroupClient({
               <th className="border border-gray-800 py-2">টিউব</th>
               {scheduleType === "blowing" && <th className="border border-gray-800 py-2">থিকনেস</th>}
               {scheduleType === "blowing" ? (
-                <th className="border border-gray-800 py-2">এল বি এস</th>
+                <th className="border border-gray-800 py-2">এলবিএস</th>
               ) : (
                 <th className="border border-gray-800 py-2">Quantity</th>
               )}
@@ -166,11 +260,11 @@ export default function ScheduleGroupClient({
                 ) : (
                   <td className="border border-gray-800 text-center py-2">{b.quantity_pcs?.toLocaleString()}.00 Pcs</td>
                 )}
-                <td className="border border-gray-800 text-center py-2">{remarks[b.id]}</td>
+                <td className="border border-gray-800 text-center py-2">{remarks[scheduleType][b.id]}</td>
               </tr>
             ))}
             <tr className="font-semibold">
-              <td className="border border-gray-800 text-center py-2" colSpan={scheduleType === "blowing" ? 2 : 1}>মোট =</td>
+              <td className="border border-gray-800 text-center py-2" colSpan={scheduleType === "blowing" ? 2 : 1}>টোটাল =</td>
               {scheduleType === "blowing" ? (
                 <td className="border border-gray-800 text-center py-2">{totalLbs.toFixed(2)} Lbs</td>
               ) : (
@@ -183,12 +277,11 @@ export default function ScheduleGroupClient({
             </tr>
           </tbody>
         </table>
-
         <div className="flex justify-between px-6 py-6 text-sm">
           <div>অপারেটরের স্বাক্ষর</div>
           {scheduleType === "blowing" && <div>স্টোরের স্বাক্ষর</div>}
           {scheduleType === "blowing" && <div>প্রোডাকশন ম্যানেজার</div>}
-          <div>অনুমাদনকারীর স্বাক্ষর</div>
+          <div>অনুমোদনকারীর স্বাক্ষর</div>
         </div>
       </div>
     </div>

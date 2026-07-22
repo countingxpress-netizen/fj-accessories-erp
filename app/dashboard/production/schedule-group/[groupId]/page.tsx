@@ -3,11 +3,9 @@ import { notFound } from "next/navigation";
 import ScheduleGroupClient from "./ScheduleGroupClient";
 
 export default async function ScheduleGroupPage({
-  params, searchParams,
-}: { params: Promise<{ groupId: string }>; searchParams: Promise<{ type?: string }> }) {
+  params,
+}: { params: Promise<{ groupId: string }> }) {
   const { groupId } = await params;
-  const { type } = await searchParams;
-  const scheduleType = (type ?? "blowing") as "blowing" | "printing" | "cutting";
   const supabase = await createClient();
 
   let { data: bookings } = await supabase
@@ -27,11 +25,5 @@ export default async function ScheduleGroupPage({
 
   const { data: company } = await supabase.from("company_profile").select("*").single();
 
-  return (
-    <ScheduleGroupClient
-      bookings={bookings}
-      company={company}
-      scheduleType={scheduleType}
-    />
-  );
+  return <ScheduleGroupClient bookings={bookings} company={company} groupId={groupId} />;
 }

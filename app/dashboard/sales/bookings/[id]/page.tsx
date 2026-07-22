@@ -25,19 +25,6 @@ export default async function BookingViewPage({ params }: { params: Promise<{ id
     .from("production_orders")
     .select("*")
     .eq("booking_id", id);
-  
-{productionOrders && productionOrders[0] && (
-        <>
-          <h2 className="text-sm font-semibold uppercase text-gray-500 mb-2">Status Tracker</h2>
-          <div className="mb-6">
-            <StatusTracker
-              productionOrder={productionOrders[0]}
-              hasPrint={booking.has_print}
-              bookingCreatedAt={booking.booking_date}
-            />
-          </div>
-        </>
-      )}
 
   return (
     <div>
@@ -95,6 +82,19 @@ export default async function BookingViewPage({ params }: { params: Promise<{ id
           <p><span className="text-gray-500">Status:</span> {booking.status}</p>
         </div>
       </div>
+
+      {productionOrders && productionOrders[0] && (
+        <>
+          <h2 className="text-sm font-semibold uppercase text-gray-500 mb-2">Status Tracker</h2>
+          <div className="mb-6">
+            <StatusTracker
+              productionOrder={productionOrders[0]}
+              hasPrint={booking.has_print}
+              bookingCreatedAt={booking.booking_date}
+            />
+          </div>
+        </>
+      )}
 
       <h2 className="text-sm font-semibold uppercase text-gray-500 mb-2">Production Orders</h2>
       <div className="overflow-hidden rounded-xl border bg-white shadow-sm">
