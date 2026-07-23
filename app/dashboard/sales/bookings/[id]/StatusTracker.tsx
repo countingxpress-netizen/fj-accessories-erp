@@ -18,9 +18,6 @@ export default function StatusTracker({
       blowing_completed_at: new Date().toISOString(),
       stage: "cutting",
     }).eq("id", productionOrder.id);
-    await supabase.from("bookings").update({
-      status: "blowing",
-    }).eq("id", productionOrder.booking_id);
     setLoading(false);
     router.refresh();
   }
@@ -31,9 +28,6 @@ export default function StatusTracker({
       cutting_completed_at: new Date().toISOString(),
       stage: hasPrint ? "printing" : "finished",
     }).eq("id", productionOrder.id);
-    await supabase.from("bookings").update({
-      status: "cutting",
-    }).eq("id", productionOrder.booking_id);
     setLoading(false);
     router.refresh();
   }
@@ -44,9 +38,6 @@ export default function StatusTracker({
       printing_completed_at: new Date().toISOString(),
       stage: "finished",
     }).eq("id", productionOrder.id);
-    await supabase.from("bookings").update({
-      status: "printing",
-    }).eq("id", productionOrder.booking_id);
     setLoading(false);
     router.refresh();
   }

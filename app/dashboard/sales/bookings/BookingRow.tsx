@@ -3,6 +3,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { formatDate } from "@/lib/formatDate";
+import { formatStyle } from "@/lib/formatStyle";
 
 function formatMeasurement(b: any) {
   const unit = b.measurement_unit;

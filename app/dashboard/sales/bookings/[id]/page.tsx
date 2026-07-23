@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { formatDate } from "@/lib/formatDate";
+import { formatStyle } from "@/lib/formatStyle";
 import { notFound } from "next/navigation";
 import StatusTracker from "./StatusTracker";
 
@@ -74,7 +75,7 @@ async function BookingItemBlock({ booking, index, total }: { booking: any; index
           <p><span className="text-gray-500">Buyer:</span> {booking.buyers?.name ?? "-"}</p>
           <p><span className="text-gray-500">Merchant:</span> {booking.merchants?.name ?? "-"}</p>
           <p><span className="text-gray-500">Garments:</span> {booking.garments_name ?? "-"}</p>
-          <p><span className="text-gray-500">Style:</span> {booking.style ?? "-"}</p>
+          <p><span className="text-gray-500">Style:</span> {formatStyle(booking.style)}</p>
           <p><span className="text-gray-500">Customer Booking Ref:</span> {booking.customer_booking_ref ?? "-"}</p>
           <p><span className="text-gray-500">Booking Date:</span> {formatDate(booking.booking_date)}</p>
         </div>

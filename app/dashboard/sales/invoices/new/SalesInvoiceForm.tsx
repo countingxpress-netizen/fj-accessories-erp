@@ -6,7 +6,7 @@ import { generateNextDocNo } from "@/lib/docNumber";
 
 type Booking = {
   id: string; booking_no: string; quantity_pcs: number; product_id: string; customer_id: string;
-  style: string | null; buyers: { name: string } | null; merchants: { name: string } | null;
+  style: string | null; garments_name: string | null; buyers: { name: string } | null; merchants: { name: string } | null;
   delivery_point: string | null; customer_booking_ref: string | null;
   has_print: boolean; print_colors: number; rate_per_color: number; rate_per_inch: number;
   measurement_type: string; width_val: number; measurement_unit: string;
@@ -23,6 +23,7 @@ export default function SalesInvoiceForm({
   const [buyerFilter, setBuyerFilter] = useState("");
   const [merchantFilter, setMerchantFilter] = useState("");
   const [styleFilter, setStyleFilter] = useState("");
+  const [garmentsFilter, setGarmentsFilter] = useState("");
   const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().slice(0, 10));
   const [paymentReceived, setPaymentReceived] = useState(false);
   const [selectedQty, setSelectedQty] = useState<Record<string, string>>({});
@@ -45,8 +46,9 @@ export default function SalesInvoiceForm({
       .filter((b) => b.remaining > 0)
       .filter((b) => !buyerFilter || b.buyers?.name === buyerFilter)
       .filter((b) => !merchantFilter || b.merchants?.name === merchantFilter)
-      .filter((b) => !styleFilter || b.style === styleFilter);
-  }, [bookings, customerId, invoicedMap, buyerFilter, merchantFilter, styleFilter]);
+      .filter((b) => !styleFilter || b.style === styleFilter)
+      .filter((b) => !garmentsFilter || b.garments_name === garmentsFilter);
+  }, [bookings, customerId, invoicedMap, buyerFilter, merchantFilter, styleFilter, garmentsFilter]);
 
   const availableBuyers = useMemo(
     () => Array.from(new Set(bookings.filter((b) => b.customer_id === customerId).map((b) => b.buyers?.name).filter(Boolean))) as string[],
@@ -58,6 +60,11 @@ export default function SalesInvoiceForm({
   );
   const availableStyles = useMemo(
     () => Array.from(new Set(bookings.filter((b) => b.customer_id === customerId).map((b) => b.style).filter(Boolean))) as string[],
+    [bookings, customerId]
+  );
+
+  const availableGarments = useMemo(
+    () => Array.from(new Set(bookings.filter((b) => b.customer_id === customerId).map((b) => b.garments_name).filter(Boolean))) as string[],
     [bookings, customerId]
   );
 
@@ -191,7 +198,7 @@ export default function SalesInvoiceForm({
       <div className="flex flex-wrap gap-4 items-end">
         <div className="flex-1 max-w-xs">
           <label className="block text-sm text-gray-600 mb-1">Customer</label>
-          <select value={customerId} onChange={(e) => { setCustomerId(e.target.value); setSelectedQty({}); setPriceOverride({}); setBuyerFilter(""); setMerchantFilter(""); setStyleFilter(""); }} className="w-full rounded-lg border px-3 py-2 text-sm" required>
+          <select value={customerId} onChange={(e) => { setCustomerId(e.target.value); setSelectedQty({}); setPriceOverride({}); setBuyerFilter(""); setMerchantFilter(""); setStyleFilter(""); setGarmentsFilter(""); }} className="w-full rounded-lg border px-3 py-2 text-sm" required>
             <option value="">-- বাছুন --</option>
             {customers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
@@ -219,6 +226,15 @@ export default function SalesInvoiceForm({
                 {availableStyles.map((s) => <option key={s} value={s}>{s}</option>)}
               </select>
             </div>
+
+<div>
+              <label className="block text-sm text-gray-600 mb-1">Garments Filter</label>
+              <select value={garmentsFilter} onChange={(e) => setGarmentsFilter(e.target.value)} className="rounded-lg border px-3 py-2 text-sm">
+                <option value="">সব</option>
+                {availableGarments.map((g) => <option key={g} value={g}>{g}</option>)}
+              </select>
+            </div>
+
           </>
         )}
         <div>

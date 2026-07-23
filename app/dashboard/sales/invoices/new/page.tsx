@@ -6,7 +6,7 @@ export default async function NewSalesInvoicePage() {
   const { data: customers } = await supabase.from("customers").select("id, name, price_per_lbs").order("name");
   const { data: bookings } = await supabase
     .from("bookings")
-    .select("id, booking_no, quantity_pcs, product_id, customer_id, style, buyers(name), merchants(name), delivery_point, customer_booking_ref, has_print, print_colors, rate_per_color, rate_per_inch, measurement_type, width_val, measurement_unit, finished_goods(product_name, length_cm, width_cm, thickness)")
+    .select("id, booking_no, quantity_pcs, product_id, customer_id, style, garments_name, buyers(name), merchants(name), delivery_point, customer_booking_ref, has_print, print_colors, measurement_type, width_val, measurement_unit, finished_goods(product_name, length_cm, width_cm, thickness)")
     .order("booking_date", { ascending: false });
   const { data: allItems } = await supabase.from("sales_invoice_items").select("booking_id, quantity_pcs");
 

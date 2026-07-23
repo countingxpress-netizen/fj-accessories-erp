@@ -21,6 +21,7 @@ type PendingItem = {
   gussetVal: number;
   thicknessMm: number;
   productionThicknessMm: number;
+  piThicknessMm: number;
   materialType: "pe_standard" | "pe_rld" | "pp" | "custom";
   quantity: number;
   warehouseId: string;
@@ -68,6 +69,7 @@ export default function BookingForm({
   const [gussetVal, setGussetVal] = useState("");
   const [thicknessMm, setThicknessMm] = useState("");
   const [productionThicknessMm, setProductionThicknessMm] = useState("");
+  const [piThicknessMm, setPiThicknessMm] = useState("");
   const [materialType, setMaterialType] = useState<"pe_standard" | "pe_rld" | "pp" | "custom">("pe_standard");
   const [customLines, setCustomLines] = useState<CustomLine[]>([
     { material_id: "", percentage: "" },
@@ -166,6 +168,7 @@ export default function BookingForm({
     setGussetVal("");
     setThicknessMm("");
     setProductionThicknessMm("");
+    setPiThicknessMm("");
     setMaterialType("pe_standard");
     setCustomLines([{ material_id: "", percentage: "" }, { material_id: "", percentage: "" }]);
     setQuantity("");
@@ -201,6 +204,7 @@ export default function BookingForm({
       style, customerBookingRef, productDetails,
       measurementType, unit, lengthVal: L, widthVal: W, flapVal: F, gussetVal: G, thicknessMm: T,
       productionThicknessMm: PT,
+      piThicknessMm: parseFloat(piThicknessMm) || 0,
       materialType, quantity: qty, warehouseId, warehouseName,
       finalLbs: calculated.finalLbs, kg: calculated.kg, bags: calculated.bags,
       materialsNeeded, lengthCm, widthCm, hasPrint, printColors: parseInt(printColors) || 0,
@@ -325,6 +329,7 @@ export default function BookingForm({
           length_val: item.lengthVal, width_val: item.widthVal,
           flap_val: item.flapVal || null, gusset_val: item.gussetVal || null,
           thickness_mm: item.thicknessMm, production_thickness_mm: item.productionThicknessMm,
+          pi_thickness_mm: item.piThicknessMm,
           material_type: item.materialType,
           quantity_pcs: item.quantity, booking_date: bookingDate,
           required_lbs: Number(item.finalLbs.toFixed(2)),
@@ -432,8 +437,9 @@ export default function BookingForm({
 
       <div className="flex flex-wrap gap-4">
         <div className="flex-1 min-w-[180px]">
-          <label className="block text-sm text-gray-600 mb-1">Style</label>
-          <input value={style} onChange={(e) => setStyle(e.target.value)} onBlur={checkDuplicateStyle} className="w-full rounded-lg border px-3 py-2 text-sm" placeholder="যেমন: ST-1024" />
+          <label className="block text-sm text-gray-600 mb-1">Style (স্বয়ংক্রিয়ভাবে ST- যোগ হবে)</label>
+          <input value={style} onChange={(e) => setStyle(e.target.value)} onBlur={checkDuplicateStyle} className="w-full rounded-lg border px-3 py-2 text-sm" placeholder="যেমন: 1024" />
+          {style && !style.startsWith("ST-") && <p className="text-xs text-gray-500 mt-1">দেখাবে: ST-{style}</p>}
         </div>
         <div className="flex-1 min-w-[180px]">
           <label className="block text-sm text-gray-600 mb-1">Customer Booking Ref</label>
@@ -492,6 +498,10 @@ export default function BookingForm({
           <div>
             <label className="block text-xs text-gray-500 mb-1">Production Thickness (mm)</label>
             <input type="number" step="0.001" min="0" max="30" value={productionThicknessMm} onChange={(e) => setProductionThicknessMm(e.target.value)} className="rounded-lg border px-3 py-2 text-sm w-28" />
+          </div>
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">PI Thickness (mm)</label>
+            <input type="number" step="0.001" min="0" max="30" value={piThicknessMm} onChange={(e) => setPiThicknessMm(e.target.value)} className="rounded-lg border px-3 py-2 text-sm w-28" />
           </div>
         </div>
       </div>
