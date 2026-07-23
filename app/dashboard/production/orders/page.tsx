@@ -19,7 +19,7 @@ export default async function ProductionOrdersPage() {
   const supabase = await createClient();
   const { data: orders } = await supabase
     .from("production_orders")
-    .select("*, bookings(booking_no, customers(name), finished_goods(product_name))")
+    .select("*, bookings(booking_no, customers(name), finished_goods(product_name), quantity_pcs, status)")
     .order("order_date", { ascending: false });
 
   return (
@@ -31,8 +31,8 @@ export default async function ProductionOrdersPage() {
         </Link>
       </div>
 
-      <div className="overflow-hidden rounded-xl border bg-white shadow-sm">
-        <table className="w-full text-sm">
+      <div className="overflow-x-auto rounded-xl border bg-white shadow-sm">
+        <table className="w-full text-sm min-w-[900px]">
           <thead className="bg-gray-50 text-left text-gray-600">
             <tr>
               <th className="px-4 py-2">Production No</th>
@@ -43,14 +43,19 @@ export default async function ProductionOrdersPage() {
               <th className="px-4 py-2 text-right">Qty (Pcs)</th>
               <th className="px-4 py-2 text-right">Required Lbs</th>
               <th className="px-4 py-2">Stage</th>
+              <th className="px-4 py-2 text-right">Action</th>
             </tr>
           </thead>
           <tbody>
             {(orders ?? []).map((o: any) => (
-              <tr key={o.id} className="border-t">
+              <tr key={o.id} className="border-t hover:bg-gray-50">
                 <td className="px-4 py-2 font-medium">{o.production_no}</td>
-                <td className="px-4 py-2 text-gray-500">{o.order_date}</td>
-                <td className="px-4 py-2">{o.bookings?.booking_no ?? "-"}</td>
+                <td className="px-4 py-2 text-gray-500">{formatDate(o.order_date)}</td>
+                <td className="px-4 py-2">
+                  <Link href={`/dashboard/sales/bookings/${o.booking_id}`} className="text-blue-600 hover:underline">
+                    {o.bookings?.booking_no ?? "-"}
+                  </Link>
+                </td>
                 <td className="px-4 py-2">{o.bookings?.customers?.name ?? "-"}</td>
                 <td className="px-4 py-2">{o.bookings?.finished_goods?.product_name ?? "-"}</td>
                 <td className="px-4 py-2 text-right">{o.quantity_pcs?.toLocaleString()}</td>
@@ -60,10 +65,15 @@ export default async function ProductionOrdersPage() {
                     {stageLabels[o.stage] ?? o.stage}
                   </span>
                 </td>
+                <td className="px-4 py-2 text-right">
+                  <Link href={`/dashboard/sales/bookings/${o.booking_id}`} className="text-xs text-blue-600 hover:underline">
+                    View
+                  </Link>
+                </td>
               </tr>
             ))}
             {(!orders || orders.length === 0) && (
-              <tr><td colSpan={8} className="px-4 py-3 text-gray-400 italic">এখনো কোনো Production Order নেই</td></tr>
+              <tr><td colSpan={9} className="px-4 py-3 text-gray-400 italic">এখনো কোনো Production Order নেই</td></tr>
             )}
           </tbody>
         </table>

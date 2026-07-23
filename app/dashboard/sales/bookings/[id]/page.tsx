@@ -8,32 +8,65 @@ export default async function BookingViewPage({ params }: { params: Promise<{ id
   const { id } = await params;
   const supabase = await createClient();
 
-  const { data: booking } = await supabase
+  const { data: currentBooking } = await supabase.from("bookings").select("booking_group_id").eq("id", id).single();
+  if (!currentBooking) return notFound();
+
+  const groupId = currentBooking.booking_group_id ?? id;
+
+  const query = supabase
     .from("bookings")
-    .select("*, customers(name), buyers(name), merchants(name), finished_goods(product_name, length_cm, width_cm, thickness), warehouses(name)")
-    .eq("id", id)
-    .single();
+    .select("*, customers(name), buyers(name), merchants(name), finished_goods(product_name, length_cm, width_cm, thickness), warehouses(name)");
 
-  if (!booking) return notFound();
+  const { data: bookings } = currentBooking.booking_group_id
+    ? await query.eq("booking_group_id", groupId)
+    : await query.eq("id", id);
 
-  const { data: materials } = await supabase
-    .from("booking_materials")
-    .select("quantity_lbs, raw_materials(material_name)")
-    .eq("booking_id", id);
-
-  const { data: productionOrders } = await supabase
-    .from("production_orders")
-    .select("*")
-    .eq("booking_id", id);
+  if (!bookings || bookings.length === 0) return notFound();
 
   return (
     <div>
       <Link href="/dashboard/sales/bookings" className="text-sm text-gray-500 hover:underline">← সব Booking-এর তালিকায় ফিরুন</Link>
 
       <div className="flex items-center justify-between mt-2 mb-4">
-        <h1 className="text-2xl font-semibold">{booking.booking_no}</h1>
-        <Link href={`/dashboard/sales/bookings/${id}/edit`} className="rounded-lg bg-gray-900 px-4 py-2 text-sm text-white">Edit</Link>
+        <h1 className="text-2xl font-semibold">
+          {bookings[0].booking_no}
+          {bookings.length > 1 && <span className="ml-2 text-sm text-blue-600">({bookings.length}টি প্রোডাক্ট)</span>}
+        </h1>
       </div>
+
+      {bookings.map((booking, index) => (
+        <BookingItemBlock key={booking.id} booking={booking} index={index + 1} total={bookings.length} />
+      ))}
+    </div>
+  );
+}
+
+async function BookingItemBlock({ booking, index, total }: { booking: any; index: number; total: number }) {
+  const supabase = await createClient();
+
+  const { data: materials } = await supabase
+    .from("booking_materials")
+    .select("quantity_lbs, raw_materials(material_name)")
+    .eq("booking_id", booking.id);
+
+  const { data: productionOrders } = await supabase
+    .from("production_orders")
+    .select("*")
+    .eq("booking_id", booking.id);
+
+  return (
+    <div className="mb-10 border-t-4 border-gray-100 pt-4 first:border-t-0 first:pt-0">
+      {total > 1 && (
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-lg font-semibold text-gray-700">আইটেম {index}/{total} — {booking.style || booking.product_details || "-"}</h2>
+          <Link href={`/dashboard/sales/bookings/${booking.id}/edit`} className="rounded-lg bg-gray-900 px-3 py-1.5 text-xs text-white">Edit</Link>
+        </div>
+      )}
+      {total === 1 && (
+        <div className="flex justify-end mb-3">
+          <Link href={`/dashboard/sales/bookings/${booking.id}/edit`} className="rounded-lg bg-gray-900 px-4 py-2 text-sm text-white">Edit</Link>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
         <div className="rounded-xl border bg-white p-4 shadow-sm space-y-1 text-sm">
@@ -85,8 +118,8 @@ export default async function BookingViewPage({ params }: { params: Promise<{ id
 
       {productionOrders && productionOrders[0] && (
         <>
-          <h2 className="text-sm font-semibold uppercase text-gray-500 mb-2">Status Tracker</h2>
-          <div className="mb-6">
+          <h3 className="text-sm font-semibold uppercase text-gray-500 mb-2">Status Tracker</h3>
+          <div className="mb-4">
             <StatusTracker
               productionOrder={productionOrders[0]}
               hasPrint={booking.has_print}
@@ -95,27 +128,6 @@ export default async function BookingViewPage({ params }: { params: Promise<{ id
           </div>
         </>
       )}
-
-      <h2 className="text-sm font-semibold uppercase text-gray-500 mb-2">Production Orders</h2>
-      <div className="overflow-hidden rounded-xl border bg-white shadow-sm">
-        <table className="w-full text-sm">
-          <thead className="bg-gray-50 text-left text-gray-600">
-            <tr><th className="px-4 py-2">Production No</th><th className="px-4 py-2">Stage</th><th className="px-4 py-2 text-right">Required Lbs</th></tr>
-          </thead>
-          <tbody>
-            {(productionOrders ?? []).map((po: any) => (
-              <tr key={po.id} className="border-t">
-                <td className="px-4 py-2">{po.production_no}</td>
-                <td className="px-4 py-2 capitalize">{po.stage}</td>
-                <td className="px-4 py-2 text-right">{po.required_lbs?.toFixed(2)}</td>
-              </tr>
-            ))}
-            {(!productionOrders || productionOrders.length === 0) && (
-              <tr><td colSpan={3} className="px-4 py-3 text-gray-400 italic">কোনো Production Order নেই</td></tr>
-            )}
-          </tbody>
-        </table>
-      </div>
     </div>
   );
 }

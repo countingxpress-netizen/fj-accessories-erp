@@ -4,6 +4,16 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { formatDate } from "@/lib/formatDate";
 
+function formatMeasurement(b: any) {
+  const unit = b.measurement_unit;
+  const L = b.length_val, W = b.width_val, F = b.flap_val, G = b.gusset_val;
+
+  if (b.measurement_type === "simple") return `L-${L} x W-${W}${unit}`;
+  if (b.measurement_type === "gusset") return `L-${L} x W-${W} + G-${G}${unit}`;
+  if (b.measurement_type === "adhesive") return `L-${L} + F-${F} x W-${W}${unit}`;
+  return "-";
+}
+
 function getStatusLabel(booking: any, deliveredQty: number) {
   const po = booking.production_orders?.[0];
 
@@ -77,6 +87,8 @@ export default function BookingRow({
   const status = getStatusLabel(booking, deliveredQty);
   const groupKey = booking.booking_group_id ?? booking.id;
 
+  const piNo = booking.pi_bookings?.[0]?.proforma_invoices?.pi_no ?? null;
+
   return (
     <tr className={`border-t ${groupBg} ${isGroupStart && groupSize && groupSize > 1 ? "border-t-2 border-t-blue-200" : ""}`}>
       <td className="px-4 py-2 text-gray-500">{serial ?? ""}</td>
@@ -90,11 +102,18 @@ export default function BookingRow({
       <td className="px-4 py-2">{booking.customers?.name ?? "-"}</td>
       <td className="px-4 py-2 text-gray-500">{booking.buyers?.name ?? "-"}</td>
       <td className="px-4 py-2 text-gray-500">{booking.garments_name ?? "-"}</td>
-      <td className="px-4 py-2">{booking.finished_goods?.product_name ?? "-"}</td>
+      <td className="px-4 py-2 text-sm">{formatMeasurement(booking)}</td>
       <td className="px-4 py-2 text-right">{booking.quantity_pcs?.toLocaleString()}</td>
       <td className="px-4 py-2 text-right">{booking.required_lbs?.toFixed(2)}</td>
       <td className="px-4 py-2">
         <span className={`rounded-full px-2 py-0.5 text-xs ${status.color}`}>{status.label}</span>
+      </td>
+      <td className="px-4 py-2 font-medium text-xs">
+        {piNo ? (
+          <span className="text-blue-700">{piNo}</span>
+        ) : (
+          <span className="text-gray-400">-</span>
+        )}
       </td>
       <td className="px-4 py-2 text-right">
         <details className="relative inline-block text-left">

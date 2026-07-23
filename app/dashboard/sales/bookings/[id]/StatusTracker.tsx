@@ -65,7 +65,6 @@ export default function StatusTracker({
       <StepRow label="a. বুকিং রিসিভ করলাম" done dateStr={bookingCreatedAt} />
 
       <StepRow label="b. ব্লোয়িং সিডিউল দিলাম" done={blowingDone} dateStr={productionOrder.blowing_completed_at}>
-        <Link href={`/dashboard/production/orders/${productionOrder.id}/schedule-print?type=blowing`} target="_blank" className="text-xs text-blue-700 hover:underline self-center">Print Blowing Schedule</Link>
         {!blowingDone && (
           <button onClick={markBlowingDone} disabled={loading} className="rounded bg-gray-900 px-3 py-1 text-xs text-white">সম্পন্ন করুন</button>
         )}
@@ -73,7 +72,6 @@ export default function StatusTracker({
 
       {hasPrint ? (
         <StepRow label="c. প্রিন্টিং সিডিউল দিলাম" done={printingDone} dateStr={productionOrder.printing_completed_at}>
-          <Link href={`/dashboard/production/orders/${productionOrder.id}/schedule-print?type=printing`} target="_blank" className="text-xs text-blue-700 hover:underline self-center">Print Layout + Order</Link>
           {blowingDone && !printingDone && (
             <button onClick={markPrintingDone} disabled={loading} className="rounded bg-gray-900 px-3 py-1 text-xs text-white">সম্পন্ন করুন</button>
           )}
@@ -83,7 +81,6 @@ export default function StatusTracker({
       )}
 
       <StepRow label="d. কাটিং সিডিউল দিলাম" done={cuttingDone} dateStr={productionOrder.cutting_completed_at}>
-        <Link href={`/dashboard/production/orders/${productionOrder.id}/schedule-print?type=cutting`} target="_blank" className="text-xs text-blue-700 hover:underline self-center">Print Cutting Schedule</Link>
         {(hasPrint ? printingDone : blowingDone) && !cuttingDone && (
           <button onClick={markCuttingDone} disabled={loading} className="rounded bg-gray-900 px-3 py-1 text-xs text-white">সম্পন্ন করুন</button>
         )}
