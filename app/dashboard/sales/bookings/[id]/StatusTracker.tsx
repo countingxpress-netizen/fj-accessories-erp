@@ -16,17 +16,11 @@ export default function StatusTracker({
     setLoading(true);
     await supabase.from("production_orders").update({
       blowing_completed_at: new Date().toISOString(),
-      stage: hasPrint ? "printing" : "cutting",
+      stage: "cutting",
     }).eq("id", productionOrder.id);
-    setLoading(false);
-    router.refresh();
-  }
-
-  async function markPrintingDone() {
-    setLoading(true);
-    await supabase.from("production_orders").update({
-      printing_completed_at: new Date().toISOString(), stage: "cutting",
-    }).eq("id", productionOrder.id);
+    await supabase.from("bookings").update({
+      status: "blowing",
+    }).eq("id", productionOrder.booking_id);
     setLoading(false);
     router.refresh();
   }
@@ -35,7 +29,24 @@ export default function StatusTracker({
     setLoading(true);
     await supabase.from("production_orders").update({
       cutting_completed_at: new Date().toISOString(),
+      stage: hasPrint ? "printing" : "finished",
     }).eq("id", productionOrder.id);
+    await supabase.from("bookings").update({
+      status: "cutting",
+    }).eq("id", productionOrder.booking_id);
+    setLoading(false);
+    router.refresh();
+  }
+
+  async function markPrintingDone() {
+    setLoading(true);
+    await supabase.from("production_orders").update({
+      printing_completed_at: new Date().toISOString(),
+      stage: "finished",
+    }).eq("id", productionOrder.id);
+    await supabase.from("bookings").update({
+      status: "printing",
+    }).eq("id", productionOrder.booking_id);
     setLoading(false);
     router.refresh();
   }
@@ -70,21 +81,21 @@ export default function StatusTracker({
         )}
       </StepRow>
 
+      <StepRow label="c. কাটিং সিডিউল দিলাম" done={cuttingDone} dateStr={productionOrder.cutting_completed_at}>
+        {blowingDone && !cuttingDone && (
+          <button onClick={markCuttingDone} disabled={loading} className="rounded bg-gray-900 px-3 py-1 text-xs text-white">সম্পন্ন করুন</button>
+        )}
+      </StepRow>
+
       {hasPrint ? (
-        <StepRow label="c. প্রিন্টিং সিডিউল দিলাম" done={printingDone} dateStr={productionOrder.printing_completed_at}>
-          {blowingDone && !printingDone && (
+        <StepRow label="d. প্রিন্টিং সিডিউল দিলাম" done={printingDone} dateStr={productionOrder.printing_completed_at}>
+          {cuttingDone && !printingDone && (
             <button onClick={markPrintingDone} disabled={loading} className="rounded bg-gray-900 px-3 py-1 text-xs text-white">সম্পন্ন করুন</button>
           )}
         </StepRow>
       ) : (
-        <StepRow label="c. প্রিন্টিং (নেই)" done={true} />
+        <StepRow label="d. প্রিন্টিং (নেই)" done={true} />
       )}
-
-      <StepRow label="d. কাটিং সিডিউল দিলাম" done={cuttingDone} dateStr={productionOrder.cutting_completed_at}>
-        {(hasPrint ? printingDone : blowingDone) && !cuttingDone && (
-          <button onClick={markCuttingDone} disabled={loading} className="rounded bg-gray-900 px-3 py-1 text-xs text-white">সম্পন্ন করুন</button>
-        )}
-      </StepRow>
 
       <StepRow label="e. Finished Goods স্টোর হলো" done={finishedDone}>
         {!finishedDone && (
