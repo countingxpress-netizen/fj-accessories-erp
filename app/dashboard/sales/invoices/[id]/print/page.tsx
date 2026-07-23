@@ -3,13 +3,23 @@ import { formatDate } from "@/lib/formatDate";
 import { notFound } from "next/navigation";
 import PrintButton from "@/app/dashboard/PrintButton";
 
+function formatMeasurement(b: any) {
+  const unit = b.measurement_unit;
+  const L = b.length_val, W = b.width_val, F = b.flap_val, G = b.gusset_val;
+
+  if (b.measurement_type === "simple") return `L-${L} x W-${W} ${unit}`;
+  if (b.measurement_type === "gusset") return `L-${L} x W-${W} + G-${G} ${unit}`;
+  if (b.measurement_type === "adhesive") return `L-${L} + F-${F} x W-${W} ${unit}`;
+  return "-";
+}
+
 export default async function InvoicePrintPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const supabase = await createClient();
 
   const { data: invoice } = await supabase
     .from("sales_invoices")
-    .select("*, customers(name, address, phone), sales_invoice_items(quantity_pcs, unit_price, amount, bookings(booking_no), finished_goods(product_name, length_cm, width_cm, thickness))")
+    .select("*, customers(name, address, phone), sales_invoice_items(quantity_pcs, unit_price, amount, bookings(booking_no, measurement_type, length_val, width_val, flap_val, gusset_val, measurement_unit), finished_goods(product_name))")
     .eq("id", id)
     .single();
 
@@ -53,7 +63,7 @@ export default async function InvoicePrintPage({ params }: { params: Promise<{ i
           <tr className="border-b-2 border-gray-800">
             <th className="text-left py-2">Booking</th>
             <th className="text-left py-2">Product</th>
-            <th className="text-right py-2">Size (cm)</th>
+            <th className="text-right py-2">Measurement</th>
             <th className="text-right py-2">Qty</th>
             <th className="text-right py-2">Unit Price</th>
             <th className="text-right py-2">Amount</th>
@@ -64,7 +74,7 @@ export default async function InvoicePrintPage({ params }: { params: Promise<{ i
             <tr key={i} className="border-b">
               <td className="py-2 text-gray-600">{item.bookings?.booking_no}</td>
               <td className="py-2">{item.finished_goods?.product_name}</td>
-              <td className="text-right py-2">{item.finished_goods?.length_cm}×{item.finished_goods?.width_cm}×{item.finished_goods?.thickness}</td>
+              <td className="text-right py-2">{formatMeasurement(item.bookings)}</td>
               <td className="text-right py-2">{item.quantity_pcs}</td>
               <td className="text-right py-2">{item.unit_price.toFixed(4)}</td>
               <td className="text-right py-2">{item.amount.toFixed(2)}</td>
@@ -79,8 +89,8 @@ export default async function InvoicePrintPage({ params }: { params: Promise<{ i
         </tfoot>
       </table>
 
-      <div className="mt-16 flex justify-between text-sm">
-        <div className="border-t border-gray-400 pt-2 w-40 text-center">Prepared By</div>
+      <div className="mt-24 flex justify-between text-sm">
+        <div className="border-t border-gray-400 pt-2 w-40 text-center">Received By</div>
         <div className="border-t border-gray-400 pt-2 w-40 text-center">Authorized Signature</div>
       </div>
     </div>
