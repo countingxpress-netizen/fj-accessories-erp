@@ -27,7 +27,7 @@ export default async function InvoicePrintPage({ params }: { params: Promise<{ i
 
   if (!invoice) return notFound();
 
-  const total = (invoice.sales_invoice_items ?? []).reduce((s: number, i: any) => s + (i.amount || 0), 0);
+  const total = Math.round((invoice.sales_invoice_items ?? []).reduce((s: number, i: any) => s + (i.amount || 0), 0) * 100) / 100;
 
   return (
     <div className="max-w-3xl mx-auto p-8 bg-white text-gray-900 print:p-0">
@@ -76,8 +76,8 @@ export default async function InvoicePrintPage({ params }: { params: Promise<{ i
               <td className="py-2">{item.finished_goods?.product_name}</td>
               <td className="text-right py-2">{formatMeasurement(item.bookings)}</td>
               <td className="text-right py-2">{item.quantity_pcs}</td>
-              <td className="text-right py-2">{item.unit_price.toFixed(4)}</td>
-              <td className="text-right py-2">{item.amount.toFixed(2)}</td>
+              <td className="text-right py-2">{item.unit_price.toFixed(2)}</td>
+              <td className="text-right py-2">{(Math.round(item.unit_price * item.quantity_pcs * 100) / 100).toFixed(2)}</td>
             </tr>
           ))}
         </tbody>
