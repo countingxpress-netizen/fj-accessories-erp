@@ -123,7 +123,7 @@ export default function EditInvoiceForm({
                   <span className="text-xs text-gray-400 ml-1">(max {it.maxQty})</span>
                 </td>
                 <td className="px-3 py-2">
-                  <input type="number" step="0.0001" value={it.price} onChange={(e) => updateItem(it.id, "price", e.target.value)} className="w-full rounded border px-2 py-1 text-sm" />
+                  <input type="number" step="0.01" value={it.price} onChange={(e) => updateItem(it.id, "price", e.target.value)} className="w-full rounded border px-2 py-1 text-sm" />
                 </td>
                 <td className="px-3 py-2 text-right">{((parseFloat(it.qty) || 0) * (parseFloat(it.price) || 0)).toFixed(2)}</td>
               </tr>

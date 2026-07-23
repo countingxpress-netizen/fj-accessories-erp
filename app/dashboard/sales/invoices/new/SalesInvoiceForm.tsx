@@ -286,7 +286,7 @@ export default function SalesInvoiceForm({
                       {b.measurement_type === "adhesive" && "Adhesive"}
                       {!b.has_print && b.measurement_type !== "adhesive" && "-"}
                     </td>
-                    <td className="px-3 py-2 text-right">{unitPrice.toFixed(4)}</td>
+                    <td className="px-3 py-2 text-right">{unitPrice.toFixed(2)}</td>
                     <td className="px-3 py-2 text-right">{(qty * unitPrice).toFixed(2)}</td>
                   </tr>
                 );

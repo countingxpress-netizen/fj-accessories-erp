@@ -7,7 +7,7 @@ export default async function NewDeliveryChallanPage() {
   const { data: customers } = await supabase.from("customers").select("id, name").order("name");
   const { data: bookings } = await supabase
     .from("bookings")
-    .select("id, booking_no, quantity_pcs, product_id, customer_id, style, buyers(name), merchants(name), delivery_point, customer_booking_ref, finished_goods(product_name)")
+    .select("id, booking_no, quantity_pcs, product_id, customer_id, style, garments_name, buyers(name), merchants(name), delivery_point, customer_booking_ref, finished_goods(product_name)")
     .in("status", ["in_production", "partially_delivered"])
     .order("booking_date", { ascending: false });
   const { data: warehouses } = await supabase.from("warehouses").select("id, name").order("name");
