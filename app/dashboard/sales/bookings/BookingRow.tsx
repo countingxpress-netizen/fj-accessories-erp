@@ -87,7 +87,13 @@ export default function BookingRow({
   const status = getStatusLabel(booking, deliveredQty);
   const groupKey = booking.booking_group_id ?? booking.id;
 
+<<<<<<< HEAD
   const piNo = booking.pi_bookings?.[0]?.proforma_invoices?.pi_no ?? null;
+=======
+  const piList = (booking.pi_bookings ?? [])
+    .map((pb: any) => pb.proforma_invoices)
+    .filter(Boolean);
+>>>>>>> a320505bf4cbe3c43006bc1c05ad3d55c375a394
 
   return (
     <tr className={`border-t ${groupBg} ${isGroupStart && groupSize && groupSize > 1 ? "border-t-2 border-t-blue-200" : ""}`}>
@@ -109,8 +115,20 @@ export default function BookingRow({
         <span className={`rounded-full px-2 py-0.5 text-xs ${status.color}`}>{status.label}</span>
       </td>
       <td className="px-4 py-2 font-medium text-xs">
+<<<<<<< HEAD
         {piNo ? (
           <span className="text-blue-700">{piNo}</span>
+=======
+        {piList.length > 0 ? (
+          piList.map((pi: any, i: number) => (
+            <span key={pi.id}>
+              <Link href={`/dashboard/lc-export/proforma/${pi.id}/print`} target="_blank" className="text-blue-700 hover:underline">
+                {pi.pi_no}
+              </Link>
+              {i < piList.length - 1 && ", "}
+            </span>
+          ))
+>>>>>>> a320505bf4cbe3c43006bc1c05ad3d55c375a394
         ) : (
           <span className="text-gray-400">-</span>
         )}

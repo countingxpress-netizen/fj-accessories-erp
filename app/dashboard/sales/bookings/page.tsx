@@ -7,7 +7,11 @@ export default async function BookingsListPage() {
   const supabase = await createClient();
   const { data: bookings } = await supabase
     .from("bookings")
+<<<<<<< HEAD
     .select("*, customers(name), buyers(name), finished_goods(product_name), production_orders(id, stage, blowing_completed_at, printing_completed_at, cutting_completed_at), pi_bookings(proforma_invoices(pi_no))")
+=======
+    .select("*, customers(name), buyers(name), finished_goods(product_name), production_orders(id, stage, blowing_completed_at, printing_completed_at, cutting_completed_at), pi_bookings(proforma_invoices(id, pi_no))")
+>>>>>>> a320505bf4cbe3c43006bc1c05ad3d55c375a394
     .order("created_at", { ascending: false });
 
   const { data: allChallanItems } = await supabase
