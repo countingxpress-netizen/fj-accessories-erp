@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { generateNextDocNo } from "@/lib/docNumber";
 import { recalcBookingStatus } from "@/lib/recalcBookingStatus";
+import { formatStyle } from "@/lib/formatStyle";
 
 type Booking = {
   id: string; booking_no: string; quantity_pcs: number; product_id: string; customer_id: string;
@@ -22,7 +23,6 @@ export default function DeliveryChallanForm({
   const [merchantFilter, setMerchantFilter] = useState("");
   const [styleFilter, setStyleFilter] = useState("");
   const [garmentsFilter, setGarmentsFilter] = useState("");
-  const [warehouseId, setWarehouseId] = useState("");
   const [challanDate, setChallanDate] = useState(new Date().toISOString().slice(0, 10));
   const [selectedQty, setSelectedQty] = useState<Record<string, string>>({});
   const [error, setError] = useState("");
@@ -74,7 +74,7 @@ export default function DeliveryChallanForm({
     e.preventDefault();
     setError("");
 
-    if (!customerId || !warehouseId || lineItems.length === 0) {
+    if (!customerId || lineItems.length === 0) {
       setError("Customer, Warehouse এবং অন্তত একটা বুকিং-এ Quantity দিন।");
       return;
     }
@@ -87,15 +87,23 @@ export default function DeliveryChallanForm({
 
     setLoading(true);
 
+    const resolvedWarehouseId: Record<string, string> = {};
+
     for (const li of lineItems) {
-      const { data: stock } = await supabase
-        .from("finished_goods_stock").select("quantity_pcs")
-        .eq("product_id", li.booking.product_id).eq("warehouse_id", warehouseId).maybeSingle();
-      if ((stock?.quantity_pcs ?? 0) < li.qty) {
+      const { data: stockRows } = await supabase
+        .from("finished_goods_stock")
+        .select("warehouse_id, quantity_pcs")
+        .eq("product_id", li.booking.product_id)
+        .gt("quantity_pcs", 0)
+        .order("quantity_pcs", { ascending: false });
+
+      const matchedStock = (stockRows ?? []).find((s) => s.quantity_pcs >= li.qty);
+      if (!matchedStock) {
         setLoading(false);
-        setError(`${li.booking.booking_no}-এর পণ্যে পর্যাপ্ত স্টক নেই (বর্তমান: ${stock?.quantity_pcs ?? 0})।`);
+        setError(`${li.booking.booking_no}-এর পণ্যে কোনো গুদামেই পর্যাপ্ত স্টক নেই।`);
         return;
       }
+      resolvedWarehouseId[li.booking.id] = matchedStock.warehouse_id;
     }
 
     const challanNo = await generateNextDocNo(supabase, "delivery_challans", "challan_no", "DC", "challan_date", challanDate);
@@ -120,20 +128,22 @@ export default function DeliveryChallanForm({
     }
 
     for (const li of lineItems) {
+      const wId = resolvedWarehouseId[li.booking.id];
+
       await supabase.from("delivery_challan_items").insert({
         challan_id: challan.id, product_id: li.booking.product_id, quantity_pcs: li.qty,
       });
 
       const { data: stock } = await supabase
         .from("finished_goods_stock").select("*")
-        .eq("product_id", li.booking.product_id).eq("warehouse_id", warehouseId).single();
+        .eq("product_id", li.booking.product_id).eq("warehouse_id", wId).single();
 
       await supabase.from("finished_goods_stock")
         .update({ quantity_pcs: stock.quantity_pcs - li.qty, updated_at: new Date().toISOString() })
         .eq("id", stock.id);
 
       await supabase.from("stock_ledger").insert({
-        item_type: "finished_goods", item_id: li.booking.product_id, warehouse_id: warehouseId,
+        item_type: "finished_goods", item_id: li.booking.product_id, warehouse_id: wId,
         txn_type: "out", quantity: li.qty, reference_type: "delivery", reference_id: challan.id, txn_date: challanDate,
       });
 
@@ -187,13 +197,7 @@ export default function DeliveryChallanForm({
             </div>
           </>
         )}
-        <div>
-          <label className="block text-sm text-gray-600 mb-1">Warehouse</label>
-          <select value={warehouseId} onChange={(e) => setWarehouseId(e.target.value)} className="rounded-lg border px-3 py-2 text-sm min-w-[180px]" required>
-            <option value="">-- বাছুন --</option>
-            {warehouses.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
-          </select>
-        </div>
+        
         <div>
           <label className="block text-sm text-gray-600 mb-1">Challan Date</label>
           <input type="date" value={challanDate} onChange={(e) => setChallanDate(e.target.value)} className="rounded-lg border px-3 py-2 text-sm" required />
@@ -217,7 +221,7 @@ export default function DeliveryChallanForm({
               {customerBookings.map((b) => (
                 <tr key={b.id} className="border-t">
                   <td className="px-3 py-2 font-medium">{b.booking_no}</td>
-                  <td className="px-3 py-2 text-gray-500">{b.style || "-"}</td>
+                  <td className="px-3 py-2 text-gray-500">{formatStyle(b.style)}</td>
                   <td className="px-3 py-2 text-gray-500">{b.buyers?.name || "-"}</td>
                   <td className="px-3 py-2">{b.finished_goods?.product_name}</td>
                   <td className="px-3 py-2 text-right">{b.remaining}</td>

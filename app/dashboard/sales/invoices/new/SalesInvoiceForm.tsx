@@ -68,6 +68,11 @@ export default function SalesInvoiceForm({
     [bookings, customerId]
   );
 
+  function getLineAmount(qty: number, unitPrice: number) {
+  const rounded = Math.round(unitPrice * 100) / 100;
+  return Math.floor(qty * rounded);
+}
+
   function getSurcharge(b: Booking) {
     let printCharge = 0, adhesiveCharge = 0;
     if (b.has_print) printCharge = (b.print_colors || 0) * (b.rate_per_color || 0.20);
@@ -91,8 +96,9 @@ export default function SalesInvoiceForm({
   const lineItems = customerBookings
     .map((b) => {
       const qty = parseFloat(selectedQty[b.id] || "0");
-      const unitPrice = getUnitPrice(b);
-      return { booking: b, qty, unitPrice, amount: qty * unitPrice };
+      const unitPriceRaw = getUnitPrice(b);
+      const unitPrice = Math.round(unitPriceRaw * 100) / 100;
+      return { booking: b, qty, unitPrice, amount: getLineAmount(qty, unitPriceRaw) };
     })
     .filter((li) => li.qty > 0);
 
@@ -286,8 +292,8 @@ export default function SalesInvoiceForm({
                       {b.measurement_type === "adhesive" && "Adhesive"}
                       {!b.has_print && b.measurement_type !== "adhesive" && "-"}
                     </td>
-                    <td className="px-3 py-2 text-right">{unitPrice.toFixed(2)}</td>
-                    <td className="px-3 py-2 text-right">{(qty * unitPrice).toFixed(2)}</td>
+                    <td className="px-3 py-2 text-right">{(Math.round(unitPrice * 100) / 100).toFixed(2)}</td>
+                    <td className="px-3 py-2 text-right">{getLineAmount(qty, unitPrice).toLocaleString()}.00</td>
                   </tr>
                 );
               })}
