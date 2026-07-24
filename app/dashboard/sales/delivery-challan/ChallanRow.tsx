@@ -3,6 +3,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { formatDate } from "@/lib/formatDate";
+import DeliveryStatusBadge from "./DeliveryStatusBadge";
 import { recalcBookingStatus } from "@/lib/recalcBookingStatus";
 
 export default function ChallanRow({ challan }: { challan: any }) {
@@ -60,18 +61,7 @@ export default function ChallanRow({ challan }: { challan: any }) {
       </td>
 
     <td className="px-4 py-2">
-        <select
-          value={challan.delivery_status ?? "challan_ready"}
-          onChange={async (e) => {
-            await supabase.from("delivery_challans").update({ delivery_status: e.target.value }).eq("id", challan.id);
-            router.refresh();
-          }}
-          className="rounded border px-2 py-1 text-xs"
-        >
-          <option value="challan_ready">Challan Ready</option>
-          <option value="delivery_done">Delivery Done</option>
-          <option value="challan_received">Challan Received</option>
-        </select>
+        <DeliveryStatusBadge challanId={challan.id} currentStatus={challan.delivery_status ?? "challan_ready"} />
       </td>
 
       <td className="px-4 py-2 text-right whitespace-nowrap">

@@ -3,14 +3,24 @@ import { formatDate } from "@/lib/formatDate";
 import { notFound } from "next/navigation";
 import PrintButton from "@/app/dashboard/PrintButton";
 
-function formatMeasurement(b: any) {
-  if (!b) return "-";
-  const unit = b.measurement_unit;
-  const L = b.length_val, W = b.width_val, F = b.flap_val, G = b.gusset_val;
+function formatMeasurement(booking: any, finishedGood: any) {
+  // ১. বুকিং ডাটা থাকলে সেটা দেখাবে
+  if (booking) {
+    const unit = booking.measurement_unit || "cm";
+    const L = booking.length_val, W = booking.width_val, F = booking.flap_val, G = booking.gusset_val;
 
-  if (b.measurement_type === "simple") return `L-${L} x W-${W} ${unit}`;
-  if (b.measurement_type === "gusset") return `L-${L} x W-${W} + G-${G} ${unit}`;
-  if (b.measurement_type === "adhesive") return `L-${L} + F-${F} x W-${W} ${unit}`;
+    if (booking.measurement_type === "simple") return `L-${L} x W-${W} ${unit}`;
+    if (booking.measurement_type === "gusset") return `L-${L} x W-${W} + G-${G} ${unit}`;
+    if (booking.measurement_type === "adhesive") return `L-${L} + F-${F} x W-${W} ${unit}`;
+  }
+
+  // ২. বুকিং ডাটা না থাকলে finished_goods টেবিলের ডাটা (Fallback) দেখাবে
+  if (finishedGood?.length_cm || finishedGood?.width_cm) {
+    const L = finishedGood.length_cm || 0;
+    const W = finishedGood.width_cm || 0;
+    return `L-${L} x W-${W} cm`;
+  }
+
   return "-";
 }
 
@@ -18,24 +28,40 @@ export default async function ChallanPrintPage({ params }: { params: Promise<{ i
   const { id } = await params;
   const supabase = await createClient();
 
+  // ১. Challan-এর সাথে items এবং item-এর product_id সহ ফেচ করা হলো
   const { data: challan } = await supabase
     .from("delivery_challans")
-    .select("*, customers(name, address, phone), delivery_challan_items(quantity_pcs, finished_goods(product_name, length_cm, width_cm, thickness))")
+    .select(`
+      *, 
+      customers(name, address, phone), 
+      delivery_challan_items(
+        product_id, 
+        quantity_pcs, 
+        finished_goods(product_name, length_cm, width_cm, thickness)
+      )
+    `)
     .eq("id", id)
     .single();
 
-  // প্রতিটা item-এর measurement বের করতে সংশ্লিষ্ট booking খুঁজুন (একই product_id/quantity মিলিয়ে)
-  const { data: relatedBookings } = await supabase
-    .from("bookings")
-    .select("product_id, measurement_type, length_val, width_val, flap_val, gusset_val, measurement_unit")
-    .eq("id", challan?.booking_id ?? "");
+  if (!challan) return notFound();
 
-  const bookingByProduct: Record<string, any> = {};
-  (relatedBookings ?? []).forEach((b: any) => { bookingByProduct[b.product_id] = b; });
+  // ২. Related Bookings লোড করা
+  let bookingByProduct: Record<string, any> = {};
+  
+  if (challan.booking_id) {
+    const { data: relatedBookings } = await supabase
+      .from("bookings")
+      .select("product_id, measurement_type, length_val, width_val, flap_val, gusset_val, measurement_unit")
+      .eq("id", challan.booking_id);
+
+    (relatedBookings ?? []).forEach((b: any) => { 
+      if (b.product_id) {
+        bookingByProduct[b.product_id] = b; 
+      }
+    });
+  }
 
   const { data: company } = await supabase.from("company_profile").select("*").single();
-
-  if (!challan) return notFound();
 
   return (
     <div className="min-h-[297mm] flex flex-col max-w-3xl mx-auto p-8 bg-white text-gray-900 print:p-0">
@@ -74,13 +100,16 @@ export default async function ChallanPrintPage({ params }: { params: Promise<{ i
             </tr>
           </thead>
           <tbody>
-            {(challan.delivery_challan_items ?? []).map((item: any, i: number) => (
-              <tr key={i} className="border-b">
-                <td className="py-2">{item.finished_goods?.product_name}</td>
-                <td className="py-2">{formatMeasurement(bookingByProduct[item.product_id])}</td>
-                <td className="text-right py-2">{item.quantity_pcs}</td>
-              </tr>
-            ))}
+            {(challan.delivery_challan_items ?? []).map((item: any, i: number) => {
+              const bookingData = bookingByProduct[item.product_id];
+              return (
+                <tr key={i} className="border-b">
+                  <td className="py-2">{item.finished_goods?.product_name || "-"}</td>
+                  <td className="py-2">{formatMeasurement(bookingData, item.finished_goods)}</td>
+                  <td className="text-right py-2">{item.quantity_pcs}</td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
