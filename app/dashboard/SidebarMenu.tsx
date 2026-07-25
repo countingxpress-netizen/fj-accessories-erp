@@ -12,6 +12,7 @@ const menu: MenuGroup[] = [
     items: [
       { label: "Chart of Accounts", href: "/dashboard/accounting" },
       { label: "Journal Vouchers", href: "/dashboard/accounting/journal" },
+      { label: "Expenses", href: "/dashboard/accounting/expenses" },
       { label: "General Ledger", href: "/dashboard/accounting/ledger" },
       { label: "Trial Balance", href: "/dashboard/accounting/trial-balance" },
       { label: "Cash Book", href: "/dashboard/accounting/cash-book" },
