@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { formatDate } from "@/lib/formatDate";
 import { notFound } from "next/navigation";
 import PrintButton from "@/app/dashboard/PrintButton";
+import { amountInWords } from "@/lib/numberToWords";
 
 export default async function PIPrintPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -9,65 +10,105 @@ export default async function PIPrintPage({ params }: { params: Promise<{ id: st
 
   const { data: pi } = await supabase
     .from("proforma_invoices")
-    .select("*, customers(name, address, phone), pi_bookings(bookings(booking_no, quantity_pcs, finished_goods(product_name, length_cm, width_cm, thickness)))")
-    .eq("id", id)
-    .single();
+    .select("*, customers(name, address, phone)")
+    .eq("id", id).single();
 
+  const { data: items } = await supabase.from("pi_items").select("*").eq("pi_id", id).order("sl_no");
   const { data: company } = await supabase.from("company_profile").select("*").single();
+
   if (!pi) return notFound();
+
+  const subtotal = (items ?? []).reduce((s, it: any) => {
+    const amt = it.price_basis === "dzn" ? (it.qty_pcs / 12) * it.price_unit : it.qty_pcs * it.price_unit;
+    return s + amt;
+  }, 0);
+  const discountAmount = pi.discount_type === "percentage" ? (subtotal * pi.discount_value) / 100
+    : pi.discount_type === "fixed" ? pi.discount_value : 0;
+
+  const totalQtyPcs = (items ?? []).reduce((s, it: any) => s + it.qty_pcs, 0);
+  const totalQtyDzn = totalQtyPcs / 12;
 
   return (
     <div className="max-w-3xl mx-auto p-8 bg-white text-gray-900 print:p-0">
       <PrintButton />
-      <div className="text-center mb-6 border-b pb-4">
-        <h1 className="text-2xl font-bold">{company?.name}</h1>
+
+      <div className="text-center mb-4 border-b-2 border-gray-800 pb-3">
+        <h1 className="text-3xl font-bold tracking-wide">{company?.name}</h1>
         <p className="text-sm text-gray-600">{company?.address}</p>
-        <p className="text-sm text-gray-600">Phone: {company?.phone} | Email: {company?.email}</p>
+        <p className="text-lg font-semibold underline mt-2">PROFORMA INVOICE</p>
       </div>
-      <h2 className="text-xl font-semibold text-center mb-4">Proforma Invoice</h2>
-      <div className="flex justify-between mb-6 text-sm">
+
+      <div className="flex justify-between mb-4 text-sm">
         <div>
-          <p className="font-medium">Buyer:</p>
-          <p>{pi.customers?.name}</p>
+          <p><strong>INVOICE NO.</strong> {pi.pi_no}{pi.revision > 0 && ` (Rev-${pi.revision})`}</p>
+          <p><strong>Date:</strong> {formatDate(pi.pi_date)}</p>
+          <p className="mt-2 underline font-semibold">BUYER</p>
+          <p className="font-medium">{pi.customers?.name}</p>
           <p className="text-gray-600">{pi.customers?.address}</p>
-          {pi.buyer_name && <p className="text-gray-600">Buyer: {pi.buyer_name}</p>}
-          {pi.merchant_name && <p className="text-gray-600">Merchant: {pi.merchant_name}</p>}
-        </div>
-        <div className="text-right">
-          <p><span className="text-gray-600">PI No: </span><strong>{pi.pi_no}</strong></p>
-          <p><span className="text-gray-600">Date: </span>{formatDate(pi.pi_date)}</p>
-          {pi.style && <p><span className="text-gray-600">Style: </span>{pi.style}</p>}
+          {pi.buyer_name && <p className="mt-1"><strong>Buyer: </strong>{pi.buyer_name}</p>}
         </div>
       </div>
-      <table className="w-full text-sm border-collapse mb-6">
+
+      <table className="w-full text-sm border-collapse mb-2">
         <thead>
-          <tr className="border-b-2 border-gray-800">
-            <th className="text-left py-2">Booking</th>
-            <th className="text-left py-2">Product</th>
-            <th className="text-right py-2">Size (cm)</th>
-            <th className="text-right py-2">Qty</th>
+          <tr className="border-2 border-gray-800 bg-gray-50">
+            <th className="border border-gray-800 py-1 px-2">Sl No</th>
+            <th className="border border-gray-800 py-1 px-2">Description</th>
+            <th className="border border-gray-800 py-1 px-2">Measurement</th>
+            <th className="border border-gray-800 py-1 px-2">Qty (Pcs)</th>
+            <th className="border border-gray-800 py-1 px-2">Qty (Dzn)</th>
+            <th className="border border-gray-800 py-1 px-2">Price/Unit</th>
+            <th className="border border-gray-800 py-1 px-2">Total Amt</th>
           </tr>
         </thead>
         <tbody>
-          {(pi.pi_bookings ?? []).map((pb: any, i: number) => (
-            <tr key={i} className="border-b">
-              <td className="py-2">{pb.bookings?.booking_no}</td>
-              <td className="py-2">{pb.bookings?.finished_goods?.product_name}</td>
-              <td className="text-right py-2">{pb.bookings?.finished_goods?.length_cm}×{pb.bookings?.finished_goods?.width_cm}×{pb.bookings?.finished_goods?.thickness}</td>
-              <td className="text-right py-2">{pb.bookings?.quantity_pcs}</td>
-            </tr>
-          ))}
-        </tbody>
-        <tfoot>
-          <tr className="border-t-2 border-gray-800 font-semibold">
-            <td colSpan={3} className="text-right py-2">Total Amount</td>
-            <td className="text-right py-2">{pi.total_amount?.toFixed(2)}</td>
+          {(items ?? []).map((it: any) => {
+            const amount = it.price_basis === "dzn" ? (it.qty_pcs / 12) * it.price_unit : it.qty_pcs * it.price_unit;
+            return (
+              <tr key={it.id}>
+                <td className="border border-gray-800 text-center py-1 px-2">{it.sl_no}</td>
+                <td className="border border-gray-800 py-1 px-2">{it.description}</td>
+                <td className="border border-gray-800 py-1 px-2">{it.measurement}</td>
+                <td className="border border-gray-800 text-right py-1 px-2">{it.qty_pcs.toLocaleString()}</td>
+                <td className="border border-gray-800 text-right py-1 px-2">{(it.qty_pcs / 12).toFixed(2)}</td>
+                <td className="border border-gray-800 text-right py-1 px-2">{it.price_unit}/{it.price_basis}</td>
+                <td className="border border-gray-800 text-right py-1 px-2">{pi.currency} {amount.toFixed(2)}</td>
+              </tr>
+            );
+          })}
+          <tr className="font-semibold">
+            <td className="border border-gray-800 text-center py-1" colSpan={3}>Total =</td>
+            <td className="border border-gray-800 text-right py-1 px-2">{totalQtyPcs.toLocaleString()}</td>
+            <td className="border border-gray-800 text-right py-1 px-2">{totalQtyDzn.toFixed(2)}</td>
+            <td className="border border-gray-800"></td>
+            <td className="border border-gray-800 text-right py-1 px-2">{pi.currency} {subtotal.toFixed(2)}</td>
           </tr>
-        </tfoot>
+          {pi.discount_type !== "none" && (
+            <tr>
+              <td colSpan={6} className="border border-gray-800 text-right py-1 px-2">
+                (-) Discount {pi.discount_type === "percentage" ? `${pi.discount_value}%` : ""} =
+              </td>
+              <td className="border border-gray-800 text-right py-1 px-2">{pi.currency} {discountAmount.toFixed(2)}</td>
+            </tr>
+          )}
+          <tr className="font-bold">
+            <td colSpan={6} className="border border-gray-800 text-right py-1 px-2">Total =</td>
+            <td className="border border-gray-800 text-right py-1 px-2">{pi.currency} {pi.total_amount?.toFixed(2)}</td>
+          </tr>
+        </tbody>
       </table>
-      <div className="mt-16 flex justify-between text-sm">
-        <div className="border-t border-gray-400 pt-2 w-40 text-center">Prepared By</div>
-        <div className="border-t border-gray-400 pt-2 w-40 text-center">Authorized Signature</div>
+
+      <p className="text-sm font-semibold mb-4">SAY: {amountInWords(pi.total_amount ?? 0, pi.currency)}</p>
+
+      {pi.terms_conditions && (
+        <pre className="text-xs whitespace-pre-wrap font-sans mb-6">{pi.terms_conditions}</pre>
+      )}
+
+      <div className="mt-16 flex justify-end text-sm">
+        <div className="text-center">
+          <p className="font-semibold">{company?.name}</p>
+          <div className="mt-8 border-t border-gray-400 pt-1 w-40">Authorized Signature</div>
+        </div>
       </div>
     </div>
   );

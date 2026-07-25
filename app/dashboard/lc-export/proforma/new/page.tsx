@@ -7,11 +7,11 @@ export default async function NewProformaPage() {
 
   const { data: allBookings } = await supabase
     .from("bookings")
-    .select("id, booking_no, quantity_pcs, product_id, customer_id, style, buyers(name), merchants(name), measurement_type, measurement_unit, length_val, width_val, flap_val, gusset_val, pi_thickness_mm, finished_goods(product_name, length_cm, width_cm, thickness)")
+    .select("id, booking_no, quantity_pcs, product_id, customer_id, style, garments_name, buyers(name), merchants(name), measurement_type, measurement_unit, length_val, width_val, flap_val, gusset_val, pi_thickness_mm, finished_goods(product_name, length_cm, width_cm, thickness)")
     .order("booking_date", { ascending: false });
 
-  const { data: usedBookings } = await supabase.from("pi_bookings").select("booking_id");
-  const usedIds = new Set((usedBookings ?? []).map((pb: any) => pb.booking_id));
+  const { data: usedItems } = await supabase.from("pi_items").select("booking_id").not("booking_id", "is", null);
+  const usedIds = new Set((usedItems ?? []).map((pi: any) => pi.booking_id));
   const availableBookings = (allBookings ?? []).filter((b: any) => !usedIds.has(b.id));
 
   return (

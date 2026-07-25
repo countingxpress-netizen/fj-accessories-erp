@@ -2,72 +2,166 @@
 import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { calcPiWeightLbs } from "@/lib/calcTubeCutting";
-import { formatStyle } from "@/lib/formatStyle";
 import { generateNextDocNo } from "@/lib/docNumber";
+import { calcPiUnitPrice } from "@/lib/calcTubeCutting";
+import { amountInWords } from "@/lib/numberToWords";
 
 type Booking = {
   id: string; booking_no: string; quantity_pcs: number; product_id: string; customer_id: string;
-  style: string | null; buyers: { name: string } | null; merchants: { name: string } | null;
+  style: string | null; garments_name: string | null; buyers: { name: string } | null; merchants: { name: string } | null;
   measurement_type: string; measurement_unit: string; length_val: number; width_val: number;
   flap_val: number | null; gusset_val: number | null; pi_thickness_mm: number | null;
   finished_goods: { product_name: string; length_cm: number; width_cm: number; thickness: number } | null;
 };
 type Customer = { id: string; name: string; price_per_lbs: number | null };
 
-const CM_PER_INCH = 2.54;
+type ManualLine = { description: string; measurement: string; qtyPcs: string; priceUnit: string; priceBasis: "pcs" | "dzn" };
+
+const DEFAULT_TERMS = `01) 100% IRREVOCABLE LETTER OF CREDIT AT SIGHT.
+02) PARTIAL SHIPMENT MUST BE ALLOWED IN THE L/C.
+03) SHIPMENT WITHIN 15 DAYS AFTER RECEIVED OF L/C.
+04) DELIVERY FROM OUR FACTORY TO APPLICANT FACTORY.
+05) C&F BASIS.
+06) INSPECTION CERTIFICATE ISSUE BY BENEFICIARIES.
+07) OUR DUE INTEREST WILL BE THE L/C OPENER.
+08) L/C RECEIVE FROM UD
+09) PAYMENT MUST BE BY USD.`;
+
+function formatMeasurement(b: Booking) {
+  const unit = b.measurement_unit;
+  const L = b.length_val, W = b.width_val, F = b.flap_val, G = b.gusset_val;
+  if (b.measurement_type === "simple") return `L-${L} x W-${W}${unit}`;
+  if (b.measurement_type === "gusset") return `L-${L} x W-${W} + G-${G}${unit}`;
+  if (b.measurement_type === "adhesive") return `L-${L} + F-${F} x W-${W}${unit}`;
+  return "-";
+}
 
 export default function ProformaForm({ customers, bookings }: { customers: Customer[]; bookings: Booking[] }) {
+  const [mode, setMode] = useState<"booking" | "manual">("booking");
   const [customerId, setCustomerId] = useState("");
+  const [garmentsFilter, setGarmentsFilter] = useState("");
   const [piDate, setPiDate] = useState(new Date().toISOString().slice(0, 10));
+  const [currency, setCurrency] = useState("USD");
+  const [discountType, setDiscountType] = useState<"none" | "percentage" | "fixed">("none");
+  const [discountValue, setDiscountValue] = useState("0");
+  const [termsConditions, setTermsConditions] = useState(DEFAULT_TERMS);
+  const [validTill, setValidTill] = useState("");
+
   const [selectedBookings, setSelectedBookings] = useState<Record<string, boolean>>({});
-  const [priceOverride, setPriceOverride] = useState<Record<string, string>>({});
+  const [bookingPrice, setBookingPrice] = useState<Record<string, string>>({});
+  const [bookingBasis, setBookingBasis] = useState<Record<string, "pcs" | "dzn">>({});
+
+  const [manualLines, setManualLines] = useState<ManualLine[]>([
+    { description: "", measurement: "", qtyPcs: "", priceUnit: "", priceBasis: "pcs" },
+  ]);
+
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const router = useRouter();
   const supabase = createClient();
 
   const selectedCustomer = customers.find((c) => c.id === customerId);
-  const customerBookings = useMemo(() => bookings.filter((b) => b.customer_id === customerId), [bookings, customerId]);
 
-  function calcUnitPrice(b: Booking) {
-    if (!b.finished_goods || !b.pi_thickness_mm) return 0;
-    const price = parseFloat(priceOverride[b.id] || "") || selectedCustomer?.price_per_lbs || 0;
-    const { length_cm, width_cm } = b.finished_goods;
-    return (price * length_cm * width_cm * b.pi_thickness_mm) / 75000 / CM_PER_INCH / CM_PER_INCH;
+  const customerBookings = useMemo(() => {
+    return bookings
+      .filter((b) => b.customer_id === customerId)
+      .filter((b) => !garmentsFilter || b.garments_name === garmentsFilter);
+  }, [bookings, customerId, garmentsFilter]);
+
+  const availableGarments = useMemo(
+    () => Array.from(new Set(bookings.filter((b) => b.customer_id === customerId).map((b) => b.garments_name).filter(Boolean))) as string[],
+    [bookings, customerId]
+  );
+
+  function calcLineAmount(qtyPcs: number, priceUnit: number, basis: "pcs" | "dzn") {
+    if (basis === "dzn") return (qtyPcs / 12) * priceUnit;
+    return qtyPcs * priceUnit;
   }
 
-  function calcAmount(b: Booking) {
-    return calcUnitPrice(b) * b.quantity_pcs;
-  }
+  // বুকিং মোডে সিলেক্ট করা লাইনগুলোর হিসাব
+  const bookingLineItems = Object.keys(selectedBookings)
+    .filter((id) => selectedBookings[id])
+    .map((id) => {
+      const b = customerBookings.find((bk) => bk.id === id)!;
+      const priceUnit = parseFloat(bookingPrice[id] || "0");
+      const basis = bookingBasis[id] || "pcs";
+      const amount = calcLineAmount(b.quantity_pcs, priceUnit, basis);
+      return { booking: b, priceUnit, basis, amount };
+    });
 
-  function calcWeight(b: Booking) {
-    return calcPiWeightLbs(b, b.pi_thickness_mm ?? 0);
-  }
+  // Manual মোডের লাইনগুলোর হিসাব
+  const manualLineItems = manualLines
+    .filter((l) => l.description && parseFloat(l.qtyPcs) > 0)
+    .map((l) => {
+      const qtyPcs = parseFloat(l.qtyPcs) || 0;
+      const priceUnit = parseFloat(l.priceUnit) || 0;
+      const amount = calcLineAmount(qtyPcs, priceUnit, l.priceBasis);
+      return { ...l, qtyPcs, priceUnit, amount };
+    });
 
-  const checkedBookings = customerBookings.filter((b) => selectedBookings[b.id]);
-  const totalAmount = checkedBookings.reduce((s, b) => s + calcAmount(b), 0);
+  const subtotal = mode === "booking"
+    ? bookingLineItems.reduce((s, li) => s + li.amount, 0)
+    : manualLineItems.reduce((s, li) => s + li.amount, 0);
+
+  const discountAmount = discountType === "percentage"
+    ? (subtotal * parseFloat(discountValue || "0")) / 100
+    : discountType === "fixed"
+    ? parseFloat(discountValue || "0")
+    : 0;
+
+  const totalAmount = Math.max(subtotal - discountAmount, 0);
+
+  function updateManualLine(i: number, field: keyof ManualLine, value: string) {
+    setManualLines((prev) => prev.map((l, idx) => (idx === i ? { ...l, [field]: value } : l)));
+  }
+  function addManualLine() {
+    setManualLines((prev) => [...prev, { description: "", measurement: "", qtyPcs: "", priceUnit: "", priceBasis: "pcs" }]);
+  }
+  function removeManualLine(i: number) {
+    setManualLines((prev) => prev.filter((_, idx) => idx !== i));
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
-    if (!customerId || checkedBookings.length === 0) {
-      setError("Customer বাছুন এবং অন্তত একটা বুকিং টিক দিন।");
-      return;
+
+    if (mode === "booking") {
+      if (!customerId || bookingLineItems.length === 0) {
+        setError("Customer বাছুন এবং অন্তত একটা বুকিং বেছে দাম দিন।");
+        return;
+      }
+      if (bookingLineItems.some((li) => li.priceUnit <= 0)) {
+        setError("প্রতিটা বাছাই করা বুকিং-এর জন্য দাম দিন।");
+        return;
+      }
+    } else {
+      if (manualLineItems.length === 0) {
+        setError("অন্তত একটা লাইন আইটেম (Description, Qty, Price) দিন।");
+        return;
+      }
     }
+
     setLoading(true);
 
-    const styles = Array.from(new Set(checkedBookings.map((b) => b.style).filter(Boolean))).join(", ");
-    const firstBooking = checkedBookings[0];
+    const styles = mode === "booking"
+      ? Array.from(new Set(bookingLineItems.map((li) => li.booking.style).filter(Boolean))).join(", ")
+      : null;
+    const firstBooking = mode === "booking" ? bookingLineItems[0]?.booking : null;
 
     const piNo = await generateNextDocNo(supabase, "proforma_invoices", "pi_no", "PI", "pi_date", piDate);
 
     const { data: pi, error: piError } = await supabase
       .from("proforma_invoices")
       .insert({
-        pi_no: piNo, customer_id: customerId, pi_date: piDate,
-        style: styles || null, buyer_name: firstBooking.buyers?.name ?? null,
-        merchant_name: firstBooking.merchants?.name ?? null, total_amount: totalAmount,
+        pi_no: piNo,
+        customer_id: mode === "booking" ? customerId : (customerId || null),
+        pi_date: piDate,
+        style: styles,
+        buyer_name: firstBooking?.buyers?.name ?? null,
+        merchant_name: firstBooking?.merchants?.name ?? null,
+        total_amount: totalAmount,
+        currency, discount_type: discountType, discount_value: parseFloat(discountValue) || 0,
+        terms_conditions: termsConditions, is_manual: mode === "manual", status: "draft",
       })
       .select().single();
 
@@ -77,9 +171,24 @@ export default function ProformaForm({ customers, bookings }: { customers: Custo
       return;
     }
 
-    await supabase.from("pi_bookings").insert(
-      checkedBookings.map((b) => ({ pi_id: pi.id, booking_id: b.id }))
-    );
+    if (mode === "booking") {
+      await supabase.from("pi_items").insert(
+        bookingLineItems.map((li, i) => ({
+          pi_id: pi.id, booking_id: li.booking.id, sl_no: i + 1,
+          description: `${li.booking.style || li.booking.booking_no}`,
+          measurement: formatMeasurement(li.booking),
+          qty_pcs: li.booking.quantity_pcs, price_unit: li.priceUnit, price_basis: li.basis,
+        }))
+      );
+    } else {
+      await supabase.from("pi_items").insert(
+        manualLineItems.map((li, i) => ({
+          pi_id: pi.id, booking_id: null, sl_no: i + 1,
+          description: li.description, measurement: li.measurement,
+          qty_pcs: li.qtyPcs, price_unit: li.priceUnit, price_basis: li.priceBasis,
+        }))
+      );
+    }
 
     setLoading(false);
     router.push("/dashboard/lc-export/proforma");
@@ -87,22 +196,52 @@ export default function ProformaForm({ customers, bookings }: { customers: Custo
   }
 
   return (
-    <form onSubmit={handleSubmit} className="rounded-xl border bg-white p-6 shadow-sm space-y-4 max-w-4xl">
-      <div className="flex gap-4">
+    <form onSubmit={handleSubmit} className="rounded-xl border bg-white p-6 shadow-sm space-y-4 max-w-5xl">
+      <div className="flex gap-2">
+        <button type="button" onClick={() => setMode("booking")} className={`rounded-lg px-4 py-2 text-sm ${mode === "booking" ? "bg-gray-900 text-white" : "border text-gray-600"}`}>
+          Booking থেকে তৈরি করুন
+        </button>
+        <button type="button" onClick={() => setMode("manual")} className={`rounded-lg px-4 py-2 text-sm ${mode === "manual" ? "bg-gray-900 text-white" : "border text-gray-600"}`}>
+          Manual PI (Booking ছাড়া)
+        </button>
+      </div>
+
+      <div className="flex flex-wrap gap-4">
         <div className="flex-1 max-w-xs">
-          <label className="block text-sm text-gray-600 mb-1">Customer</label>
-          <select value={customerId} onChange={(e) => { setCustomerId(e.target.value); setSelectedBookings({}); }} className="w-full rounded-lg border px-3 py-2 text-sm" required>
+          <label className="block text-sm text-gray-600 mb-1">Customer {mode === "manual" && "(ঐচ্ছিক)"}</label>
+          <select value={customerId} onChange={(e) => { setCustomerId(e.target.value); setSelectedBookings({}); setGarmentsFilter(""); }} className="w-full rounded-lg border px-3 py-2 text-sm" required={mode === "booking"}>
             <option value="">-- বাছুন --</option>
             {customers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
         </div>
+        {mode === "booking" && customerId && (
+          <div>
+            <label className="block text-sm text-gray-600 mb-1">Garments Filter</label>
+            <select value={garmentsFilter} onChange={(e) => setGarmentsFilter(e.target.value)} className="rounded-lg border px-3 py-2 text-sm">
+              <option value="">সব</option>
+              {availableGarments.map((g) => <option key={g} value={g}>{g}</option>)}
+            </select>
+          </div>
+        )}
         <div>
           <label className="block text-sm text-gray-600 mb-1">PI Date</label>
           <input type="date" value={piDate} onChange={(e) => setPiDate(e.target.value)} className="rounded-lg border px-3 py-2 text-sm" required />
         </div>
+        <div>
+          <label className="block text-sm text-gray-600 mb-1">Currency</label>
+          <select value={currency} onChange={(e) => setCurrency(e.target.value)} className="rounded-lg border px-3 py-2 text-sm">
+            <option value="USD">USD</option>
+            <option value="BDT">BDT</option>
+            <option value="EUR">EUR</option>
+          </select>
+        </div>
+        <div>
+          <label className="block text-sm text-gray-600 mb-1">Valid Till (ঐচ্ছিক)</label>
+          <input type="date" value={validTill} onChange={(e) => setValidTill(e.target.value)} className="rounded-lg border px-3 py-2 text-sm" />
+        </div>
       </div>
 
-      {customerId && (
+      {mode === "booking" && customerId && (
         <div className="overflow-hidden rounded-lg border">
           <table className="w-full text-sm">
             <thead className="bg-gray-50 text-left text-gray-600">
@@ -110,44 +249,121 @@ export default function ProformaForm({ customers, bookings }: { customers: Custo
                 <th className="px-3 py-2 w-10"></th>
                 <th className="px-3 py-2">Booking</th>
                 <th className="px-3 py-2">Style</th>
-                <th className="px-3 py-2">Product</th>
-                <th className="px-3 py-2 text-right">Qty</th>
-                <th className="px-3 py-2 w-32">Price/Lbs</th>
-                <th className="px-3 py-2 text-right">Amount</th>
+                <th className="px-3 py-2">Measurement</th>
+                <th className="px-3 py-2 text-right">Qty (Pcs)</th>
+                <th className="px-3 py-2 w-24">Basis</th>
+                <th className="px-3 py-2 w-32">Price/Unit</th>
                 <th className="px-3 py-2 text-right">Amount</th>
               </tr>
             </thead>
             <tbody>
-              {customerBookings.map((b) => (
-                <tr key={b.id} className="border-t">
-                  <td className="px-3 py-2">
-                    <input type="checkbox" checked={!!selectedBookings[b.id]} onChange={(e) => setSelectedBookings((prev) => ({ ...prev, [b.id]: e.target.checked }))} />
-                  </td>
-                  <td className="px-3 py-2 font-medium">{b.booking_no}</td>
-                  <td className="px-3 py-2 text-gray-500">{b.style || "-"}</td>
-                  <td className="px-3 py-2">{b.finished_goods?.product_name}</td>
-                  <td className="px-3 py-2 text-right">{b.quantity_pcs}</td>
-                  <td className="px-3 py-2">
-                    <input type="number" step="0.01" placeholder={String(selectedCustomer?.price_per_lbs ?? "")} value={priceOverride[b.id] || ""} onChange={(e) => setPriceOverride((prev) => ({ ...prev, [b.id]: e.target.value }))} className="w-full rounded border px-2 py-1 text-sm" />
-                  </td>
-                  <td className="px-3 py-2 text-right">{calcWeight(b).toFixed(2)}</td>
-                  <td className="px-3 py-2 text-right">{calcAmount(b).toFixed(2)}</td>
-                </tr>
-              ))}
+              {customerBookings.map((b) => {
+                const suggestedPrice = selectedCustomer?.price_per_lbs
+                  ? calcPiUnitPrice(b, selectedCustomer.price_per_lbs)
+                  : 0;
+                return (
+                  <tr key={b.id} className="border-t">
+                    <td className="px-3 py-2">
+                      <input type="checkbox" checked={!!selectedBookings[b.id]} onChange={(e) => setSelectedBookings((prev) => ({ ...prev, [b.id]: e.target.checked }))} />
+                    </td>
+                    <td className="px-3 py-2 font-medium">{b.booking_no}</td>
+                    <td className="px-3 py-2 text-gray-500">{b.style || "-"}</td>
+                    <td className="px-3 py-2 text-gray-500">{formatMeasurement(b)}</td>
+                    <td className="px-3 py-2 text-right">{b.quantity_pcs}</td>
+                    <td className="px-3 py-2">
+                      <select value={bookingBasis[b.id] || "pcs"} onChange={(e) => setBookingBasis((prev) => ({ ...prev, [b.id]: e.target.value as "pcs" | "dzn" }))} className="w-full rounded border px-1 py-1 text-xs">
+                        <option value="pcs">Per Pc</option>
+                        <option value="dzn">Per Dzn</option>
+                      </select>
+                    </td>
+                    <td className="px-3 py-2">
+                      <input type="number" step="0.0001" placeholder={suggestedPrice ? suggestedPrice.toFixed(4) : ""} value={bookingPrice[b.id] || ""} onChange={(e) => setBookingPrice((prev) => ({ ...prev, [b.id]: e.target.value }))} className="w-full rounded border px-2 py-1 text-sm" />
+                    </td>
+                    <td className="px-3 py-2 text-right">
+                      {calcLineAmount(b.quantity_pcs, parseFloat(bookingPrice[b.id] || "0"), bookingBasis[b.id] || "pcs").toFixed(2)}
+                    </td>
+                  </tr>
+                );
+              })}
               {customerBookings.length === 0 && (
-                <tr><td colSpan={7} className="px-3 py-3 text-gray-400 italic">এই কাস্টমারের কোনো বুকিং নেই</td></tr>
+                <tr><td colSpan={8} className="px-3 py-3 text-gray-400 italic">এই কাস্টমারের কোনো বুকিং নেই</td></tr>
               )}
             </tbody>
-            <tfoot className="bg-gray-50 border-t font-semibold">
-              <tr><td colSpan={6} className="px-3 py-2 text-right">Total</td><td className="px-3 py-2 text-right">{totalAmount.toFixed(2)}</td></tr>
-            </tfoot>
           </table>
         </div>
       )}
 
+      {mode === "manual" && (
+        <div className="overflow-hidden rounded-lg border">
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50 text-left text-gray-600">
+              <tr>
+                <th className="px-3 py-2">Description</th>
+                <th className="px-3 py-2">Measurement</th>
+                <th className="px-3 py-2 text-right w-24">Qty (Pcs)</th>
+                <th className="px-3 py-2 w-20">Basis</th>
+                <th className="px-3 py-2 w-28">Price/Unit</th>
+                <th className="px-3 py-2 text-right">Amount</th>
+                <th className="px-3 py-2 w-12"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {manualLines.map((l, i) => (
+                <tr key={i} className="border-t">
+                  <td className="px-3 py-2"><input value={l.description} onChange={(e) => updateManualLine(i, "description", e.target.value)} className="w-full rounded border px-2 py-1 text-sm" placeholder="Style/Description" /></td>
+                  <td className="px-3 py-2"><input value={l.measurement} onChange={(e) => updateManualLine(i, "measurement", e.target.value)} className="w-full rounded border px-2 py-1 text-sm" placeholder="L-32+F-5 x W-27cm" /></td>
+                  <td className="px-3 py-2"><input type="number" value={l.qtyPcs} onChange={(e) => updateManualLine(i, "qtyPcs", e.target.value)} className="w-full rounded border px-2 py-1 text-sm text-right" /></td>
+                  <td className="px-3 py-2">
+                    <select value={l.priceBasis} onChange={(e) => updateManualLine(i, "priceBasis", e.target.value)} className="w-full rounded border px-1 py-1 text-xs">
+                      <option value="pcs">Per Pc</option>
+                      <option value="dzn">Per Dzn</option>
+                    </select>
+                  </td>
+                  <td className="px-3 py-2"><input type="number" step="0.0001" value={l.priceUnit} onChange={(e) => updateManualLine(i, "priceUnit", e.target.value)} className="w-full rounded border px-2 py-1 text-sm" /></td>
+                  <td className="px-3 py-2 text-right">{calcLineAmount(parseFloat(l.qtyPcs) || 0, parseFloat(l.priceUnit) || 0, l.priceBasis).toFixed(2)}</td>
+                  <td className="px-3 py-2 text-right">
+                    {manualLines.length > 1 && <button type="button" onClick={() => removeManualLine(i)} className="text-red-600 text-xs hover:underline">সরান</button>}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <button type="button" onClick={addManualLine} className="w-full border-t px-3 py-2 text-xs text-gray-600 hover:bg-gray-50">+ আরেকটি লাইন যোগ করুন</button>
+        </div>
+      )}
+
+      <div className="flex flex-wrap gap-4 items-end">
+        <div>
+          <label className="block text-sm text-gray-600 mb-1">Discount Type</label>
+          <select value={discountType} onChange={(e) => setDiscountType(e.target.value as any)} className="rounded-lg border px-3 py-2 text-sm">
+            <option value="none">নেই</option>
+            <option value="percentage">Percentage (%)</option>
+            <option value="fixed">Fixed Amount</option>
+          </select>
+        </div>
+        {discountType !== "none" && (
+          <div>
+            <label className="block text-sm text-gray-600 mb-1">Discount Value</label>
+            <input type="number" step="0.01" value={discountValue} onChange={(e) => setDiscountValue(e.target.value)} className="rounded-lg border px-3 py-2 text-sm w-32" />
+          </div>
+        )}
+      </div>
+
+      <div>
+        <label className="block text-sm text-gray-600 mb-1">Terms &amp; Conditions</label>
+        <textarea value={termsConditions} onChange={(e) => setTermsConditions(e.target.value)} rows={9} className="w-full rounded-lg border px-3 py-2 text-sm font-mono" />
+      </div>
+
+      <div className="rounded-lg bg-gray-50 border p-4 space-y-1 text-sm">
+        <p>Subtotal: <strong>{currency} {subtotal.toFixed(2)}</strong></p>
+        {discountType !== "none" && <p>Discount: <strong>{currency} {discountAmount.toFixed(2)}</strong></p>}
+        <p className="text-base">Total: <strong>{currency} {totalAmount.toFixed(2)}</strong></p>
+        <p className="text-xs text-gray-500 italic">{amountInWords(totalAmount, currency)}</p>
+      </div>
+
       {error && <p className="text-sm text-red-600">{error}</p>}
 
-      <button type="submit" disabled={loading || checkedBookings.length === 0} className="rounded-lg bg-gray-900 px-5 py-2 text-sm text-white disabled:opacity-40">
+      <button type="submit" disabled={loading} className="rounded-lg bg-gray-900 px-5 py-2 text-sm text-white disabled:opacity-40">
         {loading ? "সেভ হচ্ছে..." : "Proforma Invoice তৈরি করুন"}
       </button>
     </form>

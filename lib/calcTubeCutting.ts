@@ -20,3 +20,9 @@ export function calcPiWeightLbs(booking: any, piThicknessMm: number): number {
   const baseLbs = (booking.quantity_pcs * tubeInch * cuttingInch * piThicknessMm) / 75000;
   return baseLbs * 1.01; // 1% বাফার সহ, Booking formula-র মতোই
 }
+
+export function calcPiUnitPrice(booking: any, pricePerLbs: number): number {
+  if (!booking.finished_goods || !booking.pi_thickness_mm || !pricePerLbs) return 0;
+  const { length_cm, width_cm } = booking.finished_goods;
+  return (pricePerLbs * length_cm * width_cm * booking.pi_thickness_mm) / 75000 / 2.54 / 2.54;
+}
