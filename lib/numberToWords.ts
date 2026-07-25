@@ -41,3 +41,11 @@ export function amountInWords(amount: number, currency: string): string {
   }
   return text;
 }
+
+
+export function currencySymbol(currency: string): string {
+  if (currency === "USD") return "$";
+  if (currency === "EUR") return "€";
+  if (currency === "BDT") return "৳";
+  return currency;
+}

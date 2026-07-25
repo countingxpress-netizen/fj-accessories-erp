@@ -2,7 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { formatDate } from "@/lib/formatDate";
 import { notFound } from "next/navigation";
 import PrintButton from "@/app/dashboard/PrintButton";
-import { amountInWords } from "@/lib/numberToWords";
+import { amountInWords, currencySymbol } from "@/lib/numberToWords";
 
 export default async function PIPrintPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -17,6 +17,8 @@ export default async function PIPrintPage({ params }: { params: Promise<{ id: st
   const { data: company } = await supabase.from("company_profile").select("*").single();
 
   if (!pi) return notFound();
+
+  const sym = currencySymbol(pi.currency);
 
   const subtotal = (items ?? []).reduce((s, it: any) => {
     const amt = it.price_basis === "dzn" ? (it.qty_pcs / 12) * it.price_unit : it.qty_pcs * it.price_unit;
@@ -42,10 +44,23 @@ export default async function PIPrintPage({ params }: { params: Promise<{ id: st
         <div>
           <p><strong>INVOICE NO.</strong> {pi.pi_no}{pi.revision > 0 && ` (Rev-${pi.revision})`}</p>
           <p><strong>Date:</strong> {formatDate(pi.pi_date)}</p>
-          <p className="mt-2 underline font-semibold">BUYER</p>
-          <p className="font-medium">{pi.customers?.name}</p>
-          <p className="text-gray-600">{pi.customers?.address}</p>
-          {pi.buyer_name && <p className="mt-1"><strong>Buyer: </strong>{pi.buyer_name}</p>}
+          <p className="mt-2 underline font-semibold">To</p>
+          {pi.buyer_name && <p className="font-medium">{pi.buyer_name}</p>}
+          {pi.garments_name && <p className="font-medium">{pi.garments_name}</p>}
+          {pi.garments_address && <p className="text-gray-600">{pi.garments_address}</p>}
+          {!pi.buyer_name && !pi.garments_name && (
+            <>
+              <p className="font-medium">{pi.customers?.name}</p>
+              <p className="text-gray-600">{pi.customers?.address}</p>
+            </>
+          )}
+        </div>
+        <div className="text-right text-sm">
+          <p className="underline font-semibold mb-1">ADVISING BANK:</p>
+          {pi.advising_bank_name && <p className="font-bold">{pi.advising_bank_name}</p>}
+          {pi.advising_bank_branch && <p className="font-bold">{pi.advising_bank_branch}</p>}
+          {pi.advising_bank_address && <p className="font-bold">{pi.advising_bank_address}</p>}
+          {pi.advising_bank_swift && <p className="font-bold">SWIFT: {pi.advising_bank_swift}</p>}
         </div>
       </div>
 
@@ -71,8 +86,8 @@ export default async function PIPrintPage({ params }: { params: Promise<{ id: st
                 <td className="border border-gray-800 py-1 px-2">{it.measurement}</td>
                 <td className="border border-gray-800 text-right py-1 px-2">{it.qty_pcs.toLocaleString()}</td>
                 <td className="border border-gray-800 text-right py-1 px-2">{(it.qty_pcs / 12).toFixed(2)}</td>
-                <td className="border border-gray-800 text-right py-1 px-2">{it.price_unit}/{it.price_basis}</td>
-                <td className="border border-gray-800 text-right py-1 px-2">{pi.currency} {amount.toFixed(2)}</td>
+                <td className="border border-gray-800 text-right py-1 px-2">{sym}{it.price_unit}/{it.price_basis}</td>
+                <td className="border border-gray-800 text-right py-1 px-2">{sym}{amount.toFixed(2)}</td>
               </tr>
             );
           })}
@@ -81,24 +96,27 @@ export default async function PIPrintPage({ params }: { params: Promise<{ id: st
             <td className="border border-gray-800 text-right py-1 px-2">{totalQtyPcs.toLocaleString()}</td>
             <td className="border border-gray-800 text-right py-1 px-2">{totalQtyDzn.toFixed(2)}</td>
             <td className="border border-gray-800"></td>
-            <td className="border border-gray-800 text-right py-1 px-2">{pi.currency} {subtotal.toFixed(2)}</td>
+            <td className="border border-gray-800 text-right py-1 px-2">{sym}{subtotal.toFixed(2)}</td>
           </tr>
           {pi.discount_type !== "none" && (
             <tr>
               <td colSpan={6} className="border border-gray-800 text-right py-1 px-2">
                 (-) Discount {pi.discount_type === "percentage" ? `${pi.discount_value}%` : ""} =
               </td>
-              <td className="border border-gray-800 text-right py-1 px-2">{pi.currency} {discountAmount.toFixed(2)}</td>
+              <td className="border border-gray-800 text-right py-1 px-2">{sym}{discountAmount.toFixed(2)}</td>
             </tr>
           )}
           <tr className="font-bold">
             <td colSpan={6} className="border border-gray-800 text-right py-1 px-2">Total =</td>
-            <td className="border border-gray-800 text-right py-1 px-2">{pi.currency} {pi.total_amount?.toFixed(2)}</td>
+            <td className="border border-gray-800 text-right py-1 px-2">{sym}{pi.total_amount?.toFixed(2)}</td>
           </tr>
         </tbody>
       </table>
 
-      <p className="text-sm font-semibold mb-4">SAY: {amountInWords(pi.total_amount ?? 0, pi.currency)}</p>
+      <p className="text-sm font-semibold mb-1">SAY: {amountInWords(pi.total_amount ?? 0, pi.currency)}</p>
+      {pi.total_weight_kg && <p className="text-sm font-semibold mb-1">Total Invoice Weight = {pi.total_weight_kg} Kgs</p>}
+      <p className="text-sm mb-1">H.S CODE NO: {pi.hs_code || "3923.21.00"}</p>
+      <p className="text-sm mb-4">BIN No. {pi.bin_no || "000131803-1201"}</p>
 
       {pi.terms_conditions && (
         <pre className="text-xs whitespace-pre-wrap font-sans mb-6">{pi.terms_conditions}</pre>

@@ -40,12 +40,23 @@ export default function ProformaForm({ customers, bookings }: { customers: Custo
   const [mode, setMode] = useState<"booking" | "manual">("booking");
   const [customerId, setCustomerId] = useState("");
   const [garmentsFilter, setGarmentsFilter] = useState("");
+  const [buyerFilter, setBuyerFilter] = useState("");
+  const [styleFilter, setStyleFilter] = useState("");
   const [piDate, setPiDate] = useState(new Date().toISOString().slice(0, 10));
   const [currency, setCurrency] = useState("USD");
   const [discountType, setDiscountType] = useState<"none" | "percentage" | "fixed">("none");
   const [discountValue, setDiscountValue] = useState("0");
   const [termsConditions, setTermsConditions] = useState(DEFAULT_TERMS);
   const [validTill, setValidTill] = useState("");
+  const [garmentsAddress, setGarmentsAddress] = useState("");
+  const [advisingBankName, setAdvisingBankName] = useState("");
+  const [advisingBankBranch, setAdvisingBankBranch] = useState("");
+  const [advisingBankAddress, setAdvisingBankAddress] = useState("");
+  const [advisingBankSwift, setAdvisingBankSwift] = useState("");
+  const [totalWeightKg, setTotalWeightKg] = useState("");
+  const [hsCode, setHsCode] = useState("3923.21.00");
+  const [binNo, setBinNo] = useState("000131803-1201");
+  const [exchangeRate, setExchangeRate] = useState("122");
 
   const [selectedBookings, setSelectedBookings] = useState<Record<string, boolean>>({});
   const [bookingPrice, setBookingPrice] = useState<Record<string, string>>({});
@@ -65,11 +76,22 @@ export default function ProformaForm({ customers, bookings }: { customers: Custo
   const customerBookings = useMemo(() => {
     return bookings
       .filter((b) => b.customer_id === customerId)
-      .filter((b) => !garmentsFilter || b.garments_name === garmentsFilter);
-  }, [bookings, customerId, garmentsFilter]);
+      .filter((b) => !garmentsFilter || b.garments_name === garmentsFilter)
+      .filter((b) => !buyerFilter || b.buyers?.name === buyerFilter)
+      .filter((b) => !styleFilter || b.style === styleFilter);
+  }, [bookings, customerId, garmentsFilter, buyerFilter, styleFilter]);
 
   const availableGarments = useMemo(
     () => Array.from(new Set(bookings.filter((b) => b.customer_id === customerId).map((b) => b.garments_name).filter(Boolean))) as string[],
+    [bookings, customerId]
+  );
+
+  const availableBuyers = useMemo(
+    () => Array.from(new Set(bookings.filter((b) => b.customer_id === customerId).map((b) => b.buyers?.name).filter(Boolean))) as string[],
+    [bookings, customerId]
+  );
+  const availableStyles = useMemo(
+    () => Array.from(new Set(bookings.filter((b) => b.customer_id === customerId).map((b) => b.style).filter(Boolean))) as string[],
     [bookings, customerId]
   );
 
@@ -162,6 +184,11 @@ export default function ProformaForm({ customers, bookings }: { customers: Custo
         total_amount: totalAmount,
         currency, discount_type: discountType, discount_value: parseFloat(discountValue) || 0,
         terms_conditions: termsConditions, is_manual: mode === "manual", status: "draft",
+        garments_name: firstBooking?.garments_name ?? null, garments_address: garmentsAddress || null,
+        advising_bank_name: advisingBankName || null, advising_bank_branch: advisingBankBranch || null,
+        advising_bank_address: advisingBankAddress || null, advising_bank_swift: advisingBankSwift || null,
+        total_weight_kg: parseFloat(totalWeightKg) || null, hs_code: hsCode, bin_no: binNo,
+        exchange_rate_to_bdt: parseFloat(exchangeRate) || 122,
       })
       .select().single();
 
@@ -215,13 +242,29 @@ export default function ProformaForm({ customers, bookings }: { customers: Custo
           </select>
         </div>
         {mode === "booking" && customerId && (
-          <div>
-            <label className="block text-sm text-gray-600 mb-1">Garments Filter</label>
-            <select value={garmentsFilter} onChange={(e) => setGarmentsFilter(e.target.value)} className="rounded-lg border px-3 py-2 text-sm">
-              <option value="">সব</option>
-              {availableGarments.map((g) => <option key={g} value={g}>{g}</option>)}
-            </select>
-          </div>
+          <>
+            <div>
+              <label className="block text-sm text-gray-600 mb-1">Garments Filter</label>
+              <select value={garmentsFilter} onChange={(e) => setGarmentsFilter(e.target.value)} className="rounded-lg border px-3 py-2 text-sm">
+                <option value="">সব</option>
+                {availableGarments.map((g) => <option key={g} value={g}>{g}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm text-gray-600 mb-1">Buyer Filter</label>
+              <select value={buyerFilter} onChange={(e) => setBuyerFilter(e.target.value)} className="rounded-lg border px-3 py-2 text-sm">
+                <option value="">সব</option>
+                {availableBuyers.map((b) => <option key={b} value={b}>{b}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm text-gray-600 mb-1">Style Filter</label>
+              <select value={styleFilter} onChange={(e) => setStyleFilter(e.target.value)} className="rounded-lg border px-3 py-2 text-sm">
+                <option value="">সব</option>
+                {availableStyles.map((s) => <option key={s} value={s}>{s}</option>)}
+              </select>
+            </div>
+          </>
         )}
         <div>
           <label className="block text-sm text-gray-600 mb-1">PI Date</label>
@@ -345,6 +388,47 @@ export default function ProformaForm({ customers, bookings }: { customers: Custo
           <div>
             <label className="block text-sm text-gray-600 mb-1">Discount Value</label>
             <input type="number" step="0.01" value={discountValue} onChange={(e) => setDiscountValue(e.target.value)} className="rounded-lg border px-3 py-2 text-sm w-32" />
+          </div>
+        )}
+      </div>
+
+      <div className="rounded-lg border p-3 bg-gray-50 space-y-3">
+        <p className="text-sm font-semibold text-gray-700">Garments Info (Print-এ "To" সেকশনে দেখাবে)</p>
+        <div>
+          <label className="block text-xs text-gray-500 mb-1">Garments Address</label>
+          <textarea value={garmentsAddress} onChange={(e) => setGarmentsAddress(e.target.value)} rows={2} className="w-full rounded-lg border px-3 py-2 text-sm" />
+        </div>
+      </div>
+
+      <div className="rounded-lg border p-3 bg-gray-50 space-y-3">
+        <p className="text-sm font-semibold text-gray-700">Advising Bank</p>
+        <div className="flex flex-wrap gap-3">
+          <input value={advisingBankName} onChange={(e) => setAdvisingBankName(e.target.value)} placeholder="Bank Name" className="flex-1 min-w-[160px] rounded-lg border px-3 py-2 text-sm" />
+          <input value={advisingBankBranch} onChange={(e) => setAdvisingBankBranch(e.target.value)} placeholder="Branch Name" className="flex-1 min-w-[160px] rounded-lg border px-3 py-2 text-sm" />
+        </div>
+        <div className="flex flex-wrap gap-3">
+          <input value={advisingBankAddress} onChange={(e) => setAdvisingBankAddress(e.target.value)} placeholder="সংক্ষিপ্ত ঠিকানা" className="flex-1 min-w-[160px] rounded-lg border px-3 py-2 text-sm" />
+          <input value={advisingBankSwift} onChange={(e) => setAdvisingBankSwift(e.target.value)} placeholder="Swift Code" className="w-40 rounded-lg border px-3 py-2 text-sm" />
+        </div>
+      </div>
+
+      <div className="flex flex-wrap gap-4">
+        <div>
+          <label className="block text-xs text-gray-500 mb-1">Total Weight (Kg)</label>
+          <input type="number" step="0.01" value={totalWeightKg} onChange={(e) => setTotalWeightKg(e.target.value)} className="rounded-lg border px-3 py-2 text-sm w-32" />
+        </div>
+        <div>
+          <label className="block text-xs text-gray-500 mb-1">H.S. Code</label>
+          <input value={hsCode} onChange={(e) => setHsCode(e.target.value)} className="rounded-lg border px-3 py-2 text-sm w-36" />
+        </div>
+        <div>
+          <label className="block text-xs text-gray-500 mb-1">BIN No</label>
+          <input value={binNo} onChange={(e) => setBinNo(e.target.value)} className="rounded-lg border px-3 py-2 text-sm w-40" />
+        </div>
+        {currency === "USD" && (
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">USD → BDT Rate</label>
+            <input type="number" step="0.01" value={exchangeRate} onChange={(e) => setExchangeRate(e.target.value)} className="rounded-lg border px-3 py-2 text-sm w-28" />
           </div>
         )}
       </div>

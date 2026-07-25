@@ -39,6 +39,10 @@ export default function LCForm({ banks, customers, suppliers, pis }: { banks: Ba
       linked_pi_id: piId || null, status: "active",
     });
 
+    if (!error && piId) {
+      await supabase.from("proforma_invoices").update({ status: "lc_opened" }).eq("id", piId);
+    }
+
     setLoading(false);
     if (error) { setError(error.message); return; }
     setLcNo(""); setAmount("");

@@ -3,7 +3,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { formatDate } from "@/lib/formatDate";
-import { calcPiUnitPrice } from "@/lib/calcTubeCutting";
+import { currencySymbol } from "@/lib/numberToWords";
 
 const statusLabels: Record<string, string> = {
   draft: "Draft", sent: "Sent", in_garments: "In Garments", lc_opened: "LC Opened", paid: "Paid",
@@ -16,20 +16,19 @@ const statusColors: Record<string, string> = {
   paid: "bg-green-100 text-green-700",
 };
 
-export default function ProformaRow({ pi, customerPricePerLbs }: { pi: any; customerPricePerLbs: number | null }) {
+export default function ProformaRow({ pi, salesInvoiceValue, garments }: { pi: any; salesInvoiceValue: number; garments: string }) {
   const router = useRouter();
   const supabase = createClient();
 
-  const bookingValue = (pi.pi_items ?? []).reduce((s: number, item: any) => {
-    if (!item.bookings || !customerPricePerLbs) return s;
-    const unitPrice = calcPiUnitPrice(item.bookings, customerPricePerLbs);
-    return s + unitPrice * item.qty_pcs;
-  }, 0);
+  const piValueInBdt = pi.currency === "USD" ? pi.total_amount * (pi.exchange_rate_to_bdt ?? 122) : pi.total_amount;
+  const difference = piValueInBdt - salesInvoiceValue;
 
-  const diff = pi.total_amount - bookingValue;
-
-  async function handleStatusChange(status: string) {
-    await supabase.from("proforma_invoices").update({ status }).eq("id", pi.id);
+  async function handleSent() {
+    await supabase.from("proforma_invoices").update({ status: "in_garments" }).eq("id", pi.id);
+    router.refresh();
+  }
+  async function handleMarkPaid() {
+    await supabase.from("proforma_invoices").update({ status: "paid" }).eq("id", pi.id);
     router.refresh();
   }
 
@@ -48,17 +47,22 @@ export default function ProformaRow({ pi, customerPricePerLbs }: { pi: any; cust
       </td>
       <td className="px-4 py-2 text-gray-500">{formatDate(pi.pi_date)}</td>
       <td className="px-4 py-2">{pi.customers?.name ?? (pi.is_manual ? "Manual" : "-")}</td>
-      <td className="px-4 py-2 text-right text-gray-500">{bookingValue > 0 ? bookingValue.toFixed(2) : "-"}</td>
-      <td className="px-4 py-2 text-right font-medium">{pi.currency} {pi.total_amount?.toFixed(2)}</td>
-      <td className={`px-4 py-2 text-right text-xs ${diff !== 0 ? (diff > 0 ? "text-green-600" : "text-red-600") : "text-gray-400"}`}>
-        {bookingValue > 0 ? diff.toFixed(2) : "-"}
+      <td className="px-4 py-2 text-gray-500">{garments}</td>
+      <td className="px-4 py-2 text-right font-medium">{currencySymbol(pi.currency)}{pi.total_amount?.toFixed(2)}</td>
+      <td className="px-4 py-2 text-right text-gray-500">{salesInvoiceValue > 0 ? salesInvoiceValue.toFixed(2) : "-"}</td>
+      <td className={`px-4 py-2 text-right text-xs ${salesInvoiceValue > 0 ? (difference >= 0 ? "text-green-600" : "text-red-600") : "text-gray-400"}`}>
+        {salesInvoiceValue > 0 ? difference.toFixed(2) : "-"}
       </td>
       <td className="px-4 py-2">
-        <select value={pi.status} onChange={(e) => handleStatusChange(e.target.value)} className={`rounded-full border-0 px-2 py-1 text-xs ${statusColors[pi.status]}`}>
-          {Object.entries(statusLabels).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-        </select>
+        <span className={`rounded-full px-2 py-0.5 text-xs ${statusColors[pi.status]}`}>{statusLabels[pi.status]}</span>
       </td>
       <td className="px-4 py-2 text-right whitespace-nowrap">
+        {pi.status === "draft" && (
+          <button onClick={handleSent} className="rounded bg-blue-50 px-2 py-1 text-xs text-blue-700 hover:bg-blue-100 mr-2">Sent</button>
+        )}
+        {pi.status === "lc_opened" && (
+          <button onClick={handleMarkPaid} className="rounded bg-green-50 px-2 py-1 text-xs text-green-700 hover:bg-green-100 mr-2">Mark Paid</button>
+        )}
         <Link href={`/dashboard/lc-export/proforma/${pi.id}`} className="text-blue-700 hover:underline text-xs mr-2">View</Link>
         <Link href={`/dashboard/lc-export/proforma/${pi.id}/print`} target="_blank" className="text-blue-700 hover:underline text-xs mr-2">Print</Link>
         <button onClick={handleDelete} className="rounded bg-red-50 px-2 py-1 text-xs text-red-700 hover:bg-red-100">Delete</button>
