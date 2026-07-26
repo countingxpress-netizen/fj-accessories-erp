@@ -44,16 +44,18 @@ export default async function PIPrintPage({ params }: { params: Promise<{ id: st
         <div>
           <p><strong>INVOICE NO.</strong> {pi.pi_no}{pi.revision > 0 && ` (Rev-${pi.revision})`}</p>
           <p><strong>Date:</strong> {formatDate(pi.pi_date)}</p>
-          <p className="mt-2 underline font-semibold">To</p>
-          {pi.buyer_name && <p className="font-medium">{pi.buyer_name}</p>}
-          {pi.garments_name && <p className="font-medium">{pi.garments_name}</p>}
-          {pi.garments_address && <p className="text-gray-600">{pi.garments_address}</p>}
-          {!pi.buyer_name && !pi.garments_name && (
-            <>
-              <p className="font-medium">{pi.customers?.name}</p>
-              <p className="text-gray-600">{pi.customers?.address}</p>
-            </>
-          )}
+          <div className="mt-3">
+            <p className="underline font-semibold">To</p>
+            {pi.buyer_name && <p className="font-medium">{pi.buyer_name}</p>}
+            {pi.garments_name && <p className="font-medium">{pi.garments_name}</p>}
+            {pi.garments_address && <p className="text-gray-600">{pi.garments_address}</p>}
+            {!pi.buyer_name && !pi.garments_name && (
+              <>
+                <p className="font-medium">{pi.customers?.name}</p>
+                <p className="text-gray-600">{pi.customers?.address}</p>
+              </>
+            )}
+          </div>
         </div>
         <div className="text-right text-sm">
           <p className="underline font-semibold mb-1">ADVISING BANK:</p>
@@ -114,12 +116,19 @@ export default async function PIPrintPage({ params }: { params: Promise<{ id: st
       </table>
 
       <p className="text-sm font-semibold mb-1">SAY: {amountInWords(pi.total_amount ?? 0, pi.currency)}</p>
-      {pi.total_weight_kg && <p className="text-sm font-semibold mb-1">Total Invoice Weight = {pi.total_weight_kg} Kgs</p>}
+      {pi.total_weight_kg && <p className="text-sm mb-1">Total Invoice Weight = {pi.total_weight_kg} Kgs</p>}
       <p className="text-sm mb-1">H.S CODE NO: {pi.hs_code || "3923.21.00"}</p>
       <p className="text-sm mb-4">BIN No. {pi.bin_no || "000131803-1201"}</p>
 
       {pi.terms_conditions && (
-        <pre className="text-xs whitespace-pre-wrap font-sans mb-6">{pi.terms_conditions}</pre>
+        <div className="text-xs whitespace-pre-wrap mb-6">
+          {pi.terms_conditions.split("\n").map((line: string, i: number) => {
+            const isAdvisingBank = /advising\s*bank/i.test(line);
+            return (
+              <p key={i} className={isAdvisingBank ? "font-bold" : ""}>{line}</p>
+            );
+          })}
+        </div>
       )}
 
       <div className="mt-16 flex justify-end text-sm">

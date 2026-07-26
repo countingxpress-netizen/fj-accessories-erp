@@ -2,6 +2,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { formatDate } from "@/lib/formatDate";
 import { notFound } from "next/navigation";
+import { currencySymbol } from "@/lib/numberToWords";
 import NewRevisionButton from "./NewRevisionButton";
 
 export default async function ProformaViewPage({ params }: { params: Promise<{ id: string }> }) {
@@ -17,6 +18,8 @@ export default async function ProformaViewPage({ params }: { params: Promise<{ i
 
   const { data: items } = await supabase
     .from("pi_items").select("*, bookings(booking_no)").eq("pi_id", id).order("sl_no");
+
+  const sym = currencySymbol(pi.currency);
 
   return (
     <div>
@@ -59,8 +62,8 @@ export default async function ProformaViewPage({ params }: { params: Promise<{ i
                   <td className="px-4 py-2">{it.measurement}</td>
                   <td className="px-4 py-2 text-right">{it.qty_pcs}</td>
                   <td className="px-4 py-2 text-right">{(it.qty_pcs / 12).toFixed(2)}</td>
-                  <td className="px-4 py-2 text-right">{it.price_unit} /{it.price_basis}</td>
-                  <td className="px-4 py-2 text-right">{amount.toFixed(2)}</td>
+                  <td className="px-4 py-2 text-right">{sym}{it.price_unit}/{it.price_basis}</td>
+                  <td className="px-4 py-2 text-right">{sym}{amount.toFixed(2)}</td>
                 </tr>
               );
             })}

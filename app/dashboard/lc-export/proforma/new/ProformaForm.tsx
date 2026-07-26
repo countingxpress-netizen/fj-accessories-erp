@@ -17,6 +17,14 @@ type Customer = { id: string; name: string; price_per_lbs: number | null };
 
 type ManualLine = { description: string; measurement: string; qtyPcs: string; priceUnit: string; priceBasis: "pcs" | "dzn" };
 
+type BookingOverride = {
+  thickness: string;
+  printCharge: string;
+  adhesiveCharge: string;
+  customPrice: string;
+  customBasis: "pcs" | "dzn";
+};
+
 const DEFAULT_TERMS = `01) 100% IRREVOCABLE LETTER OF CREDIT AT SIGHT.
 02) PARTIAL SHIPMENT MUST BE ALLOWED IN THE L/C.
 03) SHIPMENT WITHIN 15 DAYS AFTER RECEIVED OF L/C.
@@ -61,6 +69,7 @@ export default function ProformaForm({ customers, bookings }: { customers: Custo
   const [selectedBookings, setSelectedBookings] = useState<Record<string, boolean>>({});
   const [bookingPrice, setBookingPrice] = useState<Record<string, string>>({});
   const [bookingBasis, setBookingBasis] = useState<Record<string, "pcs" | "dzn">>({});
+  const [bookingOverrides, setBookingOverrides] = useState<Record<string, BookingOverride>>({});
 
   const [manualLines, setManualLines] = useState<ManualLine[]>([
     { description: "", measurement: "", qtyPcs: "", priceUnit: "", priceBasis: "pcs" },
@@ -72,6 +81,28 @@ export default function ProformaForm({ customers, bookings }: { customers: Custo
   const supabase = createClient();
 
   const selectedCustomer = customers.find((c) => c.id === customerId);
+
+  function getDefaultPrice(b: Booking): number {
+    const overrides = bookingOverrides[b.id];
+    const thickness = overrides?.thickness ? parseFloat(overrides.thickness) : (b.pi_thickness_mm ?? 0);
+    const printCharge = overrides?.printCharge ? parseFloat(overrides.printCharge) : 0;
+    const adhesiveCharge = overrides?.adhesiveCharge ? parseFloat(overrides.adhesiveCharge) : 0;
+
+    let basePrice = 0;
+    if (selectedCustomer?.price_per_lbs && thickness) {
+      const { tube, cutting } = (() => {
+        const L = b.length_val ?? 0, W = b.width_val ?? 0, F = b.flap_val ?? 0, G = b.gusset_val ?? 0;
+        if (b.measurement_type === "simple") return { tube: W, cutting: L };
+        if (b.measurement_type === "adhesive") return { tube: L + F / 2, cutting: W };
+        return { tube: W + G + G, cutting: L };
+      })();
+      const unit = b.measurement_unit;
+      const tubeInch = unit === "cm" ? tube / 2.54 : tube;
+      const cuttingInch = unit === "cm" ? cutting / 2.54 : cutting;
+      basePrice = (selectedCustomer.price_per_lbs * tubeInch * cuttingInch * thickness) / 75000 / 2.54 / 2.54;
+    }
+    return basePrice + printCharge + adhesiveCharge;
+  }
 
   const customerBookings = useMemo(() => {
     return bookings
@@ -105,10 +136,14 @@ export default function ProformaForm({ customers, bookings }: { customers: Custo
     .filter((id) => selectedBookings[id])
     .map((id) => {
       const b = customerBookings.find((bk) => bk.id === id)!;
-      const priceUnit = parseFloat(bookingPrice[id] || "0");
-      const basis = bookingBasis[id] || "pcs";
+      const overrides = bookingOverrides[id];
+      const priceUnit = overrides?.customPrice ? parseFloat(overrides.customPrice) : parseFloat(bookingPrice[id] || "0");
+      const basis = overrides?.customBasis || bookingBasis[id] || "pcs";
       const amount = calcLineAmount(b.quantity_pcs, priceUnit, basis);
-      return { booking: b, priceUnit, basis, amount };
+      const thickness = overrides?.thickness ? parseFloat(overrides.thickness) : b.pi_thickness_mm;
+      const printCharge = overrides?.printCharge ? parseFloat(overrides.printCharge) : 0;
+      const adhesiveCharge = overrides?.adhesiveCharge ? parseFloat(overrides.adhesiveCharge) : 0;
+      return { booking: b, priceUnit, basis, amount, thickness, printCharge, adhesiveCharge };
     });
 
   // Manual মোডের লাইনগুলোর হিসাব
@@ -205,6 +240,7 @@ export default function ProformaForm({ customers, bookings }: { customers: Custo
           description: `${li.booking.style || li.booking.booking_no}`,
           measurement: formatMeasurement(li.booking),
           qty_pcs: li.booking.quantity_pcs, price_unit: li.priceUnit, price_basis: li.basis,
+          pi_thickness_mm: li.thickness || null, print_charge: li.printCharge || 0, adhesive_charge: li.adhesiveCharge || 0,
         }))
       );
     } else {
@@ -294,16 +330,18 @@ export default function ProformaForm({ customers, bookings }: { customers: Custo
                 <th className="px-3 py-2">Style</th>
                 <th className="px-3 py-2">Measurement</th>
                 <th className="px-3 py-2 text-right">Qty (Pcs)</th>
-                <th className="px-3 py-2 w-24">Basis</th>
+                <th className="px-3 py-2 w-20">Thickness</th>
+                <th className="px-3 py-2 w-20">Print</th>
+                <th className="px-3 py-2 w-20">Adhesive</th>
+                <th className="px-3 py-2 w-20">Basis</th>
                 <th className="px-3 py-2 w-32">Price/Unit</th>
                 <th className="px-3 py-2 text-right">Amount</th>
               </tr>
             </thead>
             <tbody>
               {customerBookings.map((b) => {
-                const suggestedPrice = selectedCustomer?.price_per_lbs
-                  ? calcPiUnitPrice(b, selectedCustomer.price_per_lbs)
-                  : 0;
+                const overrides = bookingOverrides[b.id];
+                const defaultPrice = getDefaultPrice(b);
                 return (
                   <tr key={b.id} className="border-t">
                     <td className="px-3 py-2">
@@ -314,22 +352,31 @@ export default function ProformaForm({ customers, bookings }: { customers: Custo
                     <td className="px-3 py-2 text-gray-500">{formatMeasurement(b)}</td>
                     <td className="px-3 py-2 text-right">{b.quantity_pcs}</td>
                     <td className="px-3 py-2">
-                      <select value={bookingBasis[b.id] || "pcs"} onChange={(e) => setBookingBasis((prev) => ({ ...prev, [b.id]: e.target.value as "pcs" | "dzn" }))} className="w-full rounded border px-1 py-1 text-xs">
+                      <input type="number" step="0.1" placeholder={b.pi_thickness_mm ? String(b.pi_thickness_mm) : "mm"} value={overrides?.thickness || ""} onChange={(e) => setBookingOverrides((prev) => ({ ...prev, [b.id]: { ...prev[b.id], thickness: e.target.value, customPrice: prev[b.id]?.customPrice || "", printCharge: prev[b.id]?.printCharge || "", adhesiveCharge: prev[b.id]?.adhesiveCharge || "", customBasis: prev[b.id]?.customBasis || "pcs" } }))} className="w-full rounded border px-1 py-1 text-xs" />
+                    </td>
+                    <td className="px-3 py-2">
+                      <input type="number" step="0.01" placeholder="0" value={overrides?.printCharge || ""} onChange={(e) => setBookingOverrides((prev) => ({ ...prev, [b.id]: { ...prev[b.id], printCharge: e.target.value, customPrice: prev[b.id]?.customPrice || "", thickness: prev[b.id]?.thickness || "", adhesiveCharge: prev[b.id]?.adhesiveCharge || "", customBasis: prev[b.id]?.customBasis || "pcs" } }))} className="w-full rounded border px-1 py-1 text-xs" />
+                    </td>
+                    <td className="px-3 py-2">
+                      <input type="number" step="0.01" placeholder="0" value={overrides?.adhesiveCharge || ""} onChange={(e) => setBookingOverrides((prev) => ({ ...prev, [b.id]: { ...prev[b.id], adhesiveCharge: e.target.value, customPrice: prev[b.id]?.customPrice || "", thickness: prev[b.id]?.thickness || "", printCharge: prev[b.id]?.printCharge || "", customBasis: prev[b.id]?.customBasis || "pcs" } }))} className="w-full rounded border px-1 py-1 text-xs" />
+                    </td>
+                    <td className="px-3 py-2">
+                      <select value={overrides?.customBasis || bookingBasis[b.id] || "pcs"} onChange={(e) => { setBookingBasis((prev) => ({ ...prev, [b.id]: e.target.value as "pcs" | "dzn" })); setBookingOverrides((prev) => ({ ...prev, [b.id]: { ...prev[b.id], customBasis: e.target.value as "pcs" | "dzn", customPrice: prev[b.id]?.customPrice || "", thickness: prev[b.id]?.thickness || "", printCharge: prev[b.id]?.printCharge || "", adhesiveCharge: prev[b.id]?.adhesiveCharge || "" } })); }} className="w-full rounded border px-1 py-1 text-xs">
                         <option value="pcs">Per Pc</option>
                         <option value="dzn">Per Dzn</option>
                       </select>
                     </td>
                     <td className="px-3 py-2">
-                      <input type="number" step="0.0001" placeholder={suggestedPrice ? suggestedPrice.toFixed(4) : ""} value={bookingPrice[b.id] || ""} onChange={(e) => setBookingPrice((prev) => ({ ...prev, [b.id]: e.target.value }))} className="w-full rounded border px-2 py-1 text-sm" />
+                      <input type="number" step="0.0001" placeholder={defaultPrice ? defaultPrice.toFixed(4) : ""} value={overrides?.customPrice || bookingPrice[b.id] || ""} onChange={(e) => { setBookingPrice((prev) => ({ ...prev, [b.id]: e.target.value })); setBookingOverrides((prev) => ({ ...prev, [b.id]: { ...prev[b.id], customPrice: e.target.value, thickness: prev[b.id]?.thickness || "", printCharge: prev[b.id]?.printCharge || "", adhesiveCharge: prev[b.id]?.adhesiveCharge || "", customBasis: prev[b.id]?.customBasis || "pcs" } })); }} className="w-full rounded border px-2 py-1 text-sm" />
                     </td>
                     <td className="px-3 py-2 text-right">
-                      {calcLineAmount(b.quantity_pcs, parseFloat(bookingPrice[b.id] || "0"), bookingBasis[b.id] || "pcs").toFixed(2)}
+                      {calcLineAmount(b.quantity_pcs, overrides?.customPrice ? parseFloat(overrides.customPrice) : parseFloat(bookingPrice[b.id] || "0"), overrides?.customBasis || bookingBasis[b.id] || "pcs").toFixed(2)}
                     </td>
                   </tr>
                 );
               })}
               {customerBookings.length === 0 && (
-                <tr><td colSpan={8} className="px-3 py-3 text-gray-400 italic">এই কাস্টমারের কোনো বুকিং নেই</td></tr>
+                <tr><td colSpan={11} className="px-3 py-3 text-gray-400 italic">এই কাস্টমারের কোনো বুকিং নেই</td></tr>
               )}
             </tbody>
           </table>

@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { amountInWords } from "@/lib/numberToWords";
+import { amountInWords, currencySymbol } from "@/lib/numberToWords";
 
 export default function EditProformaForm({ pi, items }: { pi: any; items: any[] }) {
   const [piDate, setPiDate] = useState(pi.pi_date);
@@ -11,14 +11,29 @@ export default function EditProformaForm({ pi, items }: { pi: any; items: any[] 
   const [discountValue, setDiscountValue] = useState(String(pi.discount_value ?? 0));
   const [status, setStatus] = useState(pi.status);
   const [termsConditions, setTermsConditions] = useState(pi.terms_conditions ?? "");
+  const [validTill, setValidTill] = useState(pi.valid_till ?? "");
+  const [garmentsAddress, setGarmentsAddress] = useState(pi.garments_address ?? "");
+  const [advisingBankName, setAdvisingBankName] = useState(pi.advising_bank_name ?? "");
+  const [advisingBankBranch, setAdvisingBankBranch] = useState(pi.advising_bank_branch ?? "");
+  const [advisingBankAddress, setAdvisingBankAddress] = useState(pi.advising_bank_address ?? "");
+  const [advisingBankSwift, setAdvisingBankSwift] = useState(pi.advising_bank_swift ?? "");
+  const [totalWeightKg, setTotalWeightKg] = useState(pi.total_weight_kg ? String(pi.total_weight_kg) : "");
+  const [hsCode, setHsCode] = useState(pi.hs_code ?? "3923.21.00");
+  const [binNo, setBinNo] = useState(pi.bin_no ?? "000131803-1201");
+  const [exchangeRate, setExchangeRate] = useState(pi.exchange_rate_to_bdt ? String(pi.exchange_rate_to_bdt) : "122");
+
   const [lines, setLines] = useState(items.map((it) => ({
     id: it.id, description: it.description, measurement: it.measurement,
     qtyPcs: String(it.qty_pcs), priceUnit: String(it.price_unit), priceBasis: it.price_basis,
+    thickness: it.pi_thickness_mm ? String(it.pi_thickness_mm) : "",
+    printCharge: it.print_charge ? String(it.print_charge) : "",
+    adhesiveCharge: it.adhesive_charge ? String(it.adhesive_charge) : "",
   })));
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const router = useRouter();
   const supabase = createClient();
+  const sym = currencySymbol(currency);
 
   function updateLine(i: number, field: string, value: string) {
     setLines((prev) => prev.map((l, idx) => (idx === i ? { ...l, [field]: value } : l)));
@@ -43,12 +58,20 @@ export default function EditProformaForm({ pi, items }: { pi: any; items: any[] 
       await supabase.from("pi_items").update({
         description: l.description, measurement: l.measurement,
         qty_pcs: parseFloat(l.qtyPcs) || 0, price_unit: parseFloat(l.priceUnit) || 0, price_basis: l.priceBasis,
+        pi_thickness_mm: parseFloat(l.thickness) || null,
+        print_charge: parseFloat(l.printCharge) || 0,
+        adhesive_charge: parseFloat(l.adhesiveCharge) || 0,
       }).eq("id", l.id);
     }
 
     const { error: updateError } = await supabase.from("proforma_invoices").update({
       pi_date: piDate, currency, discount_type: discountType, discount_value: parseFloat(discountValue) || 0,
       status, terms_conditions: termsConditions, total_amount: totalAmount,
+      valid_till: validTill || null, garments_address: garmentsAddress || null,
+      advising_bank_name: advisingBankName || null, advising_bank_branch: advisingBankBranch || null,
+      advising_bank_address: advisingBankAddress || null, advising_bank_swift: advisingBankSwift || null,
+      total_weight_kg: parseFloat(totalWeightKg) || null, hs_code: hsCode, bin_no: binNo,
+      exchange_rate_to_bdt: parseFloat(exchangeRate) || 122,
     }).eq("id", pi.id);
 
     setLoading(false);
@@ -78,6 +101,10 @@ export default function EditProformaForm({ pi, items }: { pi: any; items: any[] 
             <option value="paid">Paid</option>
           </select>
         </div>
+        <div>
+          <label className="block text-sm text-gray-600 mb-1">Valid Till</label>
+          <input type="date" value={validTill} onChange={(e) => setValidTill(e.target.value)} className="rounded-lg border px-3 py-2 text-sm" />
+        </div>
       </div>
 
       <div className="overflow-hidden rounded-lg border">
@@ -87,8 +114,11 @@ export default function EditProformaForm({ pi, items }: { pi: any; items: any[] 
               <th className="px-3 py-2">Description</th>
               <th className="px-3 py-2">Measurement</th>
               <th className="px-3 py-2 text-right w-24">Qty(Pcs)</th>
+              <th className="px-3 py-2 w-20">Thickness</th>
+              <th className="px-3 py-2 w-20">Print</th>
+              <th className="px-3 py-2 w-20">Adhesive</th>
               <th className="px-3 py-2 w-20">Basis</th>
-              <th className="px-3 py-2 w-28">Price</th>
+              <th className="px-3 py-2 w-28">Price/Unit</th>
               <th className="px-3 py-2 text-right">Amount</th>
             </tr>
           </thead>
@@ -98,13 +128,16 @@ export default function EditProformaForm({ pi, items }: { pi: any; items: any[] 
                 <td className="px-3 py-2"><input value={l.description} onChange={(e) => updateLine(i, "description", e.target.value)} className="w-full rounded border px-2 py-1 text-sm" /></td>
                 <td className="px-3 py-2"><input value={l.measurement} onChange={(e) => updateLine(i, "measurement", e.target.value)} className="w-full rounded border px-2 py-1 text-sm" /></td>
                 <td className="px-3 py-2"><input type="number" value={l.qtyPcs} onChange={(e) => updateLine(i, "qtyPcs", e.target.value)} className="w-full rounded border px-2 py-1 text-sm text-right" /></td>
+                <td className="px-3 py-2"><input type="number" step="0.1" placeholder="mm" value={l.thickness} onChange={(e) => updateLine(i, "thickness", e.target.value)} className="w-full rounded border px-1 py-1 text-xs" /></td>
+                <td className="px-3 py-2"><input type="number" step="0.01" placeholder="0" value={l.printCharge} onChange={(e) => updateLine(i, "printCharge", e.target.value)} className="w-full rounded border px-1 py-1 text-xs" /></td>
+                <td className="px-3 py-2"><input type="number" step="0.01" placeholder="0" value={l.adhesiveCharge} onChange={(e) => updateLine(i, "adhesiveCharge", e.target.value)} className="w-full rounded border px-1 py-1 text-xs" /></td>
                 <td className="px-3 py-2">
                   <select value={l.priceBasis} onChange={(e) => updateLine(i, "priceBasis", e.target.value)} className="w-full rounded border px-1 py-1 text-xs">
                     <option value="pcs">Per Pc</option><option value="dzn">Per Dzn</option>
                   </select>
                 </td>
                 <td className="px-3 py-2"><input type="number" step="0.0001" value={l.priceUnit} onChange={(e) => updateLine(i, "priceUnit", e.target.value)} className="w-full rounded border px-2 py-1 text-sm" /></td>
-                <td className="px-3 py-2 text-right">{calcAmount(l.qtyPcs, l.priceUnit, l.priceBasis).toFixed(2)}</td>
+                <td className="px-3 py-2 text-right">{sym}{calcAmount(l.qtyPcs, l.priceUnit, l.priceBasis).toFixed(2)}</td>
               </tr>
             ))}
           </tbody>
@@ -126,13 +159,56 @@ export default function EditProformaForm({ pi, items }: { pi: any; items: any[] 
         )}
       </div>
 
+      <div className="rounded-lg border p-3 bg-gray-50 space-y-3">
+        <p className="text-sm font-semibold text-gray-700">Garments Info</p>
+        <div>
+          <label className="block text-xs text-gray-500 mb-1">Garments Address</label>
+          <textarea value={garmentsAddress} onChange={(e) => setGarmentsAddress(e.target.value)} rows={2} className="w-full rounded-lg border px-3 py-2 text-sm" />
+        </div>
+      </div>
+
+      <div className="rounded-lg border p-3 bg-gray-50 space-y-3">
+        <p className="text-sm font-semibold text-gray-700">Advising Bank</p>
+        <div className="flex flex-wrap gap-3">
+          <input value={advisingBankName} onChange={(e) => setAdvisingBankName(e.target.value)} placeholder="Bank Name" className="flex-1 min-w-[160px] rounded-lg border px-3 py-2 text-sm" />
+          <input value={advisingBankBranch} onChange={(e) => setAdvisingBankBranch(e.target.value)} placeholder="Branch Name" className="flex-1 min-w-[160px] rounded-lg border px-3 py-2 text-sm" />
+        </div>
+        <div className="flex flex-wrap gap-3">
+          <input value={advisingBankAddress} onChange={(e) => setAdvisingBankAddress(e.target.value)} placeholder="সংক্ষিপ্ত ঠিকানা" className="flex-1 min-w-[160px] rounded-lg border px-3 py-2 text-sm" />
+          <input value={advisingBankSwift} onChange={(e) => setAdvisingBankSwift(e.target.value)} placeholder="Swift Code" className="w-40 rounded-lg border px-3 py-2 text-sm" />
+        </div>
+      </div>
+
+      <div className="flex flex-wrap gap-4">
+        <div>
+          <label className="block text-xs text-gray-500 mb-1">Total Weight (Kg)</label>
+          <input type="number" step="0.01" value={totalWeightKg} onChange={(e) => setTotalWeightKg(e.target.value)} className="rounded-lg border px-3 py-2 text-sm w-32" />
+        </div>
+        <div>
+          <label className="block text-xs text-gray-500 mb-1">H.S. Code</label>
+          <input value={hsCode} onChange={(e) => setHsCode(e.target.value)} className="rounded-lg border px-3 py-2 text-sm w-36" />
+        </div>
+        <div>
+          <label className="block text-xs text-gray-500 mb-1">BIN No</label>
+          <input value={binNo} onChange={(e) => setBinNo(e.target.value)} className="rounded-lg border px-3 py-2 text-sm w-40" />
+        </div>
+        {currency === "USD" && (
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">USD → BDT Rate</label>
+            <input type="number" step="0.01" value={exchangeRate} onChange={(e) => setExchangeRate(e.target.value)} className="rounded-lg border px-3 py-2 text-sm w-28" />
+          </div>
+        )}
+      </div>
+
       <div>
         <label className="block text-sm text-gray-600 mb-1">Terms &amp; Conditions</label>
         <textarea value={termsConditions} onChange={(e) => setTermsConditions(e.target.value)} rows={9} className="w-full rounded-lg border px-3 py-2 text-sm font-mono" />
       </div>
 
       <div className="rounded-lg bg-gray-50 border p-4 space-y-1 text-sm">
-        <p>Total: <strong>{currency} {totalAmount.toFixed(2)}</strong></p>
+        <p>Subtotal: <strong>{sym}{subtotal.toFixed(2)}</strong></p>
+        {discountType !== "none" && <p>Discount: <strong>{sym}{discountAmount.toFixed(2)}</strong></p>}
+        <p className="text-base">Total: <strong>{sym}{totalAmount.toFixed(2)}</strong></p>
         <p className="text-xs text-gray-500 italic">{amountInWords(totalAmount, currency)}</p>
       </div>
 
