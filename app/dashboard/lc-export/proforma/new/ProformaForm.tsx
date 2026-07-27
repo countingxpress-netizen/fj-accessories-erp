@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { generateNextDocNo } from "@/lib/docNumber";
 import { calcPiUnitPrice } from "@/lib/calcTubeCutting";
 import { amountInWords } from "@/lib/numberToWords";
+import { calcPiUnitPrice } from "@/lib/calcTubeCutting";
 
 type Booking = {
   id: string; booking_no: string; quantity_pcs: number; product_id: string; customer_id: string;
@@ -44,12 +45,18 @@ function formatMeasurement(b: Booking) {
   return "-";
 }
 
-export default function ProformaForm({ customers, bookings }: { customers: Customer[]; bookings: Booking[] }) {
+type Garment = { id: string; customer_id: string; name: string; pricing_rule: string; percentage_value: number; rate_per_lbs_value: number };
+
+export default function ProformaForm({
+  customers, bookings, garmentsMaster, lastUnitPriceByBooking,
+}: { customers: Customer[]; bookings: Booking[]; garmentsMaster: Garment[]; lastUnitPriceByBooking: Record<string, number> }) {
   const [mode, setMode] = useState<"booking" | "manual">("booking");
   const [customerId, setCustomerId] = useState("");
   const [garmentsFilter, setGarmentsFilter] = useState("");
   const [buyerFilter, setBuyerFilter] = useState("");
   const [styleFilter, setStyleFilter] = useState("");
+  const [bookingPricingRule, setBookingPricingRule] = useState<Record<string, "manual" | "percentage" | "rate_per_lbs">>({});
+  const [bookingRuleValue, setBookingRuleValue] = useState<Record<string, string>>({});
   const [piDate, setPiDate] = useState(new Date().toISOString().slice(0, 10));
   const [currency, setCurrency] = useState("USD");
   const [discountType, setDiscountType] = useState<"none" | "percentage" | "fixed">("none");
@@ -129,6 +136,36 @@ export default function ProformaForm({ customers, bookings }: { customers: Custo
   function calcLineAmount(qtyPcs: number, priceUnit: number, basis: "pcs" | "dzn") {
     if (basis === "dzn") return (qtyPcs / 12) * priceUnit;
     return qtyPcs * priceUnit;
+  }
+
+  function getGarmentFor(b: Booking): Garment | undefined {
+    return garmentsMaster.find((g) => g.customer_id === b.customer_id && g.name === b.garments_name);
+  }
+
+  function getSuggestedPrice(b: Booking): number {
+    const rule = bookingPricingRule[b.id];
+    const ruleValue = parseFloat(bookingRuleValue[b.id] || "0");
+    const lastPrice = lastUnitPriceByBooking[b.id] ?? 0;
+
+    if (rule === "percentage" && lastPrice) {
+      const bdtPrice = lastPrice * (1 + ruleValue / 100);
+      return bdtPrice / parseFloat(exchangeRateForSuggestion());
+    }
+    if (rule === "rate_per_lbs") {
+      return calcPiUnitPrice(b, ruleValue);
+    }
+    return 0;
+  }
+
+  function exchangeRateForSuggestion() {
+    return "122"; // ডিফল্ট রেট, নিচের ফর্মের Exchange Rate ফিল্ডের সাথে মিলিয়ে ম্যানুয়ালি সমন্বয় করুন
+  }
+
+  function applySuggested(bookingId: string) {
+    const b = customerBookings.find((bk) => bk.id === bookingId);
+    if (!b) return;
+    const suggested = getSuggestedPrice(b);
+    setBookingPrice((prev) => ({ ...prev, [bookingId]: suggested.toFixed(4) }));
   }
 
   // বুকিং মোডে সিলেক্ট করা লাইনগুলোর হিসাব
@@ -272,7 +309,29 @@ export default function ProformaForm({ customers, bookings }: { customers: Custo
       <div className="flex flex-wrap gap-4">
         <div className="flex-1 max-w-xs">
           <label className="block text-sm text-gray-600 mb-1">Customer {mode === "manual" && "(ঐচ্ছিক)"}</label>
-          <select value={customerId} onChange={(e) => { setCustomerId(e.target.value); setSelectedBookings({}); setGarmentsFilter(""); }} className="w-full rounded-lg border px-3 py-2 text-sm" required={mode === "booking"}>
+          <select
+            value={customerId}
+            onChange={(e) => {
+              const newCustomerId = e.target.value;
+              setCustomerId(newCustomerId);
+              setSelectedBookings({});
+              setGarmentsFilter("");
+              // এই কাস্টমারের সব বুকিং-এ তাদের Garments-এর ডিফল্ট রুল বসিয়ে দিন
+              const newRules: Record<string, any> = {};
+              const newValues: Record<string, string> = {};
+              bookings.filter((b) => b.customer_id === newCustomerId).forEach((b) => {
+                const g = garmentsMaster.find((gm) => gm.customer_id === newCustomerId && gm.name === b.garments_name);
+                if (g) {
+                  newRules[b.id] = g.pricing_rule;
+                  newValues[b.id] = g.pricing_rule === "percentage" ? String(g.percentage_value) : String(g.rate_per_lbs_value);
+                }
+              });
+              setBookingPricingRule(newRules);
+              setBookingRuleValue(newValues);
+            }}
+            className="w-full rounded-lg border px-3 py-2 text-sm"
+            required={mode === "booking"}
+          >
             <option value="">-- বাছুন --</option>
             {customers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
@@ -327,13 +386,12 @@ export default function ProformaForm({ customers, bookings }: { customers: Custo
               <tr>
                 <th className="px-3 py-2 w-10"></th>
                 <th className="px-3 py-2">Booking</th>
+                <th className="px-3 py-2">Garments</th>
                 <th className="px-3 py-2">Style</th>
                 <th className="px-3 py-2">Measurement</th>
                 <th className="px-3 py-2 text-right">Qty (Pcs)</th>
-                <th className="px-3 py-2 w-20">Thickness</th>
-                <th className="px-3 py-2 w-20">Print</th>
-                <th className="px-3 py-2 w-20">Adhesive</th>
-                <th className="px-3 py-2 w-20">Basis</th>
+                <th className="px-3 py-2 w-24">Basis</th>
+                <th className="px-3 py-2">Pricing Rule</th>
                 <th className="px-3 py-2 w-32">Price/Unit</th>
                 <th className="px-3 py-2 text-right">Amount</th>
               </tr>
@@ -348,6 +406,7 @@ export default function ProformaForm({ customers, bookings }: { customers: Custo
                       <input type="checkbox" checked={!!selectedBookings[b.id]} onChange={(e) => setSelectedBookings((prev) => ({ ...prev, [b.id]: e.target.checked }))} />
                     </td>
                     <td className="px-3 py-2 font-medium">{b.booking_no}</td>
+                    <td className="px-3 py-2 text-gray-500">{b.garments_name || "-"}</td>
                     <td className="px-3 py-2 text-gray-500">{b.style || "-"}</td>
                     <td className="px-3 py-2 text-gray-500">{formatMeasurement(b)}</td>
                     <td className="px-3 py-2 text-right">{b.quantity_pcs}</td>
@@ -367,7 +426,35 @@ export default function ProformaForm({ customers, bookings }: { customers: Custo
                       </select>
                     </td>
                     <td className="px-3 py-2">
-                      <input type="number" step="0.0001" placeholder={defaultPrice ? defaultPrice.toFixed(4) : ""} value={overrides?.customPrice || bookingPrice[b.id] || ""} onChange={(e) => { setBookingPrice((prev) => ({ ...prev, [b.id]: e.target.value })); setBookingOverrides((prev) => ({ ...prev, [b.id]: { ...prev[b.id], customPrice: e.target.value, thickness: prev[b.id]?.thickness || "", printCharge: prev[b.id]?.printCharge || "", adhesiveCharge: prev[b.id]?.adhesiveCharge || "", customBasis: prev[b.id]?.customBasis || "pcs" } })); }} className="w-full rounded border px-2 py-1 text-sm" />
+                      <div className="flex gap-1 items-center">
+                        <select
+                          value={bookingPricingRule[b.id] || "manual"}
+                          onChange={(e) => setBookingPricingRule((prev) => ({ ...prev, [b.id]: e.target.value as any }))}
+                          className="rounded border px-1 py-1 text-xs"
+                        >
+                          <option value="manual">Manual</option>
+                          <option value="percentage">% on Invoice</option>
+                          <option value="rate_per_lbs">Rate/Lbs</option>
+                        </select>
+                        {bookingPricingRule[b.id] && bookingPricingRule[b.id] !== "manual" && (
+                          <input
+                            type="number" step="0.01" placeholder="মান"
+                            value={bookingRuleValue[b.id] || ""}
+                            onChange={(e) => setBookingRuleValue((prev) => ({ ...prev, [b.id]: e.target.value }))}
+                            className="w-16 rounded border px-1 py-1 text-xs"
+                          />
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-3 py-2">
+                      <div className="flex gap-1 items-center">
+                        <input type="number" step="0.0001" value={bookingPrice[b.id] || ""} onChange={(e) => setBookingPrice((prev) => ({ ...prev, [b.id]: e.target.value }))} className="w-full rounded border px-2 py-1 text-sm" />
+                        {bookingPricingRule[b.id] && bookingPricingRule[b.id] !== "manual" && (
+                          <button type="button" onClick={() => applySuggested(b.id)} className="text-xs text-blue-600 hover:underline whitespace-nowrap">
+                            Use {getSuggestedPrice(b).toFixed(4)}
+                          </button>
+                        )}
+                      </div>
                     </td>
                     <td className="px-3 py-2 text-right">
                       {calcLineAmount(b.quantity_pcs, overrides?.customPrice ? parseFloat(overrides.customPrice) : parseFloat(bookingPrice[b.id] || "0"), overrides?.customBasis || bookingBasis[b.id] || "pcs").toFixed(2)}
