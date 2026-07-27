@@ -5,7 +5,6 @@ import { createClient } from "@/lib/supabase/client";
 import { generateNextDocNo } from "@/lib/docNumber";
 import { calcPiUnitPrice } from "@/lib/calcTubeCutting";
 import { amountInWords } from "@/lib/numberToWords";
-import { calcPiUnitPrice } from "@/lib/calcTubeCutting";
 
 type Booking = {
   id: string; booking_no: string; quantity_pcs: number; product_id: string; customer_id: string;
