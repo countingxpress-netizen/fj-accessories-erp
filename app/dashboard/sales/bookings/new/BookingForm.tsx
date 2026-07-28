@@ -53,8 +53,10 @@ export default function BookingForm({
   // Shared fields (একবার দিলেই সব item-এ থাকবে)
   const [customerId, setCustomerId] = useState("");
   const [buyerId, setBuyerId] = useState("");
+  const [buyerNameInput, setBuyerNameInput] = useState("");
   const [merchantName, setMerchantName] = useState("");
   const [garmentsId, setGarmentsId] = useState("");
+  const [garmentsNameInput, setGarmentsNameInput] = useState("");
   const [bookingDate, setBookingDate] = useState(new Date().toISOString().slice(0, 10));
   const [deliveryPoint, setDeliveryPoint] = useState("");
   const [hasPrint, setHasPrint] = useState(false);
@@ -85,6 +87,8 @@ export default function BookingForm({
   const [warehouseId, setWarehouseId] = useState("");
 
   const [pendingItems, setPendingItems] = useState<PendingItem[]>([]);
+  const [buyersList, setBuyersList] = useState(buyersMaster);
+  const [garmentsList, setGarmentsList] = useState(garmentsMaster);
   const [warning, setWarning] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -164,8 +168,94 @@ export default function BookingForm({
 
   function handleGarmentsChange(id: string) {
     setGarmentsId(id);
-    const g = garmentsMaster.find((gm) => gm.id === id);
+    const g = garmentsList.find((gm) => gm.id === id);
+    setGarmentsNameInput(g?.name ?? "");
     if (g?.address) setDeliveryPoint(g.address);
+  }
+
+  async function ensureBuyerForCurrentCustomer() {
+    const trimmedName = buyerNameInput.trim();
+    if (!customerId) return { buyerId: null as string | null, buyerName: null as string | null };
+
+    if (buyerId) {
+      const selectedBuyer = buyersList.find((b) => b.id === buyerId);
+      return { buyerId, buyerName: (selectedBuyer?.name ?? buyerNameInput.trim()) || null };
+    }
+
+    if (!trimmedName) return { buyerId: null, buyerName: null };
+
+    const existingBuyer = buyersList.find(
+      (b) => b.customer_id === customerId && b.name.toLowerCase() === trimmedName.toLowerCase()
+    );
+    if (existingBuyer) {
+      setBuyerId(existingBuyer.id);
+      setBuyerNameInput(existingBuyer.name);
+      return { buyerId: existingBuyer.id, buyerName: existingBuyer.name };
+    }
+
+    const { data, error } = await supabase
+      .from("buyers")
+      .insert({
+        customer_id: customerId,
+        name: trimmedName,
+        pricing_rule: "manual",
+        percentage_value: 0,
+        rate_per_lbs_value: 0,
+      })
+      .select("id, name")
+      .single();
+
+    if (error) throw error;
+    if (data) {
+      setBuyersList((prev) => [...prev, { id: data.id, customer_id: customerId, name: data.name }]);
+      setBuyerId(data.id);
+      setBuyerNameInput(data.name);
+      return { buyerId: data.id, buyerName: data.name };
+    }
+
+    return { buyerId: null, buyerName: trimmedName };
+  }
+
+  async function ensureGarmentsForCurrentCustomer() {
+    const trimmedName = garmentsNameInput.trim();
+    if (!customerId) return { garmentsId: null as string | null, garmentsName: null as string | null };
+
+    if (garmentsId) {
+      const selectedGarment = garmentsList.find((g) => g.id === garmentsId);
+      return { garmentsId, garmentsName: (selectedGarment?.name ?? garmentsNameInput.trim()) || null };
+    }
+
+    if (!trimmedName) return { garmentsId: null, garmentsName: null };
+
+    const existingGarment = garmentsList.find(
+      (g) => g.customer_id === customerId && g.name.toLowerCase() === trimmedName.toLowerCase()
+    );
+    if (existingGarment) {
+      setGarmentsId(existingGarment.id);
+      setGarmentsNameInput(existingGarment.name);
+      return { garmentsId: existingGarment.id, garmentsName: existingGarment.name };
+    }
+
+    const { data, error } = await supabase
+      .from("garments")
+      .insert({
+        customer_id: customerId,
+        name: trimmedName,
+        address: deliveryPoint.trim() || null,
+      })
+      .select("id, name, address")
+      .single();
+
+    if (error) throw error;
+    if (data) {
+      setGarmentsList((prev) => [...prev, { id: data.id, customer_id: customerId, name: data.name, address: data.address ?? null }]);
+      setGarmentsId(data.id);
+      setGarmentsNameInput(data.name);
+      if (data.address) setDeliveryPoint(data.address);
+      return { garmentsId: data.id, garmentsName: data.name };
+    }
+
+    return { garmentsId: null, garmentsName: trimmedName };
   }
 
   function resetItemFields() {
@@ -300,6 +390,9 @@ export default function BookingForm({
       }
     }
 
+    const { buyerId: resolvedBuyerId } = await ensureBuyerForCurrentCustomer();
+    const { garmentsId: resolvedGarmentsId, garmentsName: resolvedGarmentsName } = await ensureGarmentsForCurrentCustomer();
+
     const year = new Date(bookingDate).getFullYear();
 
     for (const item of allItems) {
@@ -325,7 +418,7 @@ export default function BookingForm({
       const { data: booking, error: bookingError } = await supabase
         .from("bookings")
         .insert({
-          booking_no: sharedBookingNo, customer_id: customerId, buyer_id: buyerId, merchant_id: merchantId,
+          booking_no: sharedBookingNo, customer_id: customerId, buyer_id: resolvedBuyerId, merchant_id: merchantId,
           style: item.style, product_details: item.productDetails, product_id: productId,
           measurement_type: item.measurementType, measurement_unit: item.unit,
           length_val: item.lengthVal, width_val: item.widthVal,
@@ -340,8 +433,8 @@ export default function BookingForm({
           delivery_point: deliveryPoint, print_layout_note: printLayoutNote,
           has_print: item.hasPrint, print_colors: item.printColors,
           rate_per_color: item.ratePerColor, rate_per_inch: item.ratePerInch,
-          garments_name: garmentsMaster.find((g) => g.id === garmentsId)?.name ?? null,
-          garments_id: garmentsId || null, booking_group_id: groupId,
+          garments_name: resolvedGarmentsName ?? null,
+          garments_id: resolvedGarmentsId || null, booking_group_id: groupId,
           customer_booking_ref: item.customerBookingRef || null,
           warehouse_id: item.warehouseId, status: "in_production",
         })
@@ -407,7 +500,7 @@ export default function BookingForm({
           <label className="block text-sm text-gray-600 mb-1">Customer</label>
           <select
             value={customerId}
-            onChange={(e) => { setCustomerId(e.target.value); setWarning(""); setBuyerId(""); setGarmentsId("");
+            onChange={(e) => { setCustomerId(e.target.value); setWarning(""); setBuyerId(""); setBuyerNameInput(""); setGarmentsId(""); setGarmentsNameInput(""); setDeliveryPoint("");
               const newCustomerId = e.target.value; 
 const selected = customers.find((c) => String(c.id) === String(newCustomerId));
               
@@ -421,10 +514,12 @@ const selected = customers.find((c) => String(c.id) === String(newCustomerId));
         </div>
         <div className="flex-1 min-w-[180px]">
           <label className="block text-sm text-gray-600 mb-1">Buyer</label>
-          <select value={buyerId} onChange={(e) => setBuyerId(e.target.value)} className="w-full rounded-lg border px-3 py-2 text-sm">
+          <select value={buyerId} onChange={(e) => { setBuyerId(e.target.value); const selected = buyersList.find((b) => b.id === e.target.value); setBuyerNameInput(selected?.name ?? ""); }} className="w-full rounded-lg border px-3 py-2 text-sm">
             <option value="">-- বাছুন --</option>
-            {buyersMaster.filter((b) => b.customer_id === customerId).map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+            {buyersList.filter((b) => b.customer_id === customerId).map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
           </select>
+          <input value={buyerNameInput} onChange={(e) => { setBuyerNameInput(e.target.value); if (!e.target.value.trim()) setBuyerId(""); }} className="mt-2 w-full rounded-lg border px-3 py-2 text-sm" placeholder="নতুন Buyer লিখুন" />
+          <p className="mt-1 text-xs text-gray-500">নতুন Buyer লিখলে সাবমিটের সময় অটোমেটিক যোগ হবে</p>
         </div>
         <div className="flex-1 min-w-[180px]">
           <label className="block text-sm text-gray-600 mb-1">Merchant Name</label>
@@ -434,8 +529,10 @@ const selected = customers.find((c) => String(c.id) === String(newCustomerId));
           <label className="block text-sm text-gray-600 mb-1">Garments</label>
           <select value={garmentsId} onChange={(e) => handleGarmentsChange(e.target.value)} className="w-full rounded-lg border px-3 py-2 text-sm">
             <option value="">-- বাছুন --</option>
-            {garmentsMaster.filter((g) => g.customer_id === customerId).map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
+            {garmentsList.filter((g) => g.customer_id === customerId).map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
           </select>
+          <input value={garmentsNameInput} onChange={(e) => { setGarmentsNameInput(e.target.value); if (!e.target.value.trim()) setGarmentsId(""); }} className="mt-2 w-full rounded-lg border px-3 py-2 text-sm" placeholder="নতুন Garments লিখুন" />
+          <p className="mt-1 text-xs text-gray-500">নতুন Garments লিখলে সাবমিটের সময় অটোমেটিক যোগ হবে</p>
         </div>
       </div>
 
@@ -668,7 +765,12 @@ const selected = customers.find((c) => String(c.id) === String(newCustomerId));
               Garments-এর ঠিকানা ব্যবহার করুন
             </button>
           )}
-          <textarea value={deliveryPoint} onChange={(e) => setDeliveryPoint(e.target.value)} rows={2} className="w-full rounded-lg border px-3 py-2 text-sm" placeholder="সম্পূর্ণ ডেলিভারি ঠিকানা লিখুন" />
+          <input value={deliveryPoint} onChange={(e) => setDeliveryPoint(e.target.value)} list="delivery-point-options" className="w-full rounded-lg border px-3 py-2 text-sm" placeholder="সম্পূর্ণ ডেলিভারি ঠিকানা লিখুন" />
+          <datalist id="delivery-point-options">
+            {garmentsList.filter((g) => g.customer_id === customerId && g.address).map((g) => (
+              <option key={g.id} value={g.address ?? ""} />
+            ))}
+          </datalist>
         </div>
         <div className="flex-1 min-w-[180px]">
           <label className="block text-sm text-gray-600 mb-1">Print Layout Note (ঐচ্ছিক)</label>

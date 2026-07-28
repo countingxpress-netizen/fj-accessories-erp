@@ -43,7 +43,6 @@ const menu: MenuGroup[] = [
       { label: "Customers", href: "/dashboard/sales/customers" },
       { label: "Buyers", href: "/dashboard/sales/buyers" },
       { label: "Garments", href: "/dashboard/sales/garments" },
-      { label: "Buyer & Garments", href: "/dashboard/sales/garments" },
       { label: "Booking Received", href: "/dashboard/sales/bookings" },
       { label: "Quotation", href: "/dashboard/sales/quotations" },
       { label: "Sales Invoice", href: "/dashboard/sales/invoices" },

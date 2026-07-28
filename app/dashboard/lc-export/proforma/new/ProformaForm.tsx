@@ -15,7 +15,7 @@ type Booking = {
   finished_goods: { product_name: string; length_cm: number; width_cm: number; thickness: number } | null;
 };
 type Customer = { id: string; name: string; price_per_lbs: number | null };
-type BuyerMaster = { id: string; customer_id: string; name: string; pricing_rule: string; percentage_value: number; rate_per_lbs_value: number };
+type BuyerMaster = { id: string; customer_id: string; name: string; pricing_rule: string; percentage_value: number; rate_per_lbs_value: number; pi_thickness_mm: number | null; adhesive_rate_per_inch: number | null; print_colors_default: number | null };
 type ManualLine = { description: string; measurement: string; qtyPcs: string; priceUnit: string; priceBasis: "pcs" | "dzn" };
 
 const DEFAULT_TERMS = `01) 100% IRREVOCABLE LETTER OF CREDIT AT SIGHT.
@@ -124,6 +124,15 @@ export default function ProformaForm({
     if (!b) return;
     const suggested = getSuggestedPrice(b);
     if (suggested > 0) setBookingPrice((prev) => ({ ...prev, [bookingId]: suggested.toFixed(4) }));
+  }
+
+  function getBuyerDefaults(b: Booking) {
+    const rule = getBuyerRule(b);
+    return {
+      thickness: rule?.pi_thickness_mm ?? null,
+      adhesiveRate: rule?.adhesive_rate_per_inch ?? null,
+      printColors: rule?.print_colors_default ?? null,
+    };
   }
 
   function calcLineAmount(qtyPcs: number, priceUnit: number, basis: "pcs" | "dzn") {
@@ -356,6 +365,7 @@ export default function ProformaForm({
               {customerBookings.map((b) => {
                 const rule = getBuyerRule(b);
                 const suggested = getSuggestedPrice(b);
+                const defaults = getBuyerDefaults(b);
                 return (
                   <tr key={b.id} className="border-t">
                     <td className="px-3 py-2">
@@ -379,6 +389,7 @@ export default function ProformaForm({
                           value={bookingPrice[b.id] || ""}
                           onChange={(e) => setBookingPrice((prev) => ({ ...prev, [b.id]: e.target.value }))}
                           className="w-24 rounded border px-2 py-1 text-sm"
+                          placeholder={defaults.thickness ? `${defaults.thickness}` : undefined}
                         />
                         {rule && rule.pricing_rule !== "manual" && suggested > 0 && (
                           <button type="button" onClick={() => applySuggested(b.id)} className="text-xs text-blue-600 hover:underline whitespace-nowrap" title={`Buyer Rule: ${rule.pricing_rule}`}>
@@ -386,6 +397,13 @@ export default function ProformaForm({
                           </button>
                         )}
                       </div>
+                      {(defaults.thickness || defaults.adhesiveRate || defaults.printColors !== null) && (
+                        <div className="mt-1 text-[11px] text-gray-500">
+                          {defaults.thickness !== null && <>PI Thick: {defaults.thickness} mm</>}
+                          {defaults.adhesiveRate !== null && <> • Adhesive: {defaults.adhesiveRate}/inch</>}
+                          {defaults.printColors !== null && <> • Print: {defaults.printColors} color</>}
+                        </div>
+                      )}
                     </td>
                     <td className="px-3 py-2 text-right">
                       {calcLineAmount(b.quantity_pcs, parseFloat(bookingPrice[b.id] || "0"), bookingBasis[b.id] || "pcs").toFixed(2)}

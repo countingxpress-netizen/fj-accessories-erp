@@ -9,6 +9,9 @@ export default function BuyerRow({ buyer }: { buyer: any }) {
   const [pricingRule, setPricingRule] = useState(buyer.pricing_rule ?? "manual");
   const [percentageValue, setPercentageValue] = useState(String(buyer.percentage_value ?? 0));
   const [rateValue, setRateValue] = useState(String(buyer.rate_per_lbs_value ?? 0));
+  const [piThicknessMm, setPiThicknessMm] = useState(String(buyer.pi_thickness_mm ?? ""));
+  const [adhesiveRatePerInch, setAdhesiveRatePerInch] = useState(String(buyer.adhesive_rate_per_inch ?? ""));
+  const [printColorsDefault, setPrintColorsDefault] = useState(String(buyer.print_colors_default ?? ""));
   const [loading, setLoading] = useState(false);
   const router = useRouter();
   const supabase = createClient();
@@ -19,6 +22,9 @@ export default function BuyerRow({ buyer }: { buyer: any }) {
       name, pricing_rule: pricingRule,
       percentage_value: parseFloat(percentageValue) || 0,
       rate_per_lbs_value: parseFloat(rateValue) || 0,
+      pi_thickness_mm: parseFloat(piThicknessMm) || null,
+      adhesive_rate_per_inch: parseFloat(adhesiveRatePerInch) || null,
+      print_colors_default: parseFloat(printColorsDefault) || null,
     }).eq("id", buyer.id);
     setLoading(false);
     setEditing(false);
@@ -41,13 +47,18 @@ export default function BuyerRow({ buyer }: { buyer: any }) {
         <td className="px-4 py-2">
           <select value={pricingRule} onChange={(e) => setPricingRule(e.target.value)} className="rounded border px-2 py-1 text-sm">
             <option value="manual">Manual</option>
-            <option value="percentage">% on Invoice</option>
-            <option value="rate_per_lbs">Rate/Lbs</option>
+            <option value="percentage">% on PI</option>
+            <option value="rate_per_lbs">Rate/Lbs (PI)</option>
           </select>
         </td>
         <td className="px-4 py-2">
-          {pricingRule === "percentage" && <input type="number" step="0.01" value={percentageValue} onChange={(e) => setPercentageValue(e.target.value)} className="w-20 rounded border px-2 py-1 text-sm" />}
-          {pricingRule === "rate_per_lbs" && <input type="number" step="0.01" value={rateValue} onChange={(e) => setRateValue(e.target.value)} className="w-20 rounded border px-2 py-1 text-sm" />}
+          <div className="space-y-2">
+            {pricingRule === "percentage" && <input type="number" step="0.01" value={percentageValue} onChange={(e) => setPercentageValue(e.target.value)} className="w-20 rounded border px-2 py-1 text-sm" />}
+            {pricingRule === "rate_per_lbs" && <input type="number" step="0.01" value={rateValue} onChange={(e) => setRateValue(e.target.value)} className="w-20 rounded border px-2 py-1 text-sm" />}
+            <input type="number" step="0.001" value={piThicknessMm} onChange={(e) => setPiThicknessMm(e.target.value)} className="w-24 rounded border px-2 py-1 text-sm" placeholder="PI Thick" />
+            <input type="number" step="0.001" value={adhesiveRatePerInch} onChange={(e) => setAdhesiveRatePerInch(e.target.value)} className="w-28 rounded border px-2 py-1 text-sm" placeholder="Adh Rate" />
+            <input type="number" min="0" step="0.0001" value={printColorsDefault} onChange={(e) => setPrintColorsDefault(e.target.value)} className="w-32 rounded border px-2 py-1 text-sm" placeholder="0.20/color/pc" />
+          </div>
         </td>
         <td className="px-4 py-2 text-right whitespace-nowrap">
           <button onClick={handleSave} disabled={loading} className="rounded bg-green-600 px-3 py-1 text-xs text-white mr-1">সেভ</button>
@@ -62,8 +73,13 @@ export default function BuyerRow({ buyer }: { buyer: any }) {
       <td className="px-4 py-2 font-medium">{buyer.name}</td>
       <td className="px-4 py-2 text-gray-500 capitalize">{(buyer.pricing_rule ?? "manual").replace(/_/g, " ")}</td>
       <td className="px-4 py-2 text-gray-500">
-        {buyer.pricing_rule === "percentage" && `${buyer.percentage_value}%`}
-        {buyer.pricing_rule === "rate_per_lbs" && buyer.rate_per_lbs_value}
+        <div className="space-y-1 text-xs">
+          <div>PI Thickness: {buyer.pi_thickness_mm ?? "-"}</div>
+          <div>Adhesive Rate/Inch: {buyer.adhesive_rate_per_inch ?? "-"}</div>
+          <div>Print/Color/Pc: {buyer.print_colors_default ?? "-"} /color/pc</div>
+          <div>{buyer.pricing_rule === "percentage" && `PI Rule Value: ${buyer.percentage_value}%`}</div>
+          <div>{buyer.pricing_rule === "rate_per_lbs" && `PI Rule Value: ${buyer.rate_per_lbs_value}`}</div>
+        </div>
       </td>
       <td className="px-4 py-2 text-right whitespace-nowrap">
         <button onClick={() => setEditing(true)} className="rounded bg-blue-50 px-3 py-1 text-xs text-blue-700 mr-2 hover:bg-blue-100">Edit</button>
