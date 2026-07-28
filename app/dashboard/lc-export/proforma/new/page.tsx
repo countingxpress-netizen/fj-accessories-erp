@@ -7,22 +7,21 @@ export default async function NewProformaPage() {
 
   const { data: allBookings } = await supabase
     .from("bookings")
-    .select("id, booking_no, quantity_pcs, product_id, customer_id, style, garments_name, buyers(name), merchants(name), measurement_type, measurement_unit, length_val, width_val, flap_val, gusset_val, pi_thickness_mm, finished_goods(product_name, length_cm, width_cm, thickness)")
+    .select("id, booking_no, quantity_pcs, product_id, customer_id, style, garments_name, buyer_id, buyers(name), merchants(name), measurement_type, measurement_unit, length_val, width_val, flap_val, gusset_val, pi_thickness_mm, finished_goods(product_name, length_cm, width_cm, thickness)")
     .order("booking_date", { ascending: false });
 
   const { data: usedItems } = await supabase.from("pi_items").select("booking_id").not("booking_id", "is", null);
   const usedIds = new Set((usedItems ?? []).map((pi: any) => pi.booking_id));
   const availableBookings = (allBookings ?? []).filter((b: any) => !usedIds.has(b.id));
 
-  const { data: garmentsMaster } = await supabase.from("garments").select("*");
-
-  const bookingIds = (availableBookings ?? []).map((b: any) => b.id);
+  const bookingIds = availableBookings.map((b: any) => b.id);
   const { data: pastInvoiceItems } = bookingIds.length
     ? await supabase.from("sales_invoice_items").select("booking_id, unit_price").in("booking_id", bookingIds)
     : { data: [] };
-
   const lastUnitPriceByBooking: Record<string, number> = {};
   (pastInvoiceItems ?? []).forEach((it: any) => { lastUnitPriceByBooking[it.booking_id] = it.unit_price; });
+
+  const { data: buyersMaster } = await supabase.from("buyers").select("*");
 
   return (
     <div>
@@ -30,7 +29,7 @@ export default async function NewProformaPage() {
       <ProformaForm
         customers={customers ?? []}
         bookings={availableBookings as any}
-        garmentsMaster={garmentsMaster ?? []}
+        buyersMaster={buyersMaster ?? []}
         lastUnitPriceByBooking={lastUnitPriceByBooking}
       />
     </div>

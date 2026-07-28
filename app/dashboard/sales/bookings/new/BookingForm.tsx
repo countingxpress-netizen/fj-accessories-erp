@@ -41,14 +41,20 @@ type PendingItem = {
 const LBS_PER_BAG = 55;
 const CM_PER_INCH = 2.54;
 
+type BuyerMaster = { id: string; customer_id: string; name: string };
+type GarmentMaster = { id: string; customer_id: string; name: string; address: string | null };
+
 export default function BookingForm({
-  customers, warehouses, materials,
-}: { customers: Customer[]; warehouses: Warehouse[]; materials: Material[] }) {
+  customers, warehouses, materials, buyersMaster, garmentsMaster,
+}: {
+  customers: Customer[]; warehouses: Warehouse[]; materials: Material[];
+  buyersMaster: BuyerMaster[]; garmentsMaster: GarmentMaster[];
+}) {
   // Shared fields (একবার দিলেই সব item-এ থাকবে)
   const [customerId, setCustomerId] = useState("");
-  const [buyerName, setBuyerName] = useState("");
+  const [buyerId, setBuyerId] = useState("");
   const [merchantName, setMerchantName] = useState("");
-  const [garmentsName, setGarmentsName] = useState("");
+  const [garmentsId, setGarmentsId] = useState("");
   const [bookingDate, setBookingDate] = useState(new Date().toISOString().slice(0, 10));
   const [deliveryPoint, setDeliveryPoint] = useState("");
   const [hasPrint, setHasPrint] = useState(false);
@@ -156,6 +162,12 @@ export default function BookingForm({
     }
   }
 
+  function handleGarmentsChange(id: string) {
+    setGarmentsId(id);
+    const g = garmentsMaster.find((gm) => gm.id === id);
+    if (g?.address) setDeliveryPoint(g.address);
+  }
+
   function resetItemFields() {
     setStyle("");
     setCustomerBookingRef("");
@@ -258,16 +270,6 @@ export default function BookingForm({
     const groupId = crypto.randomUUID();
     const sharedBookingNo = await generateNextDocNo(supabase, "bookings", "booking_no", "BK", "booking_date", bookingDate);
 
-    // Buyer/Merchant upsert (একবারই, সব item শেয়ার করবে)
-    let buyerId: string | null = null;
-    if (buyerName.trim()) {
-      const { data: existingBuyer } = await supabase
-        .from("buyers").select("id").eq("customer_id", customerId).eq("name", buyerName.trim()).maybeSingle();
-      buyerId = existingBuyer
-        ? existingBuyer.id
-        : (await supabase.from("buyers").insert({ customer_id: customerId, name: buyerName.trim() }).select().single()).data?.id ?? null;
-    }
-
     let merchantId: string | null = null;
     if (merchantName.trim()) {
       const { data: existingMerchant } = await supabase
@@ -338,7 +340,8 @@ export default function BookingForm({
           delivery_point: deliveryPoint, print_layout_note: printLayoutNote,
           has_print: item.hasPrint, print_colors: item.printColors,
           rate_per_color: item.ratePerColor, rate_per_inch: item.ratePerInch,
-          garments_name: garmentsName || null, booking_group_id: groupId,
+          garments_name: garmentsMaster.find((g) => g.id === garmentsId)?.name ?? null,
+          garments_id: garmentsId || null, booking_group_id: groupId,
           customer_booking_ref: item.customerBookingRef || null,
           warehouse_id: item.warehouseId, status: "in_production",
         })
@@ -404,10 +407,7 @@ export default function BookingForm({
           <label className="block text-sm text-gray-600 mb-1">Customer</label>
           <select
             value={customerId}
-            onChange={(e) => {
-              const newCustomerId = e.target.value;
-              setCustomerId(newCustomerId);
-              setWarning("");
+            onChange={(e) => { setCustomerId(e.target.value); setWarning(""); setBuyerId(""); setGarmentsId("");
               const selected = customers.find((c) => c.id === newCustomerId);
               if (selected) {
                 setRatePerColor(String(selected.default_print_rate ?? 0.20));
@@ -423,7 +423,10 @@ export default function BookingForm({
         </div>
         <div className="flex-1 min-w-[180px]">
           <label className="block text-sm text-gray-600 mb-1">Buyer</label>
-          <input value={buyerName} onChange={(e) => setBuyerName(e.target.value)} className="w-full rounded-lg border px-3 py-2 text-sm" placeholder="Buyer নাম" />
+          <select value={buyerId} onChange={(e) => setBuyerId(e.target.value)} className="w-full rounded-lg border px-3 py-2 text-sm">
+            <option value="">-- বাছুন --</option>
+            {buyersMaster.filter((b) => b.customer_id === customerId).map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+          </select>
         </div>
         <div className="flex-1 min-w-[180px]">
           <label className="block text-sm text-gray-600 mb-1">Merchant Name</label>
@@ -431,7 +434,10 @@ export default function BookingForm({
         </div>
         <div className="flex-1 min-w-[180px]">
           <label className="block text-sm text-gray-600 mb-1">Garments</label>
-          <input value={garmentsName} onChange={(e) => setGarmentsName(e.target.value)} className="w-full rounded-lg border px-3 py-2 text-sm" placeholder="গার্মেন্টস নাম" />
+          <select value={garmentsId} onChange={(e) => handleGarmentsChange(e.target.value)} className="w-full rounded-lg border px-3 py-2 text-sm">
+            <option value="">-- বাছুন --</option>
+            {garmentsMaster.filter((g) => g.customer_id === customerId).map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
+          </select>
         </div>
       </div>
 
@@ -655,6 +661,15 @@ export default function BookingForm({
         </div>
         <div className="flex-1 min-w-[280px]">
           <label className="block text-sm text-gray-600 mb-1">Delivery Point (পূর্ণ ঠিকানা)</label>
+          {garmentsId && garmentsMaster.find((g) => g.id === garmentsId)?.address && (
+            <button
+              type="button"
+              onClick={() => setDeliveryPoint(garmentsMaster.find((g) => g.id === garmentsId)!.address!)}
+              className="text-xs text-blue-600 hover:underline mb-1"
+            >
+              Garments-এর ঠিকানা ব্যবহার করুন
+            </button>
+          )}
           <textarea value={deliveryPoint} onChange={(e) => setDeliveryPoint(e.target.value)} rows={2} className="w-full rounded-lg border px-3 py-2 text-sm" placeholder="সম্পূর্ণ ডেলিভারি ঠিকানা লিখুন" />
         </div>
         <div className="flex-1 min-w-[180px]">
