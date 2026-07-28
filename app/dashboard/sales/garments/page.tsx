@@ -29,16 +29,17 @@ export default async function GarmentsPage() {
           <h2 className="text-sm font-semibold uppercase text-gray-500 mb-2">{group.customerName}</h2>
           <div className="overflow-hidden rounded-xl border bg-white shadow-sm">
             <table className="w-full text-sm">
-              <thead className="bg-gray-50 text-left text-gray-600">
-                <tr>
-                  <th className="px-4 py-2">Garments</th>
-                  <th className="px-4 py-2">Address</th>
-                  <th className="px-4 py-2 text-right">Action</th>
-                
-              </thead>
-              <tbody>
-                {group.items.map((g) => <GarmentRow key={g.id} garment={g} />)}
-              </tbody>
+              <thead>
+    <tr>
+      <th className="px-4 py-2">Garment No</th>
+      <th className="px-4 py-2">Date</th>
+      <th className="px-4 py-2">Address</th>
+      <th className="px-4 py-2 text-right">Action</th>
+    </tr>
+  </thead>
+  <tbody>
+    {group.items.map((g) => <GarmentRow key={g.id} garment={g} />)}
+  </tbody>
             </table>
           </div>
         </div>
