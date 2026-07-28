@@ -34,7 +34,6 @@ export default async function GarmentsPage() {
                   <th className="px-4 py-2">Garments</th>
                   <th className="px-4 py-2">Address</th>
                   <th className="px-4 py-2 text-right">Action</th>
-                </tr> className="px-4 py-2 text-right">Action</th>
                 
               </thead>
               <tbody>
