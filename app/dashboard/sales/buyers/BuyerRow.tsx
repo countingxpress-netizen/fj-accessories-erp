@@ -13,6 +13,7 @@ export default function BuyerRow({ buyer }: { buyer: any }) {
   const [bookingThicknessMm, setBookingThicknessMm] = useState(String(buyer.booking_thickness_mm ?? ""));
   const [adhesiveRatePerInch, setAdhesiveRatePerInch] = useState(String(buyer.adhesive_rate_per_inch ?? ""));
   const [printColorsDefault, setPrintColorsDefault] = useState(String(buyer.print_colors_default ?? ""));
+  const [colorQuantity, setColorQuantity] = useState(String(buyer.color_quantity ?? ""));
   const [loading, setLoading] = useState(false);
   const router = useRouter();
   const supabase = createClient();
@@ -27,6 +28,7 @@ export default function BuyerRow({ buyer }: { buyer: any }) {
       booking_thickness_mm: parseFloat(bookingThicknessMm) || null,
       adhesive_rate_per_inch: parseFloat(adhesiveRatePerInch) || null,
       print_colors_default: parseFloat(printColorsDefault) || null,
+      color_quantity: parseInt(colorQuantity) || null,
     }).eq("id", buyer.id);
     setLoading(false);
     setEditing(false);
