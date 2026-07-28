@@ -32,7 +32,12 @@ export default async function BuyersPage() {
               <thead className="bg-gray-50 text-left text-gray-600">
                 <tr>
                   <th className="px-4 py-2">Buyer</th>
-                  <th className="px-4 py-2">PI Rules Value, PI Thickness, Adhesive Rate/Inch, Print/Color/Pc</th>
+                  <th className="px-4 py-2">PI Pricing Rule Value</th>
+                  <th className="px-4 py-2">PI Thickness (mm)</th>
+                  <th className="px-4 py-2">Booking Thickness (mm)</th>
+                  <th className="px-4 py-2">Adhesive Rate/Inch</th>
+                  <th className="px-4 py-2">Print/Color/Pc</th>
+                  <th className="px-4 py-2">Color Quantity</th>
                   <th className="px-4 py-2 text-right">Action</th>
                 </tr>
               </thead>
