@@ -410,10 +410,7 @@ export default function BookingForm({
             onChange={(e) => { setCustomerId(e.target.value); setWarning(""); setBuyerId(""); setGarmentsId("");
               const newCustomerId = e.target.value; 
 const selected = customers.find((c) => String(c.id) === String(newCustomerId));
-              if (selected) {
-                setRatePerColor(String(selected.default_print_rate ?? 0.20));
-                setRatePerInch(String(selected.default_adhesive_rate ?? 0.02));
-              }
+              
             }}
             className="w-full rounded-lg border px-3 py-2 text-sm"
             required
