@@ -408,7 +408,8 @@ export default function BookingForm({
           <select
             value={customerId}
             onChange={(e) => { setCustomerId(e.target.value); setWarning(""); setBuyerId(""); setGarmentsId("");
-              const selected = customers.find((c) => c.id === newCustomerId);
+              const newCustomerId = e.target.value; 
+const selected = customers.find((c) => String(c.id) === String(newCustomerId));
               if (selected) {
                 setRatePerColor(String(selected.default_print_rate ?? 0.20));
                 setRatePerInch(String(selected.default_adhesive_rate ?? 0.02));
