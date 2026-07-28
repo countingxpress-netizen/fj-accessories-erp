@@ -35,6 +35,7 @@ export default async function BuyersPage() {
                   <th className="px-4 py-2">PI Pricing Rule Value</th>
                   <th className="px-4 py-2">PI Thickness (mm)</th>
                   <th className="px-4 py-2">Booking Thickness (mm)</th>
+                  <th className="px-4 py-2">Production Thickness (mm)</th>
                   <th className="px-4 py-2">Adhesive Rate/Inch</th>
                   <th className="px-4 py-2">Print/Color/Pc</th>
                   <th className="px-4 py-2">Color Quantity</th>

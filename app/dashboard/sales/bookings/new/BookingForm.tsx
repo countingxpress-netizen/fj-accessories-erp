@@ -41,7 +41,16 @@ type PendingItem = {
 const LBS_PER_BAG = 55;
 const CM_PER_INCH = 2.54;
 
-type BuyerMaster = { id: string; customer_id: string; name: string };
+type BuyerMaster = {
+  id: string;
+  customer_id: string;
+  name: string;
+  booking_thickness_mm: number | null;
+  production_thickness_mm: number | null;
+  pi_thickness_mm: number | null;
+  print_colors_default: number | null;
+  adhesive_rate_per_inch: number | null;
+};
 type GarmentMaster = { id: string; customer_id: string; name: string; address: string | null };
 
 export default function BookingForm({
@@ -173,6 +182,29 @@ export default function BookingForm({
     if (g?.address) setDeliveryPoint(g.address);
   }
 
+  function applyBuyerDefaults(selectedBuyerId: string) {
+    if (!selectedBuyerId) return;
+
+    const selectedBuyer = buyersList.find((b) => b.id === selectedBuyerId);
+    if (!selectedBuyer) return;
+
+    if (selectedBuyer.booking_thickness_mm != null) {
+      setThicknessMm(String(selectedBuyer.booking_thickness_mm));
+    }
+    if (selectedBuyer.production_thickness_mm != null) {
+      setProductionThicknessMm(String(selectedBuyer.production_thickness_mm));
+    }
+    if (selectedBuyer.pi_thickness_mm != null) {
+      setPiThicknessMm(String(selectedBuyer.pi_thickness_mm));
+    }
+    if (selectedBuyer.print_colors_default != null) {
+      setRatePerColor(String(selectedBuyer.print_colors_default));
+    }
+    if (selectedBuyer.adhesive_rate_per_inch != null) {
+      setRatePerInch(String(selectedBuyer.adhesive_rate_per_inch));
+    }
+  }
+
   async function ensureBuyerForCurrentCustomer() {
     const trimmedName = buyerNameInput.trim();
     if (!customerId) return { buyerId: null as string | null, buyerName: null as string | null };
@@ -207,7 +239,19 @@ export default function BookingForm({
 
     if (error) throw error;
     if (data) {
-      setBuyersList((prev) => [...prev, { id: data.id, customer_id: customerId, name: data.name }]);
+      setBuyersList((prev) => [
+        ...prev,
+        {
+          id: data.id,
+          customer_id: customerId,
+          name: data.name,
+          booking_thickness_mm: null,
+          production_thickness_mm: null,
+          pi_thickness_mm: null,
+          print_colors_default: null,
+          adhesive_rate_per_inch: null,
+        },
+      ]);
       setBuyerId(data.id);
       setBuyerNameInput(data.name);
       return { buyerId: data.id, buyerName: data.name };
@@ -514,7 +558,19 @@ const selected = customers.find((c) => String(c.id) === String(newCustomerId));
         </div>
         <div className="flex-1 min-w-[180px]">
           <label className="block text-sm text-gray-600 mb-1">Buyer</label>
-          <select value={buyerId} onChange={(e) => { setBuyerId(e.target.value); const selected = buyersList.find((b) => b.id === e.target.value); setBuyerNameInput(selected?.name ?? ""); }} className="w-full rounded-lg border px-3 py-2 text-sm">
+          <select
+            value={buyerId}
+            onChange={(e) => {
+              const nextBuyerId = e.target.value;
+              setBuyerId(nextBuyerId);
+              const selected = buyersList.find((b) => b.id === nextBuyerId);
+              setBuyerNameInput(selected?.name ?? "");
+              if (nextBuyerId) {
+                applyBuyerDefaults(nextBuyerId);
+              }
+            }}
+            className="w-full rounded-lg border px-3 py-2 text-sm"
+          >
             <option value="">-- বাছুন --</option>
             {buyersList.filter((b) => b.customer_id === customerId).map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
           </select>

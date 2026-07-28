@@ -11,6 +11,7 @@ export default function BuyerRow({ buyer }: { buyer: any }) {
   const [rateValue, setRateValue] = useState(String(buyer.rate_per_lbs_value ?? 0));
   const [piThicknessMm, setPiThicknessMm] = useState(String(buyer.pi_thickness_mm ?? ""));
   const [bookingThicknessMm, setBookingThicknessMm] = useState(String(buyer.booking_thickness_mm ?? ""));
+  const [productionThicknessMm, setProductionThicknessMm] = useState(String(buyer.production_thickness_mm ?? ""));
   const [adhesiveRatePerInch, setAdhesiveRatePerInch] = useState(String(buyer.adhesive_rate_per_inch ?? ""));
   const [printColorsDefault, setPrintColorsDefault] = useState(String(buyer.print_colors_default ?? ""));
   const [colorQuantity, setColorQuantity] = useState(String(buyer.color_quantity ?? ""));
@@ -19,18 +20,31 @@ export default function BuyerRow({ buyer }: { buyer: any }) {
   const supabase = createClient();
 
   async function handleSave() {
+    const normalizedColorQuantity = colorQuantity === "" ? null : Number.isFinite(Number(colorQuantity)) ? Math.round(Number(colorQuantity)) : null;
+    const normalizedPrintColorsDefault = printColorsDefault === "" ? null : Number.isFinite(Number(printColorsDefault)) ? Number(printColorsDefault) : null;
+
     setLoading(true);
-    await supabase.from("buyers").update({
+    const { error } = await supabase.from("buyers").update({
       name, pricing_rule: pricingRule,
       percentage_value: parseFloat(percentageValue) || 0,
       rate_per_lbs_value: parseFloat(rateValue) || 0,
       pi_thickness_mm: parseFloat(piThicknessMm) || null,
       booking_thickness_mm: parseFloat(bookingThicknessMm) || null,
+      production_thickness_mm: parseFloat(productionThicknessMm) || null,
       adhesive_rate_per_inch: parseFloat(adhesiveRatePerInch) || null,
-      print_colors_default: parseFloat(printColorsDefault) || null,
-      color_quantity: parseInt(colorQuantity) || null,
+      print_colors_default: normalizedPrintColorsDefault,
+      color_quantity: normalizedColorQuantity,
     }).eq("id", buyer.id);
     setLoading(false);
+
+    if (error) {
+      const hint = error.message.includes("does not exist")
+        ? "\n\nbuyers টেবিলে migration SQL চালানো আছে কি না দেখুন。"
+        : "";
+      alert(`সেভ করা যায়নি: ${error.message}${hint}`);
+      return;
+    }
+
     setEditing(false);
     router.refresh();
   }
@@ -61,9 +75,10 @@ export default function BuyerRow({ buyer }: { buyer: any }) {
         </td>
         <td className="px-4 py-2"><input type="number" step="0.001" value={piThicknessMm} onChange={(e) => setPiThicknessMm(e.target.value)} className="w-28 rounded border px-2 py-1 text-sm" placeholder="PI Thick" /></td>
         <td className="px-4 py-2"><input type="number" step="0.001" value={bookingThicknessMm} onChange={(e) => setBookingThicknessMm(e.target.value)} className="w-28 rounded border px-2 py-1 text-sm" placeholder="Booking Thick" /></td>
+        <td className="px-4 py-2"><input type="number" step="0.001" value={productionThicknessMm} onChange={(e) => setProductionThicknessMm(e.target.value)} className="w-28 rounded border px-2 py-1 text-sm" placeholder="Prod Thick" /></td>
         <td className="px-4 py-2"><input type="number" step="0.001" value={adhesiveRatePerInch} onChange={(e) => setAdhesiveRatePerInch(e.target.value)} className="w-28 rounded border px-2 py-1 text-sm" placeholder="Adh Rate" /></td>
         <td className="px-4 py-2"><input type="number" min="0" step="0.0001" value={printColorsDefault} onChange={(e) => setPrintColorsDefault(e.target.value)} className="w-32 rounded border px-2 py-1 text-sm" placeholder="0.20/color/pc" /></td>
-        <td className="px-4 py-2"><input type="number" min="0" value={String(buyer.color_quantity ?? colorQuantity)} onChange={(e) => setColorQuantity(e.target.value)} className="w-24 rounded border px-2 py-1 text-sm" /></td>
+        <td className="px-4 py-2"><input type="number" min="0" step="1" value={String(buyer.color_quantity ?? colorQuantity)} onChange={(e) => setColorQuantity(e.target.value)} className="w-24 rounded border px-2 py-1 text-sm" /></td>
         <td className="px-4 py-2 text-right whitespace-nowrap">
           <button onClick={handleSave} disabled={loading} className="rounded bg-green-600 px-3 py-1 text-xs text-white mr-1">সেভ</button>
           <button onClick={() => setEditing(false)} className="rounded bg-gray-200 px-3 py-1 text-xs text-gray-700">বাতিল</button>
@@ -78,6 +93,7 @@ export default function BuyerRow({ buyer }: { buyer: any }) {
       <td className="px-4 py-2 text-gray-500">{buyer.pricing_rule === "percentage" ? `${buyer.percentage_value}%` : (buyer.pricing_rule === "rate_per_lbs" ? buyer.rate_per_lbs_value : "-")}</td>
       <td className="px-4 py-2 text-gray-700">{buyer.pi_thickness_mm ?? "-"}</td>
       <td className="px-4 py-2 text-gray-700">{buyer.booking_thickness_mm ?? "-"}</td>
+      <td className="px-4 py-2 text-gray-700">{buyer.production_thickness_mm ?? "-"}</td>
       <td className="px-4 py-2 text-gray-700">{buyer.adhesive_rate_per_inch ?? "0.02"}</td>
       <td className="px-4 py-2 text-gray-700">{buyer.print_colors_default ?? "-"}</td>
       <td className="px-4 py-2 text-gray-700">{buyer.color_quantity ?? "-"}</td>

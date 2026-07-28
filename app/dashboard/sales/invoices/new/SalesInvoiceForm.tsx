@@ -3,13 +3,15 @@ import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { generateNextDocNo } from "@/lib/docNumber";
+import { calcTubeCutting } from "@/lib/calcTubeCutting";
 
 type Booking = {
   id: string; booking_no: string; quantity_pcs: number; product_id: string; customer_id: string;
   style: string | null; garments_name: string | null; buyers: { name: string } | null; merchants: { name: string } | null;
   delivery_point: string | null; customer_booking_ref: string | null;
   has_print: boolean; print_colors: number; rate_per_color: number; rate_per_inch: number;
-  measurement_type: string; width_val: number; measurement_unit: string;
+  measurement_type: string; measurement_unit: string;
+  length_val: number; width_val: number; flap_val: number | null; gusset_val: number | null; thickness_mm: number;
   finished_goods: { product_name: string; length_cm: number; width_cm: number; thickness: number } | null;
 };
 type Customer = { id: string; name: string; price_per_lbs: number | null };
@@ -73,6 +75,15 @@ export default function SalesInvoiceForm({
   return Math.floor(qty * rounded);
 }
 
+function formatMeasurement(b: Booking) {
+  const unit = b.measurement_unit;
+  const L = b.length_val, W = b.width_val, F = b.flap_val, G = b.gusset_val;
+  if (b.measurement_type === "simple") return `L-${L} x W-${W} ${unit}`;
+  if (b.measurement_type === "gusset") return `L-${L} x W-${W} + G-${G} ${unit}`;
+  if (b.measurement_type === "adhesive") return `L-${L} + F-${F} x W-${W} ${unit}`;
+  return "-";
+}
+
   function getSurcharge(b: Booking) {
     let printCharge = 0, adhesiveCharge = 0;
     if (b.has_print) printCharge = (b.print_colors || 0) * (b.rate_per_color || 0.20);
@@ -83,12 +94,20 @@ export default function SalesInvoiceForm({
     return { printCharge, adhesiveCharge };
   }
 
+  function getDefaultPricePerLbs() {
+    return selectedCustomer?.price_per_lbs ?? null;
+  }
+
   function getUnitPrice(b: Booking) {
     const overridden = priceOverride[b.id];
-    const price = overridden ? parseFloat(overridden) : (selectedCustomer?.price_per_lbs ?? 0);
-    if (!b.finished_goods || !price) return 0;
-    const { length_cm, width_cm, thickness } = b.finished_goods;
-    const baseUnitPrice = (price * length_cm * width_cm * thickness) / 75000 / CM_PER_INCH / CM_PER_INCH;
+    const pricePerLbs = overridden ? parseFloat(overridden) : (selectedCustomer?.price_per_lbs ?? 0);
+    if (!pricePerLbs || !b.thickness_mm) return 0;
+
+    const { tube, cutting } = calcTubeCutting(b);
+    const tubeVal = b.measurement_unit === "cm" ? tube / CM_PER_INCH : tube;
+    const cuttingVal = b.measurement_unit === "cm" ? cutting / CM_PER_INCH : cutting;
+
+    const baseUnitPrice = (pricePerLbs * tubeVal * cuttingVal * b.thickness_mm) / 75000;
     const { printCharge, adhesiveCharge } = getSurcharge(b);
     return baseUnitPrice + printCharge + adhesiveCharge;
   }
@@ -262,10 +281,11 @@ export default function SalesInvoiceForm({
                 <th className="px-3 py-2">Booking</th>
                 <th className="px-3 py-2">Style</th>
                 <th className="px-3 py-2">Product</th>
+                <th className="px-3 py-2">Measurement</th>
+                <th className="px-3 py-2 text-right">Order Thickness</th>
                 <th className="px-3 py-2 text-right">Remaining</th>
                 <th className="px-3 py-2 w-28">Qty</th>
                 <th className="px-3 py-2 w-32">Price/Lbs</th>
-                <th className="px-3 py-2">Print/Adhesive Feature</th>
                 <th className="px-3 py-2 text-right">Unit Price</th>
                 <th className="px-3 py-2 text-right">Amount</th>
               </tr>
@@ -274,17 +294,21 @@ export default function SalesInvoiceForm({
               {customerBookings.map((b) => {
                 const unitPrice = getUnitPrice(b);
                 const qty = parseFloat(selectedQty[b.id] || "0");
+                const defaultPrice = getDefaultPricePerLbs();
+                const priceInputValue = priceOverride[b.id] ?? (defaultPrice != null ? String(defaultPrice) : "");
                 return (
                   <tr key={b.id} className="border-t">
                     <td className="px-3 py-2 font-medium">{b.booking_no}</td>
                     <td className="px-3 py-2 text-gray-500">{b.style || "-"}</td>
                     <td className="px-3 py-2">{b.finished_goods?.product_name}</td>
+                    <td className="px-3 py-2 text-gray-500 text-xs">{formatMeasurement(b)}</td>
+                    <td className="px-3 py-2 text-right text-gray-500">{b.thickness_mm} mm</td>
                     <td className="px-3 py-2 text-right">{b.remaining}</td>
                     <td className="px-3 py-2">
                       <input type="number" step="1" min="0" max={b.remaining} value={selectedQty[b.id] || ""} onChange={(e) => updateQty(b.id, e.target.value)} className="w-full rounded border px-2 py-1 text-sm" />
                     </td>
                     <td className="px-3 py-2">
-                      <input type="number" step="0.01" placeholder={String(selectedCustomer?.price_per_lbs ?? "")} value={priceOverride[b.id] || ""} onChange={(e) => updatePrice(b.id, e.target.value)} className="w-full rounded border px-2 py-1 text-sm" />
+                      <input type="number" step="0.01" placeholder={String(defaultPrice ?? selectedCustomer?.price_per_lbs ?? "")} value={priceInputValue} onChange={(e) => updatePrice(b.id, e.target.value)} className="w-full rounded border px-2 py-1 text-sm" />
                     </td>
                     <td className="px-3 py-2 text-xs text-gray-500">
                       {b.has_print && `Print (${b.print_colors} color)`}
@@ -298,11 +322,11 @@ export default function SalesInvoiceForm({
                 );
               })}
               {customerBookings.length === 0 && (
-                <tr><td colSpan={8} className="px-3 py-3 text-gray-400 italic">এই ফিল্টারে কোনো বুকিং নেই</td></tr>
+                <tr><td colSpan={9} className="px-3 py-3 text-gray-400 italic">এই কাস্টমারের ইনভয়েস করার মতো বুকিং নেই</td></tr>
               )}
             </tbody>
             <tfoot className="bg-gray-50 border-t font-semibold">
-              <tr><td colSpan={7} className="px-3 py-2 text-right">Total</td><td className="px-3 py-2 text-right">{totalAmount.toFixed(2)}</td></tr>
+              <tr><td colSpan={8} className="px-3 py-2 text-right">Total</td><td className="px-3 py-2 text-right">{totalAmount.toFixed(2)}</td></tr>
             </tfoot>
           </table>
         </div>

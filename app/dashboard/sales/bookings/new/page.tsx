@@ -6,7 +6,10 @@ export default async function NewBookingPage() {
   const { data: customers } = await supabase.from("customers").select("*").order("name");
   const { data: warehouses } = await supabase.from("warehouses").select("id, name").order("name");
   const { data: materials } = await supabase.from("raw_materials").select("id, material_name").order("material_name");
-  const { data: buyersMaster } = await supabase.from("buyers").select("id, customer_id, name").order("name");
+  const { data: buyersMaster } = await supabase
+    .from("buyers")
+    .select("id, customer_id, name, booking_thickness_mm, production_thickness_mm, pi_thickness_mm, print_colors_default, adhesive_rate_per_inch")
+    .order("name");
   const { data: garmentsMaster } = await supabase.from("garments").select("id, customer_id, name, address").order("name");
 
   return (

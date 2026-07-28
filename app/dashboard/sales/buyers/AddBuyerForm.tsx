@@ -13,6 +13,7 @@ export default function AddBuyerForm({ customers }: { customers: Customer[] }) {
   const [rateValue, setRateValue] = useState("0");
   const [piThicknessMm, setPiThicknessMm] = useState("");
   const [bookingThicknessMm, setBookingThicknessMm] = useState("");
+  const [productionThicknessMm, setProductionThicknessMm] = useState("");
   const [adhesiveRatePerInch, setAdhesiveRatePerInch] = useState("");
   const [printColorsDefault, setPrintColorsDefault] = useState("");
   const [colorQuantity, setColorQuantity] = useState("");
@@ -25,6 +26,10 @@ export default function AddBuyerForm({ customers }: { customers: Customer[] }) {
     e.preventDefault();
     setError("");
     if (!customerId || !name) { setError("Customer ও Buyer নাম দিন।"); return; }
+
+    const normalizedColorQuantity = colorQuantity === "" ? null : Number.isFinite(Number(colorQuantity)) ? Math.round(Number(colorQuantity)) : null;
+    const normalizedPrintColorsDefault = printColorsDefault === "" ? null : Number.isFinite(Number(printColorsDefault)) ? Number(printColorsDefault) : null;
+
     setLoading(true);
     const { error } = await supabase.from("buyers").insert({
       customer_id: customerId, name,
@@ -33,13 +38,20 @@ export default function AddBuyerForm({ customers }: { customers: Customer[] }) {
       rate_per_lbs_value: parseFloat(rateValue) || 0,
       pi_thickness_mm: parseFloat(piThicknessMm) || null,
       booking_thickness_mm: parseFloat(bookingThicknessMm) || null,
+      production_thickness_mm: parseFloat(productionThicknessMm) || null,
       adhesive_rate_per_inch: parseFloat(adhesiveRatePerInch) || null,
-      print_colors_default: parseFloat(printColorsDefault) || null,
-      color_quantity: parseInt(colorQuantity) || null,
+      print_colors_default: normalizedPrintColorsDefault,
+      color_quantity: normalizedColorQuantity,
     });
     setLoading(false);
-    if (error) { setError(error.message); return; }
-    setName(""); setPercentageValue("0"); setRateValue("0"); setPiThicknessMm(""); setBookingThicknessMm(""); setAdhesiveRatePerInch("0.02"); setPrintColorsDefault(""); setColorQuantity("");
+    if (error) {
+      const hint = error.message.includes("does not exist")
+        ? " buyers টেবিলে migration SQL চালাতে হবে।"
+        : "";
+      setError(`${error.message}${hint}`);
+      return;
+    }
+    setName(""); setPercentageValue("0"); setRateValue("0"); setPiThicknessMm(""); setBookingThicknessMm(""); setProductionThicknessMm(""); setAdhesiveRatePerInch("0.02"); setPrintColorsDefault(""); setColorQuantity("");
     router.refresh();
   }
 
@@ -90,6 +102,11 @@ export default function AddBuyerForm({ customers }: { customers: Customer[] }) {
         <div className="flex flex-col">
           <label className="text-xs text-gray-500">Booking Thickness (mm)</label>
           <input type="number" step="0.001" value={bookingThicknessMm} onChange={(e) => setBookingThicknessMm(e.target.value)} className="rounded-lg border px-2 py-1 text-sm w-28" />
+        </div>
+
+        <div className="flex flex-col">
+          <label className="text-xs text-gray-500">Production Thickness (mm)</label>
+          <input type="number" step="0.001" value={productionThicknessMm} onChange={(e) => setProductionThicknessMm(e.target.value)} className="rounded-lg border px-2 py-1 text-sm w-28" />
         </div>
 
         <div className="flex flex-col">
