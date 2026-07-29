@@ -5,6 +5,8 @@ import { createClient } from "@/lib/supabase/client";
 import { generateNextDocNo } from "@/lib/docNumber";
 import { calcTubeCutting } from "@/lib/calcTubeCutting";
 
+const CM_PER_INCH = 2.54;
+
 type Booking = {
   id: string; booking_no: string; quantity_pcs: number; product_id: string; customer_id: string;
   style: string | null; garments_name: string | null; buyers: { name: string } | null; merchants: { name: string } | null;
@@ -16,7 +18,18 @@ type Booking = {
 };
 type Customer = { id: string; name: string; price_per_lbs: number | null };
 
-const CM_PER_INCH = 2.54;
+function formatMeasurement(b: Booking) {
+  const unit = b.measurement_unit;
+  const L = b.length_val, W = b.width_val, F = b.flap_val, G = b.gusset_val;
+  if (b.measurement_type === "simple") return `L-${L} x W-${W} ${unit}`;
+  if (b.measurement_type === "gusset") return `L-${L} x W-${W} + G-${G} ${unit}`;
+  if (b.measurement_type === "adhesive") return `L-${L} + F-${F} x W-${W} ${unit}`;
+  return "-";
+}
+
+function getLineAmount(qty: number, unitPriceRounded: number) {
+  return Math.floor(qty * unitPriceRounded);
+}
 
 export default function SalesInvoiceForm({
   customers, bookings, invoicedMap,
@@ -28,7 +41,7 @@ export default function SalesInvoiceForm({
   const [garmentsFilter, setGarmentsFilter] = useState("");
   const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().slice(0, 10));
   const [paymentReceived, setPaymentReceived] = useState(false);
-  const [selectedQty, setSelectedQty] = useState<Record<string, string>>({});
+  const [selectedBookings, setSelectedBookings] = useState<Record<string, boolean>>({});
   const [priceOverride, setPriceOverride] = useState<Record<string, string>>({});
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -64,25 +77,10 @@ export default function SalesInvoiceForm({
     () => Array.from(new Set(bookings.filter((b) => b.customer_id === customerId).map((b) => b.style).filter(Boolean))) as string[],
     [bookings, customerId]
   );
-
   const availableGarments = useMemo(
     () => Array.from(new Set(bookings.filter((b) => b.customer_id === customerId).map((b) => b.garments_name).filter(Boolean))) as string[],
     [bookings, customerId]
   );
-
-  function getLineAmount(qty: number, unitPrice: number) {
-  const rounded = Math.round(unitPrice * 100) / 100;
-  return Math.floor(qty * rounded);
-}
-
-function formatMeasurement(b: Booking) {
-  const unit = b.measurement_unit;
-  const L = b.length_val, W = b.width_val, F = b.flap_val, G = b.gusset_val;
-  if (b.measurement_type === "simple") return `L-${L} x W-${W} ${unit}`;
-  if (b.measurement_type === "gusset") return `L-${L} x W-${W} + G-${G} ${unit}`;
-  if (b.measurement_type === "adhesive") return `L-${L} + F-${F} x W-${W} ${unit}`;
-  return "-";
-}
 
   function getSurcharge(b: Booking) {
     let printCharge = 0, adhesiveCharge = 0;
@@ -92,10 +90,6 @@ function formatMeasurement(b: Booking) {
       adhesiveCharge = widthInch * (b.rate_per_inch || 0.02);
     }
     return { printCharge, adhesiveCharge };
-  }
-
-  function getDefaultPricePerLbs() {
-    return selectedCustomer?.price_per_lbs ?? null;
   }
 
   function getUnitPrice(b: Booking) {
@@ -113,40 +107,27 @@ function formatMeasurement(b: Booking) {
   }
 
   const lineItems = customerBookings
+    .filter((b) => selectedBookings[b.id])
     .map((b) => {
-      const qty = parseFloat(selectedQty[b.id] || "0");
+      const qty = b.remaining; // Sales Invoice সবসময় Full Quantity
       const unitPriceRaw = getUnitPrice(b);
       const unitPrice = Math.round(unitPriceRaw * 100) / 100;
-      return { booking: b, qty, unitPrice, amount: getLineAmount(qty, unitPriceRaw) };
-    })
-    .filter((li) => li.qty > 0);
+      return { booking: b, qty, unitPrice, amount: getLineAmount(qty, unitPrice) };
+    });
 
   const totalAmount = lineItems.reduce((s, li) => s + li.amount, 0);
-
-  function updateQty(bookingId: string, value: string) {
-    setSelectedQty((prev) => ({ ...prev, [bookingId]: value }));
-  }
-  function updatePrice(bookingId: string, value: string) {
-    setPriceOverride((prev) => ({ ...prev, [bookingId]: value }));
-  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
 
     if (!customerId || lineItems.length === 0) {
-      setError("Customer বাছুন এবং অন্তত একটা বুকিং-এ Quantity দিন।");
+      setError("Customer বাছুন এবং অন্তত একটা বুকিং সিলেক্ট করুন।");
       return;
     }
-    for (const li of lineItems) {
-      if (li.qty > li.booking.remaining) {
-        setError(`${li.booking.booking_no}-এ বাকি আছে মাত্র ${li.booking.remaining} পিস।`);
-        return;
-      }
-      if (li.unitPrice <= 0) {
-        setError(`${li.booking.booking_no}-এর Unit Price শূন্য — Price/Lbs সেট করুন।`);
-        return;
-      }
+    if (lineItems.some((li) => li.unitPrice <= 0)) {
+      setError("কোনো একটা বুকিং-এর Unit Price শূন্য — Price/Lbs সেট করা আছে কিনা দেখুন।");
+      return;
     }
 
     setLoading(true);
@@ -189,7 +170,6 @@ function formatMeasurement(b: Booking) {
       return;
     }
 
-    // পেমেন্ট রিসিভড হলে Dr Cash, না হলে Dr Accounts Receivable
     const debitAccountCode = paymentReceived ? "1000" : "1100";
     const { data: debitAccount } = await supabase.from("chart_of_accounts").select("id").eq("account_code", debitAccountCode).single();
     const { data: salesAccount } = await supabase.from("chart_of_accounts").select("id").eq("account_code", "4000").single();
@@ -223,7 +203,7 @@ function formatMeasurement(b: Booking) {
       <div className="flex flex-wrap gap-4 items-end">
         <div className="flex-1 max-w-xs">
           <label className="block text-sm text-gray-600 mb-1">Customer</label>
-          <select value={customerId} onChange={(e) => { setCustomerId(e.target.value); setSelectedQty({}); setPriceOverride({}); setBuyerFilter(""); setMerchantFilter(""); setStyleFilter(""); setGarmentsFilter(""); }} className="w-full rounded-lg border px-3 py-2 text-sm" required>
+          <select value={customerId} onChange={(e) => { setCustomerId(e.target.value); setSelectedBookings({}); setPriceOverride({}); setBuyerFilter(""); setMerchantFilter(""); setStyleFilter(""); setGarmentsFilter(""); }} className="w-full rounded-lg border px-3 py-2 text-sm" required>
             <option value="">-- বাছুন --</option>
             {customers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
@@ -251,15 +231,13 @@ function formatMeasurement(b: Booking) {
                 {availableStyles.map((s) => <option key={s} value={s}>{s}</option>)}
               </select>
             </div>
-
-<div>
+            <div>
               <label className="block text-sm text-gray-600 mb-1">Garments Filter</label>
               <select value={garmentsFilter} onChange={(e) => setGarmentsFilter(e.target.value)} className="rounded-lg border px-3 py-2 text-sm">
                 <option value="">সব</option>
                 {availableGarments.map((g) => <option key={g} value={g}>{g}</option>)}
               </select>
             </div>
-
           </>
         )}
         <div>
@@ -274,17 +252,17 @@ function formatMeasurement(b: Booking) {
       </label>
 
       {customerId && (
-        <div className="overflow-hidden rounded-lg border">
+        <div className="overflow-x-auto rounded-lg border">
           <table className="w-full text-sm">
             <thead className="bg-gray-50 text-left text-gray-600">
               <tr>
+                <th className="px-3 py-2 w-10"></th>
                 <th className="px-3 py-2">Booking</th>
                 <th className="px-3 py-2">Style</th>
                 <th className="px-3 py-2">Product</th>
                 <th className="px-3 py-2">Measurement</th>
                 <th className="px-3 py-2 text-right">Order Thickness</th>
-                <th className="px-3 py-2 text-right">Remaining</th>
-                <th className="px-3 py-2 w-28">Qty</th>
+                <th className="px-3 py-2 text-right">Qty</th>
                 <th className="px-3 py-2 w-32">Price/Lbs</th>
                 <th className="px-3 py-2 text-right">Unit Price</th>
                 <th className="px-3 py-2 text-right">Amount</th>
@@ -292,41 +270,34 @@ function formatMeasurement(b: Booking) {
             </thead>
             <tbody>
               {customerBookings.map((b) => {
-                const unitPrice = getUnitPrice(b);
-                const qty = parseFloat(selectedQty[b.id] || "0");
-                const defaultPrice = getDefaultPricePerLbs();
-                const priceInputValue = priceOverride[b.id] ?? (defaultPrice != null ? String(defaultPrice) : "");
+                const unitPriceRaw = getUnitPrice(b);
+                const unitPrice = Math.round(unitPriceRaw * 100) / 100;
+                const checked = !!selectedBookings[b.id];
                 return (
                   <tr key={b.id} className="border-t">
+                    <td className="px-3 py-2">
+                      <input type="checkbox" checked={checked} onChange={(e) => setSelectedBookings((prev) => ({ ...prev, [b.id]: e.target.checked }))} />
+                    </td>
                     <td className="px-3 py-2 font-medium">{b.booking_no}</td>
                     <td className="px-3 py-2 text-gray-500">{b.style || "-"}</td>
                     <td className="px-3 py-2">{b.finished_goods?.product_name}</td>
                     <td className="px-3 py-2 text-gray-500 text-xs">{formatMeasurement(b)}</td>
                     <td className="px-3 py-2 text-right text-gray-500">{b.thickness_mm} mm</td>
-                    <td className="px-3 py-2 text-right">{b.remaining}</td>
+                    <td className="px-3 py-2 text-right">{checked ? b.remaining : "-"}</td>
                     <td className="px-3 py-2">
-                      <input type="number" step="1" min="0" max={b.remaining} value={selectedQty[b.id] || ""} onChange={(e) => updateQty(b.id, e.target.value)} className="w-full rounded border px-2 py-1 text-sm" />
-                    </td>
-                    <td className="px-3 py-2">
-                      <input type="number" step="0.01" placeholder={String(defaultPrice ?? selectedCustomer?.price_per_lbs ?? "")} value={priceInputValue} onChange={(e) => updatePrice(b.id, e.target.value)} className="w-full rounded border px-2 py-1 text-sm" />
-                    </td>
-                    <td className="px-3 py-2 text-xs text-gray-500">
-                      {b.has_print && `Print (${b.print_colors} color)`}
-                      {b.has_print && b.measurement_type === "adhesive" && " + "}
-                      {b.measurement_type === "adhesive" && "Adhesive"}
-                      {!b.has_print && b.measurement_type !== "adhesive" && "-"}
+                      <input type="number" step="0.01" placeholder={String(selectedCustomer?.price_per_lbs ?? "")} value={priceOverride[b.id] || ""} onChange={(e) => setPriceOverride((prev) => ({ ...prev, [b.id]: e.target.value }))} className="w-full rounded border px-2 py-1 text-sm" />
                     </td>
                     <td className="px-3 py-2 text-right">{(Math.round(unitPrice * 100) / 100).toFixed(2)}</td>
-                    <td className="px-3 py-2 text-right">{getLineAmount(qty, unitPrice).toLocaleString()}.00</td>
+                    <td className="px-3 py-2 text-right">{checked ? getLineAmount(b.remaining, unitPrice).toLocaleString() + ".00" : "-"}</td>
                   </tr>
                 );
               })}
               {customerBookings.length === 0 && (
-                <tr><td colSpan={9} className="px-3 py-3 text-gray-400 italic">এই কাস্টমারের ইনভয়েস করার মতো বুকিং নেই</td></tr>
+                <tr><td colSpan={10} className="px-3 py-3 text-gray-400 italic">এই ফিল্টারে কোনো বুকিং নেই</td></tr>
               )}
             </tbody>
             <tfoot className="bg-gray-50 border-t font-semibold">
-              <tr><td colSpan={8} className="px-3 py-2 text-right">Total</td><td className="px-3 py-2 text-right">{totalAmount.toFixed(2)}</td></tr>
+              <tr><td colSpan={9} className="px-3 py-2 text-right">Total</td><td className="px-3 py-2 text-right">{totalAmount.toLocaleString()}.00</td></tr>
             </tfoot>
           </table>
         </div>
