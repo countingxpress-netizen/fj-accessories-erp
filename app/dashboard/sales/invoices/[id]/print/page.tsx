@@ -63,6 +63,12 @@ export default async function InvoicePrintPage({ params }: { params: Promise<{ i
     .reduce((s: number, p: any) => s + p.amount, 0);
   const runningDue = totalDue - paidBetween;
 
+  const paymentDatesBetween = (payments ?? [])
+    .filter((p: any) => p.payment_date > previousDate && p.payment_date <= invoice.invoice_date)
+    .map((p: any) => p.payment_date)
+    .sort();
+  const lastPaymentDate = paymentDatesBetween.length ? paymentDatesBetween[paymentDatesBetween.length - 1] : null;
+
   return (
     <div className="max-w-3xl mx-auto p-8 bg-white text-gray-900 print:p-0">
       <PrintButton />
@@ -126,31 +132,35 @@ export default async function InvoicePrintPage({ params }: { params: Promise<{ i
         <div className="border rounded px-3 py-2 text-sm">{amountInWords(total, "BDT")}</div>
       </div>
 
-      <table className="text-sm border-collapse w-80 ml-auto mb-8">
+      <table className="text-xs border-collapse w-full max-w-sm ml-auto mb-8" style={{ tableLayout: "fixed" }}>
+        <colgroup>
+          <col style={{ width: "65%" }} />
+          <col style={{ width: "35%" }} />
+        </colgroup>
         <tbody>
           <tr>
-            <td className="py-1 pr-4">
+            <td className="py-1 pr-2 whitespace-nowrap overflow-hidden text-ellipsis">
               Previous Bill{previousInvoice ? `-${previousInvoice.invoice_no}` : " (Opening Balance)"} Due =
             </td>
-            <td className="py-1 text-right">BDT {fmt(previousDue)}</td>
+            <td className="py-1 text-right whitespace-nowrap">BDT {fmt(previousDue)}</td>
           </tr>
           <tr>
-            <td className="py-1 pr-4">This Bill-{invoice.invoice_no} =</td>
-            <td className="py-1 text-right">BDT {fmt(thisBillAmount)}</td>
+            <td className="py-1 pr-2 whitespace-nowrap overflow-hidden text-ellipsis">This Bill-{invoice.invoice_no} =</td>
+            <td className="py-1 text-right whitespace-nowrap">BDT {fmt(thisBillAmount)}</td>
           </tr>
           <tr className="font-semibold border-t">
-            <td className="py-1 pr-4">Total Due =</td>
-            <td className="py-1 text-right">BDT {fmt(totalDue)}</td>
+            <td className="py-1 pr-2 whitespace-nowrap">Total Due =</td>
+            <td className="py-1 text-right whitespace-nowrap">BDT {fmt(totalDue)}</td>
           </tr>
-          {paidBetween > 0 && (
-            <tr>
-              <td className="py-1 pr-4">Paid =</td>
-              <td className="py-1 text-right">BDT {fmt(paidBetween)}</td>
-            </tr>
-          )}
+          <tr>
+            <td className="py-1 pr-2 whitespace-nowrap overflow-hidden text-ellipsis">
+              Paid{lastPaymentDate ? ` on ${formatDate(lastPaymentDate)}` : ""} =
+            </td>
+            <td className="py-1 text-right whitespace-nowrap">{paidBetween > 0 ? `BDT ${fmt(paidBetween)}` : ""}</td>
+          </tr>
           <tr className="font-bold border-t-2">
-            <td className="py-1 pr-4">Running Due =</td>
-            <td className="py-1 text-right">BDT {fmt(runningDue)}</td>
+            <td className="py-1 pr-2 whitespace-nowrap">Running Due =</td>
+            <td className="py-1 text-right whitespace-nowrap">BDT {fmt(runningDue)}</td>
           </tr>
         </tbody>
       </table>
