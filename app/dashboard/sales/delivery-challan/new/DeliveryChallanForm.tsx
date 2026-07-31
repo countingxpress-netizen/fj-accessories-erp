@@ -94,16 +94,18 @@ export default function DeliveryChallanForm({
         .from("finished_goods_stock")
         .select("warehouse_id, quantity_pcs")
         .eq("product_id", li.booking.product_id)
-        .gt("quantity_pcs", 0)
         .order("quantity_pcs", { ascending: false });
 
-      const matchedStock = (stockRows ?? []).find((s) => s.quantity_pcs >= li.qty);
-      if (!matchedStock) {
-        setLoading(false);
-        setError(`${li.booking.booking_no}-এর পণ্যে কোনো গুদামেই পর্যাপ্ত স্টক নেই।`);
-        return;
+      // পর্যাপ্ত স্টক থাকা warehouse খুঁজুন, না পেলে সবচেয়ে বেশি স্টক থাকা warehouse (স্টক না থাকলেও) বেছে নিন
+      const matchedStock = (stockRows ?? []).find((s) => s.quantity_pcs >= li.qty) ?? (stockRows ?? [])[0];
+
+      if (matchedStock) {
+        resolvedWarehouseId[li.booking.id] = matchedStock.warehouse_id;
+      } else {
+        // এই product-এর জন্য কোনো warehouse-এ এখনো স্টক রেকর্ডই নেই — সব Warehouse-এর মধ্যে প্রথমটা ব্যবহার করুন
+        const { data: anyWarehouse } = await supabase.from("warehouses").select("id").limit(1).single();
+        resolvedWarehouseId[li.booking.id] = anyWarehouse?.id ?? "";
       }
-      resolvedWarehouseId[li.booking.id] = matchedStock.warehouse_id;
     }
 
     const challanNo = await generateNextDocNo(supabase, "delivery_challans", "challan_no", "DC", "challan_date", challanDate);
@@ -136,11 +138,16 @@ export default function DeliveryChallanForm({
 
       const { data: stock } = await supabase
         .from("finished_goods_stock").select("*")
-        .eq("product_id", li.booking.product_id).eq("warehouse_id", wId).single();
+        .eq("product_id", li.booking.product_id).eq("warehouse_id", wId).maybeSingle();
 
-      await supabase.from("finished_goods_stock")
-        .update({ quantity_pcs: stock.quantity_pcs - li.qty, updated_at: new Date().toISOString() })
-        .eq("id", stock.id);
+      if (stock) {
+        await supabase.from("finished_goods_stock")
+          .update({ quantity_pcs: stock.quantity_pcs - li.qty, updated_at: new Date().toISOString() })
+          .eq("id", stock.id);
+      } else {
+        await supabase.from("finished_goods_stock")
+          .insert({ product_id: li.booking.product_id, warehouse_id: wId, quantity_pcs: -li.qty });
+      }
 
       await supabase.from("stock_ledger").insert({
         item_type: "finished_goods", item_id: li.booking.product_id, warehouse_id: wId,

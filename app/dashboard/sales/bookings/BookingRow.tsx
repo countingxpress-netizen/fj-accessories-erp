@@ -19,6 +19,15 @@ function getStatusLabel(booking: any, deliveredQty: number) {
   const po = booking.production_orders?.[0];
 
   if (deliveredQty >= booking.quantity_pcs && booking.quantity_pcs > 0) {
+    // Delivery সম্পূর্ণ হয়ে গেছে, কিন্তু Schedule (Blowing/Printing/Cutting) সব শেষ হয়েছে কিনা চেক করুন
+    const missing: string[] = [];
+    if (!po?.blowing_completed_at) missing.push("Blowing");
+    if (booking.has_print && !po?.printing_completed_at) missing.push("Printing");
+    if (!po?.cutting_completed_at) missing.push("Cutting");
+
+    if (missing.length > 0) {
+      return { label: `Delivery OK (${missing.join(", ")} বাকি)`, color: "bg-red-100 text-red-700 border border-red-300" };
+    }
     return { label: "Delivery Done", color: "bg-green-100 text-green-700" };
   }
   if (deliveredQty > 0) {
