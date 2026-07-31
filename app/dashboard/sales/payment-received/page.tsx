@@ -13,6 +13,29 @@ export default async function PaymentReceivedPage() {
     .or("account_name.ilike.%cash%,account_name.ilike.%bank%")
     .order("account_code");
 
+  const { data: allInvoices } = await supabase
+    .from("sales_invoices")
+    .select("id, invoice_no, invoice_date, customer_id, sales_invoice_items(amount)");
+
+  const { data: allAllocations } = await supabase.from("payment_allocations").select("invoice_id, amount");
+  const allocatedByInvoice: Record<string, number> = {};
+  (allAllocations ?? []).forEach((a: any) => {
+    allocatedByInvoice[a.invoice_id] = (allocatedByInvoice[a.invoice_id] ?? 0) + a.amount;
+  });
+
+  const invoicesByCustomer: Record<string, any[]> = {};
+  (allInvoices ?? []).forEach((inv: any) => {
+    const total = (inv.sales_invoice_items ?? []).reduce((s: number, i: any) => s + (i.amount || 0), 0);
+    const due = total - (allocatedByInvoice[inv.id] ?? 0);
+    if (due > 0.01) {
+      if (!invoicesByCustomer[inv.customer_id]) invoicesByCustomer[inv.customer_id] = [];
+      invoicesByCustomer[inv.customer_id].push({ id: inv.id, invoice_no: inv.invoice_no, invoice_date: inv.invoice_date, total, due });
+    }
+  });
+  Object.keys(invoicesByCustomer).forEach((cid) => {
+    invoicesByCustomer[cid].sort((a, b) => a.invoice_date.localeCompare(b.invoice_date));
+  });
+
   const { data: payments } = await supabase
     .from("customer_payments")
     .select("*, customers(name)")
@@ -25,7 +48,7 @@ export default async function PaymentReceivedPage() {
         <Link href="/dashboard/sales" className="text-sm text-gray-500 hover:underline">← Sales-এ ফিরুন</Link>
       </div>
 
-      <PaymentForm customers={customers ?? []} cashBankAccounts={cashBankAccounts ?? []} />
+      <PaymentForm customers={customers ?? []} cashBankAccounts={cashBankAccounts ?? []} invoicesByCustomer={invoicesByCustomer} />
 
       <div className="mt-6 overflow-hidden rounded-xl border bg-white shadow-sm">
         <table className="w-full text-sm">
@@ -33,8 +56,10 @@ export default async function PaymentReceivedPage() {
             <tr>
               <th className="px-4 py-2">Date</th>
               <th className="px-4 py-2">Customer</th>
+              <th className="px-4 py-2">Mode</th>
               <th className="px-4 py-2">Note</th>
               <th className="px-4 py-2 text-right">Amount</th>
+              <th className="px-4 py-2 text-right">Action</th>
             </tr>
           </thead>
           <tbody>
@@ -42,12 +67,16 @@ export default async function PaymentReceivedPage() {
               <tr key={p.id} className="border-t">
                 <td className="px-4 py-2 text-gray-500">{formatDate(p.payment_date)}</td>
                 <td className="px-4 py-2">{p.customers?.name ?? "-"}</td>
+                <td className="px-4 py-2 text-gray-500 capitalize">{(p.payment_mode ?? "cash").replace(/_/g, " ")}</td>
                 <td className="px-4 py-2 text-gray-500">{p.note || "-"}</td>
                 <td className="px-4 py-2 text-right">{p.amount.toFixed(2)}</td>
+                <td className="px-4 py-2 text-right">
+                  <Link href={`/dashboard/sales/payment-received/${p.id}`} className="text-blue-700 hover:underline text-xs">View</Link>
+                </td>
               </tr>
             ))}
             {(!payments || payments.length === 0) && (
-              <tr><td colSpan={4} className="px-4 py-3 text-gray-400 italic">এখনো কোনো Payment নেই</td></tr>
+              <tr><td colSpan={6} className="px-4 py-3 text-gray-400 italic">এখনো কোনো Payment নেই</td></tr>
             )}
           </tbody>
         </table>
