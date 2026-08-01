@@ -3,33 +3,63 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { generateNextDocNo } from "@/lib/docNumber";
+import { formatDate } from "@/lib/formatDate";
 
 type Account = { id: string; account_code: string; account_name: string };
+type Invoice = { id: string; invoice_no: string; invoice_date: string; total: number; due: number };
 
-export default function EditPaymentForm({ payment, cashBankAccounts }: { payment: any; cashBankAccounts: Account[] }) {
+export default function EditPaymentForm({
+  payment, cashBankAccounts, invoices, currentAllocationMap,
+}: { payment: any; cashBankAccounts: Account[]; invoices: Invoice[]; currentAllocationMap: Record<string, number> }) {
   const [paymentDate, setPaymentDate] = useState(payment.payment_date);
   const [paymentMode, setPaymentMode] = useState(payment.payment_mode ?? "cash");
   const [depositAccountId, setDepositAccountId] = useState(payment.deposit_account_id ?? "");
   const [bankCharges, setBankCharges] = useState(String(payment.bank_charges ?? 0));
   const [note, setNote] = useState(payment.note ?? "");
+  const [allocations, setAllocations] = useState<Record<string, string>>(() => {
+    const init: Record<string, string> = {};
+    Object.entries(currentAllocationMap).forEach(([id, amt]) => { init[id] = String(amt); });
+    return init;
+  });
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const router = useRouter();
   const supabase = createClient();
 
+  function updateAllocation(invoiceId: string, value: string) {
+    setAllocations((prev) => ({ ...prev, [invoiceId]: value }));
+  }
+  function payInFull(inv: Invoice) {
+    setAllocations((prev) => ({ ...prev, [inv.id]: inv.due.toFixed(2) }));
+  }
+
+  const totalAmount = Object.values(allocations).reduce((s, v) => s + (parseFloat(v) || 0), 0);
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
-    setLoading(true);
 
+    const validAllocations = Object.entries(allocations).filter(([, v]) => parseFloat(v) > 0);
+    if (!depositAccountId || validAllocations.length === 0) {
+      setError("Deposit To এবং অন্তত একটা Invoice-এ Payment থাকতে হবে।");
+      return;
+    }
+
+    setLoading(true);
     const charges = parseFloat(bankCharges) || 0;
 
     await supabase.from("customer_payments").update({
       payment_date: paymentDate, payment_mode: paymentMode,
-      deposit_account_id: depositAccountId, bank_charges: charges, note,
+      deposit_account_id: depositAccountId, bank_charges: charges, note, amount: totalAmount,
     }).eq("id", payment.id);
 
-    // পুরনো Journal Voucher মুছে নতুন করে বানান (নতুন account/charges অনুযায়ী)
+    await supabase.from("payment_allocations").delete().eq("payment_id", payment.id);
+    await supabase.from("payment_allocations").insert(
+      validAllocations.map(([invoiceId, amount]) => ({
+        payment_id: payment.id, invoice_id: invoiceId, amount: parseFloat(amount),
+      }))
+    );
+
     if (payment.voucher_id) {
       await supabase.from("journal_entry_lines").delete().eq("voucher_id", payment.voucher_id);
       await supabase.from("journal_vouchers").delete().eq("id", payment.voucher_id);
@@ -51,12 +81,12 @@ export default function EditPaymentForm({ payment, cashBankAccounts }: { payment
 
       if (voucher) {
         const lines = [
-          { voucher_id: voucher.id, account_id: depositAccountId, debit: payment.amount - charges, credit: 0, memo: "Payment (edited)" },
+          { voucher_id: voucher.id, account_id: depositAccountId, debit: totalAmount - charges, credit: 0, memo: "Payment (edited)" },
         ];
         if (charges > 0 && bankChargesAccountId) {
           lines.push({ voucher_id: voucher.id, account_id: bankChargesAccountId, debit: charges, credit: 0, memo: "Bank Charges" });
         }
-        lines.push({ voucher_id: voucher.id, account_id: arAccount.id, debit: 0, credit: payment.amount, memo: "Payment (edited)" });
+        lines.push({ voucher_id: voucher.id, account_id: arAccount.id, debit: 0, credit: totalAmount, memo: "Payment (edited)" });
 
         await supabase.from("journal_entry_lines").insert(lines);
         await supabase.from("customer_payments").update({ voucher_id: voucher.id }).eq("id", payment.id);
@@ -69,11 +99,47 @@ export default function EditPaymentForm({ payment, cashBankAccounts }: { payment
   }
 
   return (
-    <form onSubmit={handleSubmit} className="rounded-xl border bg-white p-6 shadow-sm space-y-4 max-w-xl">
-      <p className="text-xs text-orange-600 bg-orange-50 border border-orange-200 rounded-lg p-2">
-        নোট: Total Amount ও কোন Invoice-এ Apply হয়েছে তা এখান থেকে বদলানো যাবে না — শুধু Date, Mode, Deposit Account, Bank Charges, Note বদলানো যাবে।
-      </p>
-      <p className="text-sm text-gray-600">Total Amount: <strong>{payment.amount.toFixed(2)}</strong></p>
+    <form onSubmit={handleSubmit} className="rounded-xl border bg-white p-6 shadow-sm space-y-4 max-w-2xl">
+      <p className="text-sm text-gray-600">Total Amount: <strong>{totalAmount.toFixed(2)}</strong></p>
+
+      <div className="rounded-lg border overflow-hidden">
+        <div className="bg-gray-50 px-3 py-2 text-sm font-semibold text-gray-700">Invoice Allocations</div>
+        <table className="w-full text-sm">
+          <thead className="text-left text-gray-500 border-t">
+            <tr>
+              <th className="px-3 py-2">Invoice No</th>
+              <th className="px-3 py-2">Date</th>
+              <th className="px-3 py-2 text-right">Total</th>
+              <th className="px-3 py-2 text-right">Available Due</th>
+              <th className="px-3 py-2 w-32">Payment</th>
+              <th className="px-3 py-2"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {invoices.map((inv) => (
+              <tr key={inv.id} className="border-t">
+                <td className="px-3 py-2 font-medium">{inv.invoice_no}</td>
+                <td className="px-3 py-2 text-gray-500">{formatDate(inv.invoice_date)}</td>
+                <td className="px-3 py-2 text-right">{inv.total.toFixed(2)}</td>
+                <td className="px-3 py-2 text-right">{inv.due.toFixed(2)}</td>
+                <td className="px-3 py-2">
+                  <input
+                    type="number" step="0.01" min="0" max={inv.due}
+                    value={allocations[inv.id] || ""}
+                    onChange={(e) => updateAllocation(inv.id, e.target.value)}
+                    className="w-full rounded border px-2 py-1 text-sm"
+                    placeholder="0"
+                  />
+                </td>
+                <td className="px-3 py-2">
+                  <button type="button" onClick={() => payInFull(inv)} className="text-xs text-blue-600 hover:underline">Pay in Full</button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
       <div className="flex flex-wrap gap-4">
         <div>
           <label className="block text-sm text-gray-600 mb-1">Payment Date</label>

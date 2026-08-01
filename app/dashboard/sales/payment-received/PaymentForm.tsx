@@ -9,40 +9,56 @@ type Customer = { id: string; name: string };
 type Account = { id: string; account_code: string; account_name: string };
 type UnpaidInvoice = { id: string; invoice_no: string; invoice_date: string; total: number; due: number };
 
+const initialState = {
+  customerId: "", depositAccountId: "", paymentMode: "cash",
+  paymentDate: new Date().toISOString().slice(0, 10), bankCharges: "0", note: "",
+};
+
 export default function PaymentForm({
   customers, cashBankAccounts, invoicesByCustomer,
 }: { customers: Customer[]; cashBankAccounts: Account[]; invoicesByCustomer: Record<string, UnpaidInvoice[]> }) {
-  const [customerId, setCustomerId] = useState("");
-  const [depositAccountId, setDepositAccountId] = useState("");
-  const [paymentMode, setPaymentMode] = useState("cash");
-  const [paymentDate, setPaymentDate] = useState(new Date().toISOString().slice(0, 10));
-  const [bankCharges, setBankCharges] = useState("0");
-  const [note, setNote] = useState("");
+  const [customerId, setCustomerId] = useState(initialState.customerId);
+  const [depositAccountId, setDepositAccountId] = useState(initialState.depositAccountId);
+  const [paymentMode, setPaymentMode] = useState(initialState.paymentMode);
+  const [paymentDate, setPaymentDate] = useState(initialState.paymentDate);
+  const [bankCharges, setBankCharges] = useState(initialState.bankCharges);
+  const [note, setNote] = useState(initialState.note);
   const [allocations, setAllocations] = useState<Record<string, string>>({});
-  const [receivedFull, setReceivedFull] = useState(false);
   const [error, setError] = useState("");
+  const [success, setSuccess] = useState(false);
   const [loading, setLoading] = useState(false);
   const router = useRouter();
   const supabase = createClient();
 
   const unpaidInvoices = useMemo(() => invoicesByCustomer[customerId] ?? [], [invoicesByCustomer, customerId]);
   const totalDue = unpaidInvoices.reduce((s, inv) => s + inv.due, 0);
+  const amountReceived = Object.values(allocations).reduce((s, v) => s + (parseFloat(v) || 0), 0);
+  const isFullReceived = totalDue > 0 && Math.abs(amountReceived - totalDue) < 0.01;
+
+  function autoAllocate(totalAmt: number) {
+    let remaining = totalAmt;
+    const next: Record<string, string> = {};
+    for (const inv of unpaidInvoices) {
+      if (remaining <= 0) break;
+      const alloc = Math.min(inv.due, remaining);
+      if (alloc > 0) next[inv.id] = alloc.toFixed(2);
+      remaining -= alloc;
+    }
+    setAllocations(next);
+  }
 
   function selectCustomer(id: string) {
     setCustomerId(id);
     setAllocations({});
-    setReceivedFull(false);
+  }
+
+  function handleAmountReceivedChange(value: string) {
+    autoAllocate(parseFloat(value) || 0);
   }
 
   function toggleReceivedFull(checked: boolean) {
-    setReceivedFull(checked);
-    if (checked) {
-      const next: Record<string, string> = {};
-      unpaidInvoices.forEach((inv) => { next[inv.id] = inv.due.toFixed(2); });
-      setAllocations(next);
-    } else {
-      setAllocations({});
-    }
+    if (checked) autoAllocate(totalDue);
+    else setAllocations({});
   }
 
   function payInFull(invoiceId: string, due: number) {
@@ -51,14 +67,22 @@ export default function PaymentForm({
 
   function updateAllocation(invoiceId: string, value: string) {
     setAllocations((prev) => ({ ...prev, [invoiceId]: value }));
-    setReceivedFull(false);
   }
 
-  const amountReceived = Object.values(allocations).reduce((s, v) => s + (parseFloat(v) || 0), 0);
+  function resetForm() {
+    setCustomerId(initialState.customerId);
+    setDepositAccountId(initialState.depositAccountId);
+    setPaymentMode(initialState.paymentMode);
+    setPaymentDate(initialState.paymentDate);
+    setBankCharges(initialState.bankCharges);
+    setNote(initialState.note);
+    setAllocations({});
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
+    setSuccess(false);
 
     const validAllocations = Object.entries(allocations).filter(([, v]) => parseFloat(v) > 0);
     if (!customerId || !depositAccountId || validAllocations.length === 0) {
@@ -137,7 +161,8 @@ export default function PaymentForm({
     );
 
     setLoading(false);
-    router.push("/dashboard/sales/payment-received");
+    setSuccess(true);
+    resetForm();
     router.refresh();
   }
 
@@ -153,10 +178,22 @@ export default function PaymentForm({
 
       {customerId && (
         <>
-          <label className="flex items-center gap-2 text-sm bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 w-fit">
-            <input type="checkbox" checked={receivedFull} onChange={(e) => toggleReceivedFull(e.target.checked)} />
-            Received Full Amount (BDT {totalDue.toFixed(2)})
-          </label>
+          <div className="flex flex-wrap items-end gap-3">
+            <div>
+              <label className="block text-sm text-gray-600 mb-1">Amount Received</label>
+              <input
+                type="number" step="0.01" min="0"
+                value={amountReceived > 0 ? amountReceived.toFixed(2) : ""}
+                onChange={(e) => handleAmountReceivedChange(e.target.value)}
+                className="rounded-lg border px-3 py-2 text-sm w-40"
+                placeholder="0.00"
+              />
+            </div>
+            <label className="flex items-center gap-2 text-sm bg-blue-50 border border-blue-200 rounded-lg px-3 py-2">
+              <input type="checkbox" checked={isFullReceived} onChange={(e) => toggleReceivedFull(e.target.checked)} />
+              Received Full Amount (BDT {totalDue.toFixed(2)})
+            </label>
+          </div>
 
           <div className="rounded-lg border overflow-hidden">
             <div className="bg-gray-50 px-3 py-2 text-sm font-semibold text-gray-700">Unpaid Invoices</div>
@@ -200,10 +237,6 @@ export default function PaymentForm({
               </tbody>
             </table>
           </div>
-
-          <div className="rounded-lg bg-gray-50 border p-3 text-sm font-medium">
-            Amount Received: BDT {amountReceived.toFixed(2)}
-          </div>
         </>
       )}
 
@@ -240,6 +273,7 @@ export default function PaymentForm({
       </div>
 
       {error && <p className="text-sm text-red-600">{error}</p>}
+      {success && <p className="text-sm text-green-700">✅ Payment সফলভাবে সেভ হয়েছে।</p>}
 
       <button type="submit" disabled={loading} className="rounded-lg bg-gray-900 px-5 py-2 text-sm text-white disabled:opacity-40">
         {loading ? "সেভ হচ্ছে..." : "Payment সেভ করুন"}
