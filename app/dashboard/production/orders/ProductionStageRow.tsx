@@ -51,9 +51,6 @@ export default function ProductionStageRow({ row }: { row: StageRow }) {
 
   return (
     <tr className="border-t">
-      <td className="px-4 py-2">
-        <span className={`rounded-full px-2 py-0.5 text-xs ${typeColors[row.stageType]}`}>{typeLabels[row.stageType]}</span>
-      </td>
       <td className="px-4 py-2 font-medium">{row.bookingNo}</td>
       <td className="px-4 py-2">{row.customerName}</td>
       <td className="px-4 py-2">{row.productName}</td>
