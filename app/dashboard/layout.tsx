@@ -23,7 +23,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
           </p>
         )}
         <SidebarMenu />
-        {isAdmin && (
+                {isAdmin && (
           <div className="border-t border-gray-700 pt-4 mt-4 space-y-1">
             <Link href="/dashboard/settings" className="block rounded px-3 py-2 hover:bg-gray-800">
               ⚙ Settings
@@ -33,6 +33,9 @@ export default async function DashboardLayout({ children }: { children: React.Re
             </Link>
           </div>
         )}
+        <Link href="/dashboard/settings/change-password" className={`block rounded px-3 py-2 hover:bg-gray-800 ${!isAdmin ? "border-t border-gray-700 pt-4 mt-4" : ""}`}>
+          🔒 Change Password
+        </Link>
         <LogoutButton />
       </aside>
       <main className="flex-1 bg-gray-50 p-6 print:p-0 print:bg-white">{children}</main>
