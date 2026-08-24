@@ -52,8 +52,55 @@ function formatMeasurement(b: any) {
         }
       }
       await supabase.from("material_consumption").delete().eq("production_id", po.id);
+
+      // Reverse finished goods received against this production order
+      const { data: receives } = await supabase.from("finished_goods_receive").select("*").eq("production_id", po.id);
+      for (const r of receives ?? []) {
+        const { data: ledgerEntry } = await supabase
+          .from("stock_ledger").select("*")
+          .eq("reference_type", "production").eq("reference_id", po.id)
+          .eq("item_type", "finished_goods").eq("item_id", r.product_id).maybeSingle();
+        if (ledgerEntry) {
+          const { data: stock } = await supabase
+            .from("finished_goods_stock").select("*")
+            .eq("product_id", r.product_id).eq("warehouse_id", ledgerEntry.warehouse_id).maybeSingle();
+          if (stock) {
+            await supabase.from("finished_goods_stock")
+              .update({ quantity_pcs: stock.quantity_pcs - r.quantity_pcs, updated_at: new Date().toISOString() })
+              .eq("id", stock.id);
+          }
+          await supabase.from("stock_ledger").delete().eq("id", ledgerEntry.id);
+        }
+      }
+      await supabase.from("finished_goods_receive").delete().eq("production_id", po.id);
+
+      // Reverse recycled-chips stock from wastage against this production order
+      const { data: wastages } = await supabase.from("wastage").select("*").eq("production_id", po.id);
+      for (const w of wastages ?? []) {
+        if (w.recycled) {
+          const { data: ledgerEntry } = await supabase
+            .from("stock_ledger").select("*")
+            .eq("reference_type", "wastage").eq("reference_id", po.id).maybeSingle();
+          if (ledgerEntry) {
+            const { data: stock } = await supabase
+              .from("raw_material_stock").select("*")
+              .eq("material_id", ledgerEntry.item_id).eq("warehouse_id", ledgerEntry.warehouse_id).maybeSingle();
+            if (stock) {
+              await supabase.from("raw_material_stock")
+                .update({ quantity_lbs: stock.quantity_lbs - ledgerEntry.quantity, updated_at: new Date().toISOString() })
+                .eq("id", stock.id);
+            }
+            await supabase.from("stock_ledger").delete().eq("id", ledgerEntry.id);
+          }
+        }
+      }
+      await supabase.from("wastage").delete().eq("production_id", po.id);
     }
-    await supabase.from("production_orders").delete().eq("booking_id", booking.id);
+    const { error: prodOrderDeleteError } = await supabase.from("production_orders").delete().eq("booking_id", booking.id);
+    if (prodOrderDeleteError) {
+      alert("মুছে ফেলা যায়নি: " + prodOrderDeleteError.message);
+      return;
+    }
     await supabase.from("booking_materials").delete().eq("booking_id", booking.id);
 
     const { error } = await supabase.from("bookings").delete().eq("id", booking.id);
