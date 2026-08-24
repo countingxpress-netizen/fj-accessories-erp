@@ -133,8 +133,9 @@ export default function BookingForm({
     if (!qty || !tube || !cutting || !T || !PT) return null;
     const tubeInch = unit === "cm" ? tube / CM_PER_INCH : tube;
     const cuttingInch = unit === "cm" ? cutting / CM_PER_INCH : cutting;
-    const baseLbs = (qty * tubeInch * cuttingInch * PT) / 75000;
-    const finalLbs = baseLbs * 1.01;
+        const baseLbs = (qty * tubeInch * cuttingInch * PT) / 75000;
+    const finalLbsRaw = baseLbs * 1.01;
+    const finalLbs = Math.ceil(finalLbsRaw); // Fraction থাকলে Round Up
 
     let lldpe = 0, ldpe = 0, pp = 0, rld = 0;
     let customSplit: { material_id: string; qty: number }[] = [];
@@ -821,7 +822,7 @@ const selected = customers.find((c) => String(c.id) === String(newCustomerId));
               Garments-এর ঠিকানা ব্যবহার করুন
             </button>
           )}
-          <input value={deliveryPoint} onChange={(e) => setDeliveryPoint(e.target.value)} list="delivery-point-options" className="w-full rounded-lg border px-3 py-2 text-sm" placeholder="সম্পূর্ণ ডেলিভারি ঠিকানা লিখুন" />
+          <input value={deliveryPoint} onChange={(e) => setDeliveryPoint(e.target.value)} list="delivery-point-options" className="w-full rounded-lg border px-3 py-2 text-sm" placeholder="সম্পূর্ণ ডেলিভারি ঠিকানা লিখুন" required />
           <datalist id="delivery-point-options">
             {garmentsList.filter((g) => g.customer_id === customerId && g.address).map((g) => (
               <option key={g.id} value={g.address ?? ""} />

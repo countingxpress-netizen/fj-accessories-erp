@@ -35,7 +35,7 @@ export default async function ExpensesPage({
     <div>
       <div className="flex items-center justify-between mb-4">
         <h1 className="text-2xl font-semibold">Expenses</h1>
-        <Link href="/dashboard/accounting" className="text-sm text-gray-500 hover:underline">← Accounting-এ ফিরুন</Link>
+        <Link href="/dashboard/purchase" className="text-sm text-gray-500 hover:underline">← Purchase-এ ফিরুন</Link>
       </div>
 
       <ExpenseForm expenseAccounts={expenseAccounts ?? []} cashBankAccounts={cashBankAccounts ?? []} />

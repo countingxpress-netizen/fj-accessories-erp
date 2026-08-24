@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import ProductionStageRow from "./ProductionStageRow";
 import { formatMeasurement } from "@/lib/formatMeasurement";
@@ -6,15 +5,19 @@ import { formatMeasurement } from "@/lib/formatMeasurement";
 export type StageRow = {
   key: string;
   productionOrderId: string;
+  groupId: string;
   stageType: "blowing" | "printing" | "cutting";
   bookingId: string;
   bookingNo: string;
   customerName: string;
   productName: string;
   measurement: string;
-  quantity: number;
+  target: number;
+  produced: number;
   quantityUnit: "Lbs" | "Pcs";
   completed: boolean;
+  productId: string;
+  warehouseId: string | null;
 };
 
 export default async function ProductionOrdersPage({
@@ -28,10 +31,11 @@ export default async function ProductionOrdersPage({
   const { data: orders } = await supabase
     .from("production_orders")
     .select(`
-      id, booking_id, required_lbs, quantity_pcs,
+      id, booking_id, product_id, required_lbs, quantity_pcs,
       blowing_completed_at, printing_completed_at, cutting_completed_at,
+      blowing_produced_lbs, printing_produced_pcs, cutting_produced_pcs,
       bookings (
-        booking_no, has_print, measurement_type, measurement_unit,
+        booking_no, booking_group_id, has_print, warehouse_id, measurement_type, measurement_unit,
         length_val, width_val, flap_val, gusset_val,
         customers (name), finished_goods (product_name)
       )
@@ -48,25 +52,29 @@ export default async function ProductionOrdersPage({
     const measurement = formatMeasurement(b);
     const customerName = b.customers?.name ?? "-";
     const productName = b.finished_goods?.product_name ?? "-";
+    const groupId = b.booking_group_id ?? o.booking_id;
 
     blowingRows.push({
-      key: `${o.id}-blowing`, productionOrderId: o.id, stageType: "blowing",
+      key: `${o.id}-blowing`, productionOrderId: o.id, groupId, stageType: "blowing",
       bookingId: o.booking_id, bookingNo: b.booking_no, customerName, productName, measurement,
-      quantity: o.required_lbs ?? 0, quantityUnit: "Lbs", completed: !!o.blowing_completed_at,
+      target: o.required_lbs ?? 0, produced: o.blowing_produced_lbs ?? 0, quantityUnit: "Lbs",
+      completed: !!o.blowing_completed_at, productId: o.product_id, warehouseId: b.warehouse_id,
     });
 
     if (b.has_print) {
       printingRows.push({
-        key: `${o.id}-printing`, productionOrderId: o.id, stageType: "printing",
+        key: `${o.id}-printing`, productionOrderId: o.id, groupId, stageType: "printing",
         bookingId: o.booking_id, bookingNo: b.booking_no, customerName, productName, measurement,
-        quantity: o.quantity_pcs ?? 0, quantityUnit: "Pcs", completed: !!o.printing_completed_at,
+        target: o.quantity_pcs ?? 0, produced: o.printing_produced_pcs ?? 0, quantityUnit: "Pcs",
+        completed: !!o.printing_completed_at, productId: o.product_id, warehouseId: b.warehouse_id,
       });
     }
 
     cuttingRows.push({
-      key: `${o.id}-cutting`, productionOrderId: o.id, stageType: "cutting",
+      key: `${o.id}-cutting`, productionOrderId: o.id, groupId, stageType: "cutting",
       bookingId: o.booking_id, bookingNo: b.booking_no, customerName, productName, measurement,
-      quantity: o.quantity_pcs ?? 0, quantityUnit: "Pcs", completed: !!o.cutting_completed_at,
+      target: o.quantity_pcs ?? 0, produced: o.cutting_produced_pcs ?? 0, quantityUnit: "Pcs",
+      completed: !!o.cutting_completed_at, productId: o.product_id, warehouseId: b.warehouse_id,
     });
   });
 
@@ -82,12 +90,12 @@ export default async function ProductionOrdersPage({
     <div>
       <h1 className="text-2xl font-semibold mb-4">Production Orders</h1>
       <p className="text-sm text-gray-500 mb-4">
-        Booking Receive করার সাথে সাথেই Blowing/Printing/Cutting শিডিউল এখানে আলাদা আলাদা তালিকায় চলে আসে।
+        প্রতিটা স্টেজে কত উৎপাদন হয়েছে তা লিখে সেভ করুন — Target-এ পৌঁছালে স্বয়ংক্রিয়ভাবে "OK" হয়ে যাবে।
       </p>
 
       <div className="flex gap-2 mb-4">
         {Object.entries(tabData).map(([key, { label, rows }]) => (
-          <Link
+          
             key={key}
             href={`/dashboard/production/orders?tab=${key}`}
             className={`rounded-lg px-4 py-2 text-sm ${
@@ -95,20 +103,20 @@ export default async function ProductionOrdersPage({
             }`}
           >
             {label} ({rows.length})
-          </Link>
+          </a>
         ))}
       </div>
 
       <div className="overflow-x-auto rounded-xl border bg-white shadow-sm">
-        <table className="w-full text-sm min-w-[850px]">
+        <table className="w-full text-sm min-w-[900px]">
           <thead className="bg-gray-50 text-left text-gray-600">
             <tr>
               <th className="px-4 py-2">Booking No</th>
               <th className="px-4 py-2">Customer</th>
               <th className="px-4 py-2">Product</th>
               <th className="px-4 py-2">Measurement</th>
-              <th className="px-4 py-2 text-right">Quantity</th>
-              <th className="px-4 py-2 text-center">Production</th>
+              <th className="px-4 py-2 text-right">Target</th>
+              <th className="px-4 py-2 w-40">Produced</th>
               <th className="px-4 py-2">Stage</th>
               <th className="px-4 py-2 text-right">Action</th>
             </tr>

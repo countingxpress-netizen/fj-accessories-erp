@@ -115,11 +115,12 @@ export default function DeliveryChallanForm({
 
     const { data: challan, error: challanError } = await supabase
       .from("delivery_challans")
-      .insert({
+            .insert({
         challan_no: challanNo, booking_id: firstBooking.id, customer_id: customerId,
         challan_date: challanDate, is_partial: isPartial,
         buyer_name: firstBooking.buyers?.name ?? null, style: firstBooking.style ?? null,
         customer_booking_ref: bookingRefs || null,
+        delivery_point: firstBooking.delivery_point ?? null,
       })
       .select().single();
 

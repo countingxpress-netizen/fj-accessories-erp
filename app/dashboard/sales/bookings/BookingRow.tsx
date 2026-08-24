@@ -3,6 +3,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { formatDate } from "@/lib/formatDate";
+import { getBookingStatusLabel } from "@/lib/bookingStatus";
 import { formatStyle } from "@/lib/formatStyle";
 
 function formatMeasurement(b: any) {
@@ -15,39 +16,9 @@ function formatMeasurement(b: any) {
   return "-";
 }
 
-function getStatusLabel(booking: any, deliveredQty: number) {
-  const po = booking.production_orders?.[0];
-
-  if (deliveredQty >= booking.quantity_pcs && booking.quantity_pcs > 0) {
-    // Delivery সম্পূর্ণ হয়ে গেছে, কিন্তু Schedule (Blowing/Printing/Cutting) সব শেষ হয়েছে কিনা চেক করুন
-    const missing: string[] = [];
-    if (!po?.blowing_completed_at) missing.push("Blowing");
-    if (booking.has_print && !po?.printing_completed_at) missing.push("Printing");
-    if (!po?.cutting_completed_at) missing.push("Cutting");
-
-    if (missing.length > 0) {
-      return { label: `Delivery OK (${missing.join(", ")} বাকি)`, color: "bg-red-100 text-red-700 border border-red-300" };
-    }
-    return { label: "Delivery Done", color: "bg-green-100 text-green-700" };
-  }
-  if (deliveredQty > 0) {
-    return { label: "Partially Delivered", color: "bg-orange-100 text-orange-700" };
-  }
-  if (po?.cutting_completed_at) {
-    return { label: "Cutting OK", color: "bg-purple-100 text-purple-700" };
-  }
-  if (po?.printing_completed_at) {
-    return { label: "Printing OK", color: "bg-indigo-100 text-indigo-700" };
-  }
-  if (po?.blowing_completed_at) {
-    return { label: "Blowing OK", color: "bg-blue-100 text-blue-700" };
-  }
-  return { label: "Booking Received", color: "bg-gray-100 text-gray-700" };
-}
-
-export default function BookingRow({
-  booking, serial, isGroupStart, groupSize, deliveredQty,
-}: { booking: any; serial?: number; isGroupStart?: boolean; groupSize?: number; deliveredQty: number }) {
+ export default function BookingRow({
+  booking, serial, isGroupStart, groupSize, deliveredQty, challanNos,
+}: { booking: any; serial?: number; isGroupStart?: boolean; groupSize?: number; deliveredQty: number; challanNos: string[] }) {
   const router = useRouter();
   const supabase = createClient();
 
@@ -94,7 +65,7 @@ export default function BookingRow({
   }
 
   const groupBg = groupSize && groupSize > 1 ? "bg-blue-50/40" : "";
-  const status = getStatusLabel(booking, deliveredQty);
+    const status = getBookingStatusLabel(booking, deliveredQty, challanNos);
   const groupKey = booking.booking_group_id ?? booking.id;
 
   const piNo = booking.pi_bookings?.[0]?.proforma_invoices?.pi_no ?? null;

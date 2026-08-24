@@ -12,7 +12,6 @@ const menu: MenuGroup[] = [
     items: [
       { label: "Chart of Accounts", href: "/dashboard/accounting" },
       { label: "Journal Vouchers", href: "/dashboard/accounting/journal" },
-      { label: "Expenses", href: "/dashboard/accounting/expenses" },
       { label: "General Ledger", href: "/dashboard/accounting/ledger" },
       { label: "Trial Balance", href: "/dashboard/accounting/trial-balance" },
       { label: "Cash Book", href: "/dashboard/accounting/cash-book" },
@@ -28,11 +27,12 @@ const menu: MenuGroup[] = [
       { label: "Stock Ledger", href: "/dashboard/inventory/stock-ledger" },
     ],
   },
-  {
+    {
     label: "Purchase", href: "/dashboard/purchase",
     items: [
       { label: "Suppliers", href: "/dashboard/purchase/suppliers" },
       { label: "Purchase Entry", href: "/dashboard/purchase/entry" },
+      { label: "Expenses", href: "/dashboard/purchase/expenses" },
       { label: "Payment Given", href: "/dashboard/purchase/payment-given" },
       { label: "Supplier Ledger", href: "/dashboard/purchase/supplier-ledger" },
     ],
