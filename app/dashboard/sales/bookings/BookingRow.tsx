@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { formatDate } from "@/lib/formatDate";
 import { getBookingStatusLabel } from "@/lib/bookingStatus";
 import { formatStyle } from "@/lib/formatStyle";
+import { deleteBookingCascade } from "@/lib/bookingDelete";
 
 function formatMeasurement(b: any) {
   const unit = b.measurement_unit;
@@ -16,96 +17,21 @@ function formatMeasurement(b: any) {
   return "-";
 }
 
- export default function BookingRow({
-  booking, serial, isGroupStart, groupSize, deliveredQty, challanNos,
-}: { booking: any; serial?: number; isGroupStart?: boolean; groupSize?: number; deliveredQty: number; challanNos: string[] }) {
+export default function BookingRow({
+  booking, serial, isGroupStart, groupSize, deliveredQty, challanNos, selected, onToggleSelect,
+}: {
+  booking: any; serial?: number; isGroupStart?: boolean; groupSize?: number; deliveredQty: number; challanNos: string[];
+  selected?: boolean; onToggleSelect?: () => void;
+}) {
   const router = useRouter();
   const supabase = createClient();
 
   async function handleDelete() {
     if (!window.confirm(`Booking "${booking.booking_no}" মুছে ফেলতে চান? এর সাথে যুক্ত Production Order, স্টক কর্তন সবকিছু ফেরত/মুছে যাবে।`)) return;
 
-    const { data: challanItems } = await supabase.from("delivery_challans").select("id").eq("booking_id", booking.id);
-    const { data: invoiceItems } = await supabase.from("sales_invoice_items").select("id").eq("booking_id", booking.id);
-    if ((challanItems && challanItems.length > 0) || (invoiceItems && invoiceItems.length > 0)) {
-      alert("এই বুকিং-এর সাথে ইতিমধ্যে Delivery Challan বা Sales Invoice যুক্ত আছে, তাই মুছে ফেলা যাবে না।");
-      return;
-    }
-
-    const { data: prodOrders } = await supabase.from("production_orders").select("id").eq("booking_id", booking.id);
-    for (const po of prodOrders ?? []) {
-      const { data: consumptions } = await supabase.from("material_consumption").select("*").eq("production_id", po.id);
-      for (const c of consumptions ?? []) {
-        const { data: ledgerEntry } = await supabase
-          .from("stock_ledger").select("*")
-          .eq("reference_type", "production").eq("reference_id", po.id).eq("item_id", c.material_id).maybeSingle();
-        if (ledgerEntry) {
-          const { data: stock } = await supabase
-            .from("raw_material_stock").select("*")
-            .eq("material_id", c.material_id).eq("warehouse_id", ledgerEntry.warehouse_id).maybeSingle();
-          if (stock) {
-            await supabase.from("raw_material_stock")
-              .update({ quantity_lbs: stock.quantity_lbs + c.quantity_lbs, updated_at: new Date().toISOString() })
-              .eq("id", stock.id);
-          }
-          await supabase.from("stock_ledger").delete().eq("id", ledgerEntry.id);
-        }
-      }
-      await supabase.from("material_consumption").delete().eq("production_id", po.id);
-
-      // Reverse finished goods received against this production order
-      const { data: receives } = await supabase.from("finished_goods_receive").select("*").eq("production_id", po.id);
-      for (const r of receives ?? []) {
-        const { data: ledgerEntry } = await supabase
-          .from("stock_ledger").select("*")
-          .eq("reference_type", "production").eq("reference_id", po.id)
-          .eq("item_type", "finished_goods").eq("item_id", r.product_id).maybeSingle();
-        if (ledgerEntry) {
-          const { data: stock } = await supabase
-            .from("finished_goods_stock").select("*")
-            .eq("product_id", r.product_id).eq("warehouse_id", ledgerEntry.warehouse_id).maybeSingle();
-          if (stock) {
-            await supabase.from("finished_goods_stock")
-              .update({ quantity_pcs: stock.quantity_pcs - r.quantity_pcs, updated_at: new Date().toISOString() })
-              .eq("id", stock.id);
-          }
-          await supabase.from("stock_ledger").delete().eq("id", ledgerEntry.id);
-        }
-      }
-      await supabase.from("finished_goods_receive").delete().eq("production_id", po.id);
-
-      // Reverse recycled-chips stock from wastage against this production order
-      const { data: wastages } = await supabase.from("wastage").select("*").eq("production_id", po.id);
-      for (const w of wastages ?? []) {
-        if (w.recycled) {
-          const { data: ledgerEntry } = await supabase
-            .from("stock_ledger").select("*")
-            .eq("reference_type", "wastage").eq("reference_id", po.id).maybeSingle();
-          if (ledgerEntry) {
-            const { data: stock } = await supabase
-              .from("raw_material_stock").select("*")
-              .eq("material_id", ledgerEntry.item_id).eq("warehouse_id", ledgerEntry.warehouse_id).maybeSingle();
-            if (stock) {
-              await supabase.from("raw_material_stock")
-                .update({ quantity_lbs: stock.quantity_lbs - ledgerEntry.quantity, updated_at: new Date().toISOString() })
-                .eq("id", stock.id);
-            }
-            await supabase.from("stock_ledger").delete().eq("id", ledgerEntry.id);
-          }
-        }
-      }
-      await supabase.from("wastage").delete().eq("production_id", po.id);
-    }
-    const { error: prodOrderDeleteError } = await supabase.from("production_orders").delete().eq("booking_id", booking.id);
-    if (prodOrderDeleteError) {
-      alert("মুছে ফেলা যায়নি: " + prodOrderDeleteError.message);
-      return;
-    }
-    await supabase.from("booking_materials").delete().eq("booking_id", booking.id);
-
-    const { error } = await supabase.from("bookings").delete().eq("id", booking.id);
-    if (error) {
-      alert("মুছে ফেলা যায়নি: " + error.message);
+    const result = await deleteBookingCascade(supabase, booking.id);
+    if (!result.ok) {
+      alert(result.error);
       return;
     }
     router.refresh();
@@ -119,6 +45,14 @@ function formatMeasurement(b: any) {
 
   return (
     <tr className={`border-t ${groupBg} ${isGroupStart && groupSize && groupSize > 1 ? "border-t-2 border-t-blue-200" : ""}`}>
+      <td className="px-4 py-2">
+        <input
+          type="checkbox"
+          checked={!!selected}
+          onChange={onToggleSelect}
+          aria-label={`Select booking ${booking.booking_no}`}
+        />
+      </td>
       <td className="px-4 py-2 text-gray-500">{serial ?? ""}</td>
       <td className="px-4 py-2 font-medium">
         {booking.booking_no}

@@ -4,9 +4,11 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { formatDate } from "@/lib/formatDate";
 import DeliveryStatusBadge from "./DeliveryStatusBadge";
-import { recalcBookingStatus } from "@/lib/recalcBookingStatus";
+import { deleteChallanCascade } from "@/lib/challanDelete";
 
-export default function ChallanRow({ challan }: { challan: any }) {
+export default function ChallanRow({
+  challan, selected, onToggleSelect,
+}: { challan: any; selected?: boolean; onToggleSelect?: () => void }) {
   const router = useRouter();
   const supabase = createClient();
 
@@ -17,39 +19,24 @@ export default function ChallanRow({ challan }: { challan: any }) {
   async function handleDelete() {
     if (!window.confirm(`Challan "${challan.challan_no}" মুছে ফেলতে চান? স্টক আগের অবস্থায় ফিরে আসবে।`)) return;
 
-    // স্টক ফেরত দিন (item ধরে ধরে, warehouse চিনতে stock_ledger থেকে খুঁজে বের করি)
-    const { data: ledgerEntries } = await supabase
-      .from("stock_ledger").select("*").eq("reference_type", "delivery").eq("reference_id", challan.id);
-
-    for (const entry of ledgerEntries ?? []) {
-      const { data: stock } = await supabase
-        .from("finished_goods_stock").select("*")
-        .eq("product_id", entry.item_id).eq("warehouse_id", entry.warehouse_id).maybeSingle();
-      if (stock) {
-        await supabase.from("finished_goods_stock")
-          .update({ quantity_pcs: stock.quantity_pcs + entry.quantity, updated_at: new Date().toISOString() })
-          .eq("id", stock.id);
-      } else {
-        await supabase.from("finished_goods_stock").insert({
-          product_id: entry.item_id, warehouse_id: entry.warehouse_id, quantity_pcs: entry.quantity,
-        });
-      }
-    }
-    await supabase.from("stock_ledger").delete().eq("reference_type", "delivery").eq("reference_id", challan.id);
-    await supabase.from("delivery_challan_items").delete().eq("challan_id", challan.id);
-    const { error } = await supabase.from("delivery_challans").delete().eq("id", challan.id);
-
-    if (error) {
-      alert("মুছে ফেলা যায়নি: " + error.message);
+    const result = await deleteChallanCascade(supabase, challan.id, challan.booking_id);
+    if (!result.ok) {
+      alert(result.error);
       return;
     }
-
-    if (challan.booking_id) await recalcBookingStatus(supabase, challan.booking_id);
     router.refresh();
   }
 
   return (
     <tr className="border-t">
+      <td className="px-4 py-2">
+        <input
+          type="checkbox"
+          checked={!!selected}
+          onChange={onToggleSelect}
+          aria-label={`Select challan ${challan.challan_no}`}
+        />
+      </td>
       <td className="px-4 py-2 font-medium">{challan.challan_no}</td>
       <td className="px-4 py-2 text-gray-500">{formatDate(challan.challan_date)}</td>
       <td className="px-4 py-2">{challan.customers?.name ?? "-"}</td>

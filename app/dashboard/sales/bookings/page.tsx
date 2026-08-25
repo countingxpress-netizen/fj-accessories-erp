@@ -1,7 +1,6 @@
-import React from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
-import BookingRow from "./BookingRow";
+import BookingsTable from "./BookingsTable";
 
 export default async function BookingsListPage() {
   const supabase = await createClient();
@@ -15,13 +14,17 @@ export default async function BookingsListPage() {
     .select("quantity_pcs, delivery_challans(booking_id, challan_no)");
 
   const deliveredMap: Record<string, number> = {};
-  const challanNosByBooking: Record<string, Set<string>> = {};
+  const challanNosByBookingSet: Record<string, Set<string>> = {};
   (allChallanItems ?? []).forEach((item: any) => {
     const bId = item.delivery_challans?.booking_id;
     if (!bId) return;
     deliveredMap[bId] = (deliveredMap[bId] ?? 0) + item.quantity_pcs;
-    if (!challanNosByBooking[bId]) challanNosByBooking[bId] = new Set();
-    if (item.delivery_challans?.challan_no) challanNosByBooking[bId].add(item.delivery_challans.challan_no);
+    if (!challanNosByBookingSet[bId]) challanNosByBookingSet[bId] = new Set();
+    if (item.delivery_challans?.challan_no) challanNosByBookingSet[bId].add(item.delivery_challans.challan_no);
+  });
+  const challanNosByBooking: Record<string, string[]> = {};
+  Object.keys(challanNosByBookingSet).forEach((k) => {
+    challanNosByBooking[k] = Array.from(challanNosByBookingSet[k]);
   });
 
   const groups: { groupId: string; items: any[] }[] = [];
@@ -45,46 +48,7 @@ export default async function BookingsListPage() {
         </Link>
       </div>
 
-      <div className="rounded-xl border bg-white shadow-sm overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead className="bg-gray-50 text-left text-gray-600">
-            <tr>
-              <th className="px-4 py-2 w-12">SL</th>
-              <th className="px-4 py-2">Booking No</th>
-              <th className="px-4 py-2">Date</th>
-              <th className="px-4 py-2">Customer</th>
-              <th className="px-4 py-2">Buyer</th>
-              <th className="px-4 py-2">Garments</th>
-              <th className="px-4 py-2">Measurement</th>
-              <th className="px-4 py-2 text-right">Qty (Pcs)</th>
-              <th className="px-4 py-2 text-right">Required Lbs</th>
-              <th className="px-4 py-2">Status</th>
-              <th className="px-4 py-2">PI No</th>
-              <th className="px-4 py-2 text-right">Action</th>
-            </tr>
-          </thead>
-          <tbody>
-            {groups.map((group, gi) => (
-              <React.Fragment key={group.groupId}>
-                {group.items.map((b: any, i: number) => (
-                  <BookingRow
-                    key={b.id}
-                    booking={b}
-                    serial={i === 0 ? gi + 1 : undefined}
-                    isGroupStart={i === 0}
-                    groupSize={group.items.length}
-                    deliveredQty={deliveredMap[b.id] ?? 0}
-                    challanNos={Array.from(challanNosByBooking[b.id] ?? [])}
-                  />
-                ))}
-              </React.Fragment>
-            ))}
-            {(!bookings || bookings.length === 0) && (
-              <tr><td colSpan={12} className="px-4 py-3 text-gray-400 italic">এখনো কোনো Booking নেই</td></tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+      <BookingsTable groups={groups} deliveredMap={deliveredMap} challanNosByBooking={challanNosByBooking} />
     </div>
   );
 }

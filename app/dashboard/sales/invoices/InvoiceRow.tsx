@@ -3,8 +3,11 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { formatDate } from "@/lib/formatDate";
+import { deleteInvoiceCascade } from "@/lib/invoiceDelete";
 
-export default function InvoiceRow({ invoice }: { invoice: any }) {
+export default function InvoiceRow({
+  invoice, selected, onToggleSelect,
+}: { invoice: any; selected?: boolean; onToggleSelect?: () => void }) {
   const router = useRouter();
   const supabase = createClient();
 
@@ -15,15 +18,9 @@ export default function InvoiceRow({ invoice }: { invoice: any }) {
   async function handleDelete() {
     if (!window.confirm(`Invoice "${invoice.invoice_no}" মুছে ফেলতে চান? এর সাথে যুক্ত Journal Voucher-ও মুছে যাবে।`)) return;
 
-    if (invoice.voucher_id) {
-      await supabase.from("journal_entry_lines").delete().eq("voucher_id", invoice.voucher_id);
-      await supabase.from("journal_vouchers").delete().eq("id", invoice.voucher_id);
-    }
-    await supabase.from("sales_invoice_items").delete().eq("invoice_id", invoice.id);
-    const { error } = await supabase.from("sales_invoices").delete().eq("id", invoice.id);
-
-    if (error) {
-      alert("মুছে ফেলা যায়নি: " + error.message);
+    const result = await deleteInvoiceCascade(supabase, invoice.id, invoice.voucher_id);
+    if (!result.ok) {
+      alert(result.error);
       return;
     }
     router.refresh();
@@ -31,6 +28,14 @@ export default function InvoiceRow({ invoice }: { invoice: any }) {
 
   return (
     <tr className="border-t">
+      <td className="px-4 py-2">
+        <input
+          type="checkbox"
+          checked={!!selected}
+          onChange={onToggleSelect}
+          aria-label={`Select invoice ${invoice.invoice_no}`}
+        />
+      </td>
       <td className="px-4 py-2 font-medium">{invoice.invoice_no}</td>
       <td className="px-4 py-2 text-gray-500">{formatDate(invoice.invoice_date)}</td>
       <td className="px-4 py-2">{invoice.customers?.name ?? "-"}</td>

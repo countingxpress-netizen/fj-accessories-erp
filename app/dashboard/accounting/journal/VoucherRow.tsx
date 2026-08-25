@@ -2,8 +2,11 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { deleteSimpleRow } from "@/lib/simpleDelete";
 
-export default function VoucherRow({ voucher }: { voucher: any }) {
+export default function VoucherRow({
+  voucher, selected, onToggleSelect,
+}: { voucher: any; selected?: boolean; onToggleSelect?: () => void }) {
   const router = useRouter();
   const supabase = createClient();
 
@@ -18,13 +21,9 @@ export default function VoucherRow({ voucher }: { voucher: any }) {
     );
     if (!confirmed) return;
 
-    const { error } = await supabase
-      .from("journal_vouchers")
-      .delete()
-      .eq("id", voucher.id);
-
-    if (error) {
-      alert("মুছে ফেলা যায়নি: " + error.message);
+    const result = await deleteSimpleRow(supabase, "journal_vouchers", voucher.id);
+    if (!result.ok) {
+      alert(result.error);
       return;
     }
     router.refresh();
@@ -32,6 +31,14 @@ export default function VoucherRow({ voucher }: { voucher: any }) {
 
   return (
     <tr className="border-t">
+      <td className="px-4 py-2">
+        <input
+          type="checkbox"
+          checked={!!selected}
+          onChange={onToggleSelect}
+          aria-label={`Select voucher ${voucher.voucher_no}`}
+        />
+      </td>
       <td className="px-4 py-2 font-medium">{voucher.voucher_no}</td>
       <td className="px-4 py-2 text-gray-500">{voucher.voucher_date}</td>
       <td className="px-4 py-2">{voucher.narration || "-"}</td>

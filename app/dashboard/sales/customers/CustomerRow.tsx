@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { deleteSimpleRow } from "@/lib/simpleDelete";
 
 type Customer = {
   id: string; name: string; address: string | null;
@@ -10,7 +11,9 @@ type Customer = {
   opening_balance: number | null;
 };
 
-export default function CustomerRow({ customer }: { customer: Customer }) {
+export default function CustomerRow({
+  customer, selected, onToggleSelect,
+}: { customer: Customer; selected?: boolean; onToggleSelect?: () => void }) {
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(customer.name);
   const [address, setAddress] = useState(customer.address ?? "");
@@ -46,15 +49,27 @@ export default function CustomerRow({ customer }: { customer: Customer }) {
   async function handleDelete() {
     if (!window.confirm(`"${customer.name}" মুছে ফেলতে চান?`)) return;
     setLoading(true);
-    const { error } = await supabase.from("customers").delete().eq("id", customer.id);
+    const result = await deleteSimpleRow(supabase, "customers", customer.id);
     setLoading(false);
-    if (error) { alert("মুছে ফেলা যায়নি: " + error.message); return; }
+    if (!result.ok) { alert(result.error); return; }
     router.refresh();
   }
+
+  const checkboxCell = (
+    <td className="px-4 py-2">
+      <input
+        type="checkbox"
+        checked={!!selected}
+        onChange={onToggleSelect}
+        aria-label={`Select customer ${customer.name}`}
+      />
+    </td>
+  );
 
   if (editing) {
     return (
       <tr className="border-t bg-yellow-50">
+        {checkboxCell}
         <td className="px-4 py-2"><input value={name} onChange={(e) => setName(e.target.value)} className="w-full rounded border px-2 py-1 text-sm" /></td>
         <td className="px-4 py-2"><input value={address} onChange={(e) => setAddress(e.target.value)} className="w-full rounded border px-2 py-1 text-sm" /></td>
         <td className="px-4 py-2"><input value={phone} onChange={(e) => setPhone(e.target.value)} className="w-full rounded border px-2 py-1 text-sm" /></td>
@@ -73,6 +88,7 @@ export default function CustomerRow({ customer }: { customer: Customer }) {
 
   return (
     <tr className="border-t">
+      {checkboxCell}
       <td className="px-4 py-2 font-medium">{customer.name}</td>
       <td className="px-4 py-2 text-gray-500">{customer.address || "-"}</td>
       <td className="px-4 py-2 text-gray-500">{customer.phone || "-"}</td>
