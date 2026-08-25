@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import AddGarmentForm from "./AddGarmentForm";
-import GarmentRow from "./GarmentRow";
+import GarmentsTable from "./GarmentsTable";
 
 export default async function GarmentsPage() {
   const supabase = await createClient();
@@ -24,28 +24,7 @@ export default async function GarmentsPage() {
 
       <AddGarmentForm customers={customers ?? []} />
 
-      {Object.values(grouped).map((group, gi) => (
-        <div key={gi} className="mb-6">
-          <h2 className="text-sm font-semibold uppercase text-gray-500 mb-2">{group.customerName}</h2>
-          <div className="overflow-hidden rounded-xl border bg-white shadow-sm">
-            <table className="w-full text-sm">
-              <thead className="bg-gray-50 text-left text-gray-600">
-                <tr>
-                  <th className="px-4 py-3">Garment Name</th>
-                  <th className="px-4 py-3">Address</th>
-                  <th className="px-4 py-3 text-right">Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {group.items.map((g) => <GarmentRow key={g.id} garment={g} />)}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      ))}
-      {Object.keys(grouped).length === 0 && (
-        <p className="text-gray-400 italic text-sm">কোনো Garments যোগ করা হয়নি</p>
-      )}
+      <GarmentsTable groups={Object.values(grouped)} />
     </div>
   );
 }

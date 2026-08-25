@@ -35,12 +35,23 @@ export function useBulkSelect<T>(items: T[], getId: (item: T) => string) {
 
   const clear = useCallback(() => setSelected(new Set()), []);
 
+  /** Select-all/none for an arbitrary subset of ids (e.g. one group's rows in a grouped table). */
+  const toggleMany = useCallback((idsToToggle: string[]) => {
+    setSelected((prev) => {
+      const allSelected = idsToToggle.length > 0 && idsToToggle.every((id) => prev.has(id));
+      const next = new Set(prev);
+      idsToToggle.forEach((id) => (allSelected ? next.delete(id) : next.add(id)));
+      return next;
+    });
+  }, []);
+
   return {
     selectedIds: Array.from(selected),
     selectedCount: selected.size,
     isSelected,
     toggle,
     toggleAll,
+    toggleMany,
     isAllSelected,
     isSomeSelected,
     clear,

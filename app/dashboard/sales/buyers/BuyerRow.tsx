@@ -2,8 +2,11 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { deleteSimpleRow } from "@/lib/simpleDelete";
 
-export default function BuyerRow({ buyer }: { buyer: any }) {
+export default function BuyerRow({
+  buyer, selected, onToggleSelect,
+}: { buyer: any; selected?: boolean; onToggleSelect?: () => void }) {
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(buyer.name);
   const [pricingRule, setPricingRule] = useState(buyer.pricing_rule ?? "manual");
@@ -52,15 +55,27 @@ export default function BuyerRow({ buyer }: { buyer: any }) {
   async function handleDelete() {
     if (!window.confirm(`"${buyer.name}" মুছে ফেলতে চান?`)) return;
     setLoading(true);
-    const { error } = await supabase.from("buyers").delete().eq("id", buyer.id);
+    const result = await deleteSimpleRow(supabase, "buyers", buyer.id);
     setLoading(false);
-    if (error) { alert("মুছে ফেলা যায়নি: " + error.message); return; }
+    if (!result.ok) { alert(result.error); return; }
     router.refresh();
   }
+
+  const checkboxCell = (
+    <td className="px-4 py-2">
+      <input
+        type="checkbox"
+        checked={!!selected}
+        onChange={onToggleSelect}
+        aria-label={`Select buyer ${buyer.name}`}
+      />
+    </td>
+  );
 
   if (editing) {
     return (
       <tr className="border-t bg-yellow-50">
+        {checkboxCell}
         <td className="px-4 py-2"><input value={name} onChange={(e) => setName(e.target.value)} className="w-full rounded border px-2 py-1 text-sm" /></td>
         <td className="px-4 py-2">
           <div className="flex gap-2 items-center">
@@ -89,6 +104,7 @@ export default function BuyerRow({ buyer }: { buyer: any }) {
 
   return (
     <tr className="border-t">
+      {checkboxCell}
       <td className="px-4 py-2 font-medium">{buyer.name}</td>
       <td className="px-4 py-2 text-gray-500">{buyer.pricing_rule === "percentage" ? `${buyer.percentage_value}%` : (buyer.pricing_rule === "rate_per_lbs" ? buyer.rate_per_lbs_value : "-")}</td>
       <td className="px-4 py-2 text-gray-700">{buyer.pi_thickness_mm ?? "-"}</td>

@@ -1,6 +1,7 @@
 "use client";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { deleteCustomerPaymentCascade } from "@/lib/paymentReceivedDelete";
 
 export default function PaymentActions({ paymentId, voucherId }: { paymentId: string; voucherId: string | null }) {
   const router = useRouter();
@@ -9,15 +10,9 @@ export default function PaymentActions({ paymentId, voucherId }: { paymentId: st
   async function handleDelete() {
     if (!window.confirm("এই Payment মুছে ফেলতে চান? সংশ্লিষ্ট Journal Voucher-ও মুছে যাবে।")) return;
 
-    if (voucherId) {
-      await supabase.from("journal_entry_lines").delete().eq("voucher_id", voucherId);
-      await supabase.from("journal_vouchers").delete().eq("id", voucherId);
-    }
-    await supabase.from("payment_allocations").delete().eq("payment_id", paymentId);
-    const { error } = await supabase.from("customer_payments").delete().eq("id", paymentId);
-
-    if (error) {
-      alert("মুছে ফেলা যায়নি: " + error.message);
+    const result = await deleteCustomerPaymentCascade(supabase, paymentId, voucherId);
+    if (!result.ok) {
+      alert(result.error);
       return;
     }
     router.push("/dashboard/sales/payment-received");

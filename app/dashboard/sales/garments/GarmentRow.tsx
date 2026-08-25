@@ -3,8 +3,11 @@ import Link from "next/link";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { deleteSimpleRow } from "@/lib/simpleDelete";
 
-export default function GarmentRow({ garment }: { garment: any }) {
+export default function GarmentRow({
+  garment, selected, onToggleSelect,
+}: { garment: any; selected?: boolean; onToggleSelect?: () => void }) {
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(garment.name);
   const [address, setAddress] = useState(garment.address ?? "");
@@ -23,15 +26,27 @@ export default function GarmentRow({ garment }: { garment: any }) {
   async function handleDelete() {
     if (!window.confirm(`"${garment.name}" মুছে ফেলতে চান?`)) return;
     setLoading(true);
-    const { error } = await supabase.from("garments").delete().eq("id", garment.id);
+    const result = await deleteSimpleRow(supabase, "garments", garment.id);
     setLoading(false);
-    if (error) { alert("মুছে ফেলা যায়নি: " + error.message); return; }
+    if (!result.ok) { alert(result.error); return; }
     router.refresh();
   }
+
+  const checkboxCell = (
+    <td className="px-4 py-2">
+      <input
+        type="checkbox"
+        checked={!!selected}
+        onChange={onToggleSelect}
+        aria-label={`Select garment ${garment.name}`}
+      />
+    </td>
+  );
 
   if (editing) {
     return (
       <tr className="border-t bg-yellow-50">
+        {checkboxCell}
         <td className="px-4 py-2">
           <input value={name} onChange={(e) => setName(e.target.value)} className="w-full rounded border px-2 py-1 text-sm" placeholder="Garment Name" />
         </td>
@@ -48,6 +63,7 @@ export default function GarmentRow({ garment }: { garment: any }) {
 
   return (
     <tr className="border-t hover:bg-gray-50">
+      {checkboxCell}
       <td className="px-4 py-2 font-medium text-gray-800">{garment.name}</td>
       <td className="px-4 py-2 text-gray-600">{garment.address || "-"}</td>
       <td className="px-4 py-2 text-right whitespace-nowrap">

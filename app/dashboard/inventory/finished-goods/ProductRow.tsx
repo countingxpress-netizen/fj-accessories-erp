@@ -3,6 +3,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { deleteSimpleRow } from "@/lib/simpleDelete";
 
 type Product = {
   id: string;
@@ -12,7 +13,9 @@ type Product = {
   thickness: number;
 };
 
-export default function ProductRow({ product }: { product: Product }) {
+export default function ProductRow({
+  product, selected, onToggleSelect,
+}: { product: Product; selected?: boolean; onToggleSelect?: () => void }) {
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(product.product_name);
   const [length, setLength] = useState(String(product.length_cm));
@@ -48,18 +51,30 @@ export default function ProductRow({ product }: { product: Product }) {
     const confirmed = window.confirm(`"${product.product_name}" মুছে ফেলতে চান?`);
     if (!confirmed) return;
     setLoading(true);
-    const { error } = await supabase.from("finished_goods").delete().eq("id", product.id);
+    const result = await deleteSimpleRow(supabase, "finished_goods", product.id);
     setLoading(false);
-    if (error) {
-      alert("মুছে ফেলা যায়নি। সম্ভবত এই পণ্যে বুকিং/স্টক এন্ট্রি আছে।\n\n" + error.message);
+    if (!result.ok) {
+      alert("মুছে ফেলা যায়নি। সম্ভবত এই পণ্যে বুকিং/স্টক এন্ট্রি আছে।\n\n" + result.error);
       return;
     }
     router.refresh();
   }
 
+  const checkboxCell = (
+    <td className="px-4 py-2">
+      <input
+        type="checkbox"
+        checked={!!selected}
+        onChange={onToggleSelect}
+        aria-label={`Select product ${product.product_name}`}
+      />
+    </td>
+  );
+
   if (editing) {
     return (
       <tr className="border-t bg-yellow-50">
+        {checkboxCell}
         <td className="px-4 py-2">
           <input value={name} onChange={(e) => setName(e.target.value)} className="w-full rounded border px-2 py-1 text-sm" />
         </td>
@@ -83,6 +98,7 @@ export default function ProductRow({ product }: { product: Product }) {
 
   return (
     <tr className="border-t">
+      {checkboxCell}
       <td className="px-4 py-2 font-medium">
         <Link href={`/dashboard/inventory/finished-goods/${product.id}`} className="hover:underline hover:text-blue-700">
           {product.product_name}
