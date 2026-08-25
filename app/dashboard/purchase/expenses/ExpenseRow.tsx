@@ -2,21 +2,20 @@
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { formatDate } from "@/lib/formatDate";
+import { deleteExpenseCascade } from "@/lib/expenseDelete";
 
-export default function ExpenseRow({ expense }: { expense: any }) {
+export default function ExpenseRow({
+  expense, selected, onToggleSelect,
+}: { expense: any; selected?: boolean; onToggleSelect?: () => void }) {
   const router = useRouter();
   const supabase = createClient();
 
   async function handleDelete() {
     if (!window.confirm(`এই Expense এন্ট্রি মুছে ফেলতে চান? এর সাথে যুক্ত Journal Voucher-ও মুছে যাবে।`)) return;
 
-    if (expense.voucher_id) {
-      await supabase.from("journal_entry_lines").delete().eq("voucher_id", expense.voucher_id);
-      await supabase.from("journal_vouchers").delete().eq("id", expense.voucher_id);
-    }
-    const { error } = await supabase.from("expenses").delete().eq("id", expense.id);
-    if (error) {
-      alert("মুছে ফেলা যায়নি: " + error.message);
+    const result = await deleteExpenseCascade(supabase, expense.id, expense.voucher_id);
+    if (!result.ok) {
+      alert(result.error);
       return;
     }
     router.refresh();
@@ -24,6 +23,14 @@ export default function ExpenseRow({ expense }: { expense: any }) {
 
   return (
     <tr className="border-t">
+      <td className="px-4 py-2">
+        <input
+          type="checkbox"
+          checked={!!selected}
+          onChange={onToggleSelect}
+          aria-label={`Select expense ${expense.description ?? expense.id}`}
+        />
+      </td>
       <td className="px-4 py-2 text-gray-500">{formatDate(expense.expense_date)}</td>
       <td className="px-4 py-2">{expense.chart_of_accounts?.account_name ?? "-"}</td>
       <td className="px-4 py-2 text-gray-500">{expense.payee || "-"}</td>

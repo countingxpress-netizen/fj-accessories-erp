@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/client";
-import { DeleteResult } from "@/lib/deleteResult";
+import { DeleteResult, friendlyDeleteError } from "@/lib/deleteResult";
 
 type SupabaseClient = ReturnType<typeof createClient>;
 
@@ -36,6 +36,6 @@ export async function deletePurchaseEntryCascade(
   }
 
   const { error } = await supabase.from("purchase_entries").delete().eq("id", entryId);
-  if (error) return { ok: false, error: "মুছে ফেলা যায়নি: " + error.message };
+  if (error) return { ok: false, error: friendlyDeleteError(error) };
   return { ok: true };
 }

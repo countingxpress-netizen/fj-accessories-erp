@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/client";
-import { DeleteResult } from "@/lib/deleteResult";
+import { DeleteResult, friendlyDeleteError } from "@/lib/deleteResult";
 
 type SupabaseClient = ReturnType<typeof createClient>;
 
@@ -16,6 +16,6 @@ export async function deleteCustomerPaymentCascade(
   await supabase.from("payment_allocations").delete().eq("payment_id", paymentId);
   const { error } = await supabase.from("customer_payments").delete().eq("id", paymentId);
 
-  if (error) return { ok: false, error: "মুছে ফেলা যায়নি: " + error.message };
+  if (error) return { ok: false, error: friendlyDeleteError(error) };
   return { ok: true };
 }

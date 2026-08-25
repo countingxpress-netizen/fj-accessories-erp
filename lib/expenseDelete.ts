@@ -3,22 +3,17 @@ import { DeleteResult, friendlyDeleteError } from "@/lib/deleteResult";
 
 type SupabaseClient = ReturnType<typeof createClient>;
 
-/**
- * Deletes a Sales Invoice along with its items and, if present, the linked
- * Journal Voucher (+ its entry lines) — matches the FK cleanup requirement
- * from CLAUDE.md (invoice delete must remove the linked JV).
- */
-export async function deleteInvoiceCascade(
+/** Deletes an Expense entry along with its linked Journal Voucher. */
+export async function deleteExpenseCascade(
   supabase: SupabaseClient,
-  invoiceId: string,
+  expenseId: string,
   voucherId?: string | null
 ): Promise<DeleteResult> {
   if (voucherId) {
     await supabase.from("journal_entry_lines").delete().eq("voucher_id", voucherId);
     await supabase.from("journal_vouchers").delete().eq("id", voucherId);
   }
-  await supabase.from("sales_invoice_items").delete().eq("invoice_id", invoiceId);
-  const { error } = await supabase.from("sales_invoices").delete().eq("id", invoiceId);
+  const { error } = await supabase.from("expenses").delete().eq("id", expenseId);
 
   if (error) return { ok: false, error: friendlyDeleteError(error) };
   return { ok: true };

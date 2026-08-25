@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/client";
-import { DeleteResult } from "@/lib/deleteResult";
+import { DeleteResult, friendlyDeleteError } from "@/lib/deleteResult";
 import { recalcBookingStatus } from "@/lib/recalcBookingStatus";
 
 type SupabaseClient = ReturnType<typeof createClient>;
@@ -35,7 +35,7 @@ export async function deleteChallanCascade(
   await supabase.from("delivery_challan_items").delete().eq("challan_id", challanId);
   const { error } = await supabase.from("delivery_challans").delete().eq("id", challanId);
 
-  if (error) return { ok: false, error: "মুছে ফেলা যায়নি: " + error.message };
+  if (error) return { ok: false, error: friendlyDeleteError(error) };
 
   if (bookingId) await recalcBookingStatus(supabase, bookingId);
   return { ok: true };

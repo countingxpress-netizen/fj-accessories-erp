@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import ExpenseForm from "./ExpenseForm";
-import ExpenseRow from "./ExpenseRow";
+import ExpensesTable from "./ExpensesTable";
 
 export default async function ExpensesPage({
   searchParams,
@@ -57,26 +57,7 @@ export default async function ExpensesPage({
         <p className="text-lg font-semibold">{total.toFixed(2)}</p>
       </div>
 
-      <div className="overflow-hidden rounded-xl border bg-white shadow-sm">
-        <table className="w-full text-sm">
-          <thead className="bg-gray-50 text-left text-gray-600">
-            <tr>
-              <th className="px-4 py-2">Date</th>
-              <th className="px-4 py-2">Expense Head</th>
-              <th className="px-4 py-2">Payee</th>
-              <th className="px-4 py-2">Description</th>
-              <th className="px-4 py-2 text-right">Amount</th>
-              <th className="px-4 py-2 text-right">Action</th>
-            </tr>
-          </thead>
-          <tbody>
-            {(expenses ?? []).map((e) => <ExpenseRow key={e.id} expense={e} />)}
-            {(!expenses || expenses.length === 0) && (
-              <tr><td colSpan={6} className="px-4 py-3 text-gray-400 italic">এখনো কোনো Expense এন্ট্রি নেই</td></tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+      <ExpensesTable expenses={expenses ?? []} />
     </div>
   );
 }

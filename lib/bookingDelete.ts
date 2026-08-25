@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/client";
-import { DeleteResult } from "@/lib/deleteResult";
+import { DeleteResult, friendlyDeleteError } from "@/lib/deleteResult";
 
 type SupabaseClient = ReturnType<typeof createClient>;
 
@@ -87,13 +87,13 @@ export async function deleteBookingCascade(
 
   const { error: prodOrderDeleteError } = await supabase.from("production_orders").delete().eq("booking_id", bookingId);
   if (prodOrderDeleteError) {
-    return { ok: false, error: "মুছে ফেলা যায়নি: " + prodOrderDeleteError.message };
+    return { ok: false, error: friendlyDeleteError(prodOrderDeleteError) };
   }
   await supabase.from("booking_materials").delete().eq("booking_id", bookingId);
 
   const { error } = await supabase.from("bookings").delete().eq("id", bookingId);
   if (error) {
-    return { ok: false, error: "মুছে ফেলা যায়নি: " + error.message };
+    return { ok: false, error: friendlyDeleteError(error) };
   }
   return { ok: true };
 }
