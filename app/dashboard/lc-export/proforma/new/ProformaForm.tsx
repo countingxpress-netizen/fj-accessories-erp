@@ -12,6 +12,7 @@ type Booking = {
   buyers: { name: string } | null; merchants: { name: string } | null;
   measurement_type: string; measurement_unit: string; length_val: number; width_val: number;
   flap_val: number | null; gusset_val: number | null; pi_thickness_mm: number | null;
+  material_type: string; has_print: boolean;
   finished_goods: { product_name: string; length_cm: number; width_cm: number; thickness: number } | null;
 };
 type Customer = { id: string; name: string; price_per_lbs: number | null };

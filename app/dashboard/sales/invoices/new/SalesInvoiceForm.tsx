@@ -3,9 +3,7 @@ import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { generateNextDocNo } from "@/lib/docNumber";
-import { calcTubeCutting } from "@/lib/calcTubeCutting";
-
-const CM_PER_INCH = 2.54;
+import { calcTubeCutting, toInches } from "@/lib/calcTubeCutting";
 
 type Booking = {
   id: string; booking_no: string; quantity_pcs: number; product_id: string; customer_id: string;
@@ -14,6 +12,7 @@ type Booking = {
   has_print: boolean; print_colors: number; rate_per_color: number; rate_per_inch: number;
   measurement_type: string; measurement_unit: string;
   length_val: number; width_val: number; flap_val: number | null; gusset_val: number | null; thickness_mm: number;
+  material_type: string;
   finished_goods: { product_name: string; length_cm: number; width_cm: number; thickness: number } | null;
 };
 type Customer = { id: string; name: string; price_per_lbs: number | null };
@@ -82,13 +81,11 @@ export default function SalesInvoiceForm({
     [bookings, customerId]
   );
 
-  function getSurcharge(b: Booking) {
+  function getSurcharge(b: Booking, cuttingInch: number) {
     let printCharge = 0, adhesiveCharge = 0;
     if (b.has_print) printCharge = (b.print_colors || 0) * (b.rate_per_color || 0.20);
-    if (b.measurement_type === "adhesive") {
-      const widthInch = b.measurement_unit === "cm" ? b.width_val / CM_PER_INCH : b.width_val;
-      adhesiveCharge = widthInch * (b.rate_per_inch || 0.02);
-    }
+    // Adhesive-এ width_val-ই cutting, তাই একই cuttingInch (CM to Inch টেবিল-সহ) ব্যবহার হবে
+    if (b.measurement_type === "adhesive") adhesiveCharge = cuttingInch * (b.rate_per_inch || 0.02);
     return { printCharge, adhesiveCharge };
   }
 
@@ -98,11 +95,10 @@ export default function SalesInvoiceForm({
     if (!pricePerLbs || !b.thickness_mm) return 0;
 
     const { tube, cutting } = calcTubeCutting(b);
-    const tubeVal = b.measurement_unit === "cm" ? tube / CM_PER_INCH : tube;
-    const cuttingVal = b.measurement_unit === "cm" ? cutting / CM_PER_INCH : cutting;
+    const { tubeInch, cuttingInch } = toInches(tube, cutting, b.measurement_unit, b.material_type, b.has_print);
 
-    const baseUnitPrice = (pricePerLbs * tubeVal * cuttingVal * b.thickness_mm) / 75000;
-    const { printCharge, adhesiveCharge } = getSurcharge(b);
+    const baseUnitPrice = (pricePerLbs * tubeInch * cuttingInch * b.thickness_mm) / 75000;
+    const { printCharge, adhesiveCharge } = getSurcharge(b, cuttingInch);
     return baseUnitPrice + printCharge + adhesiveCharge;
   }
 

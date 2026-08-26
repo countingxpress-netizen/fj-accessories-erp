@@ -39,7 +39,6 @@ export default function BookingRow({
 
   const groupBg = groupSize && groupSize > 1 ? "bg-blue-50/40" : "";
     const status = getBookingStatusLabel(booking, deliveredQty, challanNos);
-  const groupKey = booking.booking_group_id ?? booking.id;
 
   const piNo = booking.pi_bookings?.[0]?.proforma_invoices?.pi_no ?? null;
 
@@ -86,8 +85,6 @@ export default function BookingRow({
             <Link href={`/dashboard/sales/bookings/${booking.id}`} className="block px-3 py-1.5 text-xs hover:bg-gray-50">View</Link>
             <Link href={`/dashboard/sales/bookings/${booking.id}/edit`} className="block px-3 py-1.5 text-xs hover:bg-gray-50">Edit</Link>
             <button onClick={handleDelete} className="block w-full text-left px-3 py-1.5 text-xs text-red-700 hover:bg-red-50">Delete</button>
-            <div className="border-t my-1"></div>
-            <Link href={`/dashboard/production/schedule-group/${groupKey}`} target="_blank" className="block px-3 py-1.5 text-xs hover:bg-gray-50">Schedule</Link>
           </div>
         </details>
       </td>

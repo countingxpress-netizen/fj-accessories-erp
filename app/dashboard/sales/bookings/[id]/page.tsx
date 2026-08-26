@@ -2,6 +2,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { formatDate } from "@/lib/formatDate";
 import { getBookingStatusLabel } from "@/lib/bookingStatus";
+import { calcTubeCutting, calcRequiredLbs } from "@/lib/calcTubeCutting";
 import { notFound } from "next/navigation";
 
 export default async function BookingViewPage({ params }: { params: Promise<{ id: string }> }) {
@@ -49,16 +50,69 @@ export default async function BookingViewPage({ params }: { params: Promise<{ id
   const uniqueChallans = Array.from(new Map(challanListForGroup.map((c) => [c.challan_no, c])).values())
     .sort((a, b) => a.challan_date.localeCompare(b.challan_date));
 
+  // Sales Invoice থেকে Price/Pcs ও Total Amount টেনে আনা
+  const { data: invoiceItems } = await supabase
+    .from("sales_invoice_items")
+    .select("booking_id, unit_price, quantity_pcs, sales_invoices(invoice_date)")
+    .in("booking_id", bookingIds);
+
+  const priceByBooking: Record<string, { unitPrice: number; totalAmount: number; latestDate: string }> = {};
+  (invoiceItems ?? []).forEach((item: any) => {
+    if (!item.booking_id) return;
+    const amount = Math.floor((item.quantity_pcs || 0) * (item.unit_price || 0));
+    const thisDate = item.sales_invoices?.invoice_date ?? "";
+    const existing = priceByBooking[item.booking_id];
+    if (!existing) {
+      priceByBooking[item.booking_id] = { unitPrice: item.unit_price, totalAmount: amount, latestDate: thisDate };
+    } else {
+      existing.totalAmount += amount;
+      if (thisDate >= existing.latestDate) {
+        existing.unitPrice = item.unit_price;
+        existing.latestDate = thisDate;
+      }
+    }
+  });
+
   const first = bookings[0];
 
   const statusParts = bookings.map((b: any) => {
     const s = getBookingStatusLabel(b, deliveredMap[b.id] ?? 0, Array.from(challanNosByBooking[b.id] ?? []));
-    return bookings.length > 1 ? `${b.style || b.product_details || "-"}: ${s.label}` : s.label;
+    return s.label;
   });
+
+  // পরবর্তী Schedule ধাপ নির্ণয়
+  const anyHasPrint = bookings.some((b: any) => b.has_print);
+  const allBlowingDone = bookings.every((b: any) => b.production_orders?.[0]?.blowing_completed_at);
+  const allPrintingDone = bookings.every((b: any) => b.production_orders?.[0]?.printing_completed_at);
+  const allCuttingDone = bookings.every((b: any) => b.production_orders?.[0]?.cutting_completed_at);
+
+  let nextScheduleType: "blowing" | "printing" | "cutting" | null = null;
+  let nextScheduleLabel = "";
+  if (!allBlowingDone) {
+    nextScheduleType = "blowing";
+    nextScheduleLabel = "Create Blowing Schedule";
+  } else if (anyHasPrint && !allPrintingDone) {
+    nextScheduleType = "printing";
+    nextScheduleLabel = "Create Printing Schedule";
+  } else if (!allCuttingDone) {
+    nextScheduleType = "cutting";
+    nextScheduleLabel = "Create Cutting Schedule";
+  }
 
   return (
     <div>
-      <Link href="/dashboard/sales/bookings" className="text-sm text-gray-500 hover:underline">← সব Booking-এর তালিকায় ফিরুন</Link>
+      <div className="flex items-center justify-between">
+        <Link href="/dashboard/sales/bookings" className="text-sm text-gray-500 hover:underline">← সব Booking-এর তালিকায় ফিরুন</Link>
+        {nextScheduleType && (
+          <Link
+            href={`/dashboard/production/schedule-group/${groupId}?type=${nextScheduleType}`}
+            target="_blank"
+            className="rounded-lg bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-700"
+          >
+            {nextScheduleLabel}
+          </Link>
+        )}
+      </div>
 
       <div className="rounded-xl border-2 border-gray-800 bg-white mt-2 overflow-hidden">
         <div className="text-center border-b-2 border-gray-800 py-3">
@@ -86,47 +140,64 @@ export default async function BookingViewPage({ params }: { params: Promise<{ id
                 <strong>Garments-</strong> {first.garments?.name || first.garments_name || "-"}<br />
                 <strong>Address -</strong> {first.garments?.address || "-"}
               </td>
-              <td className="border border-gray-800 px-3 py-2"><strong>Delivery Point-</strong> {first.delivery_point || "-"}</td>
+              <td className="border border-gray-800 px-3 py-2"><strong>Delivery Point-</strong> {first.garments?.name || first.garments_name || "-"}</td>
             </tr>
           </tbody>
         </table>
 
+        <div className="overflow-x-auto">
         <table className="w-full text-sm border-collapse">
           <thead>
             <tr className="bg-gray-50">
-              <th className="border border-gray-800 px-2 py-2">Style</th>
+              <th className="border border-gray-800 px-2 py-2">Sl No</th>
+              <th className="border border-gray-800 px-2 py-2">Style No</th>
               <th className="border border-gray-800 px-2 py-2">Product Details</th>
               <th className="border border-gray-800 px-2 py-2">Measurement</th>
+              <th className="border border-gray-800 px-2 py-2">Quantity</th>
+              <th className="border border-gray-800 px-2 py-2">Price/Pcs</th>
+              <th className="border border-gray-800 px-2 py-2">Total Amount</th>
+              <th className="border border-gray-800 px-2 py-2">Tube</th>
+              <th className="border border-gray-800 px-2 py-2">Cutting</th>
               <th className="border border-gray-800 px-2 py-2">Order Thickness</th>
               <th className="border border-gray-800 px-2 py-2">Production Thickness</th>
               <th className="border border-gray-800 px-2 py-2">PI Thickness</th>
-              <th className="border border-gray-800 px-2 py-2">Quantity</th>
-              <th className="border border-gray-800 px-2 py-2">Required LBS</th>
+              <th className="border border-gray-800 px-2 py-2">Order LBS</th>
+              <th className="border border-gray-800 px-2 py-2">Production LBS</th>
             </tr>
           </thead>
           <tbody>
-            {bookings.map((b: any) => {
+            {bookings.map((b: any, i: number) => {
               const unit = b.measurement_unit;
               const L = b.length_val, W = b.width_val, F = b.flap_val, G = b.gusset_val;
               const measurement =
                 b.measurement_type === "simple" ? `L-${L} x W-${W}${unit}` :
                 b.measurement_type === "gusset" ? `L-${L} x W-${W} + G-${G}${unit}` :
                 b.measurement_type === "adhesive" ? `L-${L} + F-${F} x W-${W}${unit}` : "-";
+              const { tube, cutting } = calcTubeCutting(b);
+              const orderLbs = calcRequiredLbs(b, b.thickness_mm);
+              const price = priceByBooking[b.id];
               return (
                 <tr key={b.id}>
+                  <td className="border border-gray-800 px-2 py-2 text-center">{i + 1}</td>
                   <td className="border border-gray-800 px-2 py-2 text-center">{b.style || "-"}</td>
                   <td className="border border-gray-800 px-2 py-2">{b.product_details || b.finished_goods?.product_name || "-"}</td>
                   <td className="border border-gray-800 px-2 py-2">{measurement}</td>
+                  <td className="border border-gray-800 px-2 py-2 text-right">{b.quantity_pcs}</td>
+                  <td className="border border-gray-800 px-2 py-2 text-right">{price ? price.unitPrice.toFixed(2) : "-"}</td>
+                  <td className="border border-gray-800 px-2 py-2 text-right">{price ? price.totalAmount.toFixed(2) : "-"}</td>
+                  <td className="border border-gray-800 px-2 py-2 text-center">{tube.toFixed(2)} {unit}</td>
+                  <td className="border border-gray-800 px-2 py-2 text-center">{cutting.toFixed(2)} {unit}</td>
                   <td className="border border-gray-800 px-2 py-2 text-center">{b.thickness_mm}</td>
                   <td className="border border-gray-800 px-2 py-2 text-center">{b.production_thickness_mm}</td>
                   <td className="border border-gray-800 px-2 py-2 text-center">{b.pi_thickness_mm ?? "-"}</td>
-                  <td className="border border-gray-800 px-2 py-2 text-right">{b.quantity_pcs}</td>
+                  <td className="border border-gray-800 px-2 py-2 text-right">{orderLbs.toFixed(2)}</td>
                   <td className="border border-gray-800 px-2 py-2 text-right">{b.required_lbs}</td>
                 </tr>
               );
             })}
           </tbody>
         </table>
+        </div>
 
         <div className="px-3 py-3 text-sm">
           <p className="font-semibold mb-1">Delivery Challan No/Nos: -</p>

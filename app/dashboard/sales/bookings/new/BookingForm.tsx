@@ -3,6 +3,7 @@ import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { generateNextDocNo } from "@/lib/docNumber";
+import { toInches } from "@/lib/calcTubeCutting";
 
 type Customer = { id: string; name: string; default_print_rate: number | null; default_adhesive_rate: number | null };
 type Warehouse = { id: string; name: string };
@@ -131,11 +132,9 @@ export default function BookingForm({
 
   const calculated = useMemo(() => {
     if (!qty || !tube || !cutting || !T || !PT) return null;
-    const tubeInch = unit === "cm" ? tube / CM_PER_INCH : tube;
-    const cuttingInch = unit === "cm" ? cutting / CM_PER_INCH : cutting;
-        const baseLbs = (qty * tubeInch * cuttingInch * PT) / 75000;
-    const finalLbsRaw = baseLbs * 1.01;
-    const finalLbs = Math.ceil(finalLbsRaw); // Fraction থাকলে Round Up
+    const { tubeInch, cuttingInch } = toInches(tube, cutting, unit, materialType, hasPrint);
+    const baseLbs = (qty * tubeInch * cuttingInch * PT) / 75000;
+    const finalLbs = Math.ceil(baseLbs); // Fraction থাকলে Round Up
 
     let lldpe = 0, ldpe = 0, pp = 0, rld = 0;
     let customSplit: { material_id: string; qty: number }[] = [];
@@ -161,7 +160,7 @@ export default function BookingForm({
       bags: finalLbs / LBS_PER_BAG,
       lldpe, ldpe, pp, rld, customSplit,
     };
-  }, [qty, tube, cutting, T, PT, unit, materialType, customLines]);
+  }, [qty, tube, cutting, T, PT, unit, materialType, hasPrint, customLines]);
 
   async function checkDuplicateStyle() {
     if (!customerId || !style) return;
@@ -418,23 +417,6 @@ export default function BookingForm({
     const materialMap: Record<string, string> = {};
     (allMaterials ?? []).forEach((m) => (materialMap[m.material_name] = m.id));
 
-    // সব item-এর স্টক আগে থেকে যাচাই করুন
-    for (const item of allItems) {
-      for (const m of item.materialsNeeded) {
-        const materialId = materialMap[m.name];
-        if (!materialId) continue;
-        const { data: stock } = await supabase
-          .from("raw_material_stock").select("quantity_lbs")
-          .eq("material_id", materialId).eq("warehouse_id", item.warehouseId).maybeSingle();
-        const currentQty = stock?.quantity_lbs ?? 0;
-        if (currentQty < m.qty) {
-          setLoading(false);
-          setError(`"${item.style || item.productDetails}" — ${m.name}-এ পর্যাপ্ত স্টক নেই (আছে ${currentQty.toFixed(2)} Lbs, প্রয়োজন ${m.qty.toFixed(2)} Lbs)।`);
-          return;
-        }
-      }
-    }
-
     const { buyerId: resolvedBuyerId } = await ensureBuyerForCurrentCustomer();
     const { garmentsId: resolvedGarmentsId, garmentsName: resolvedGarmentsName } = await ensureGarmentsForCurrentCustomer();
 
@@ -516,6 +498,11 @@ export default function BookingForm({
           await supabase.from("raw_material_stock")
             .update({ quantity_lbs: stock.quantity_lbs - m.qty, updated_at: new Date().toISOString() })
             .eq("id", stock.id);
+        } else {
+          // স্টক রো আগে থেকে না থাকলেও তৈরি করুন — ঘাটতি (negative) হলেও যেন দেখা যায়
+          await supabase.from("raw_material_stock").insert({
+            material_id: materialId, warehouse_id: item.warehouseId, quantity_lbs: -m.qty,
+          });
         }
 
         await supabase.from("stock_ledger").insert({
@@ -743,7 +730,7 @@ const selected = customers.find((c) => String(c.id) === String(newCustomerId));
             Tube: {calculated.tube.toFixed(2)} {unit} | Cutting: {calculated.cutting.toFixed(2)} {unit}
           </p>
           <p className="text-sm text-blue-800">
-            Required (1% সহ): <strong>{calculated.finalLbs.toFixed(2)} Lbs</strong> ≈ {calculated.kg.toFixed(2)} Kg ≈ {calculated.bags.toFixed(2)} Bags
+            Required: <strong>{calculated.finalLbs.toFixed(2)} Lbs</strong> ≈ {calculated.kg.toFixed(2)} Kg ≈ {calculated.bags.toFixed(2)} Bags
           </p>
           {materialType === "pe_standard" && (
             <p className="text-sm text-blue-800">LLDPE: {calculated.lldpe.toFixed(2)} Lbs | LDPE: {calculated.ldpe.toFixed(2)} Lbs</p>

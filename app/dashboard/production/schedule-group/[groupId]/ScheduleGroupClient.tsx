@@ -28,10 +28,10 @@ const titles: Record<string, string> = {
 };
 
 export default function ScheduleGroupClient({
-  bookings, company, groupId,
-}: { bookings: any[]; company: any; groupId: string }) {
+  bookings, company, groupId, initialType,
+}: { bookings: any[]; company: any; groupId: string; initialType?: "blowing" | "printing" | "cutting" }) {
   const anyHasPrint = bookings.some((b) => b.has_print);
-  const [scheduleType, setScheduleType] = useState<"blowing" | "printing" | "cutting">("blowing");
+  const [scheduleType, setScheduleType] = useState<"blowing" | "printing" | "cutting">(initialType ?? "blowing");
   const [operatorName, setOperatorName] = useState("");
   const [remarks, setRemarks] = useState<Record<string, Record<string, string>>>(() => {
     const initial: Record<string, Record<string, string>> = { blowing: {}, printing: {}, cutting: {} };
