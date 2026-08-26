@@ -11,6 +11,16 @@ function fmt(n: number) {
   return n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+function formatMeasurement(b: any) {
+  if (!b) return "-";
+  const unit = b.measurement_unit;
+  const L = b.length_val, W = b.width_val, F = b.flap_val, G = b.gusset_val;
+  if (b.measurement_type === "simple") return `L-${L} x W-${W} ${unit}`;
+  if (b.measurement_type === "gusset") return `L-${L} x W-${W} + G-${G} ${unit}`;
+  if (b.measurement_type === "adhesive") return `L-${L} + F-${F} x W-${W} ${unit}`;
+  return "-";
+}
+
 export default async function InvoicePrintCustomerPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const supabase = await createClient();
@@ -19,7 +29,7 @@ export default async function InvoicePrintCustomerPage({ params }: { params: Pro
     .from("sales_invoices")
     .select(`*, customers(name, address, phone),
       sales_invoice_items(quantity_pcs, unit_price,
-        bookings(booking_no, style, required_lbs, buyer_id),
+        bookings(booking_no, style, required_lbs, buyer_id, measurement_type, measurement_unit, length_val, width_val, flap_val, gusset_val),
         finished_goods(product_name))`)
     .eq("id", id)
     .single();
@@ -84,6 +94,7 @@ export default async function InvoicePrintCustomerPage({ params }: { params: Pro
           <tr className="border-b-2 border-gray-800">
             <th className="text-left py-2">Style</th>
             <th className="text-left py-2">Item Description</th>
+            <th className="text-left py-2">Measurement</th>
             <th className="text-right py-2">Qty (Pcs)</th>
             <th className="text-right py-2">Unit Price</th>
             <th className="text-right py-2">Amount</th>
@@ -94,6 +105,7 @@ export default async function InvoicePrintCustomerPage({ params }: { params: Pro
             <tr key={i} className="border-b">
               <td className="py-2 text-gray-600">{item.bookings?.style || item.bookings?.booking_no || "-"}</td>
               <td className="py-2">{item.finished_goods?.product_name}</td>
+              <td className="py-2 text-gray-600 text-xs">{formatMeasurement(item.bookings)}</td>
               <td className="text-right py-2">{item.quantity_pcs}</td>
               <td className="text-right py-2">{item.customerUnitPrice.toFixed(2)}</td>
               <td className="text-right py-2">{fmt(item.customerAmount)}</td>
@@ -102,7 +114,7 @@ export default async function InvoicePrintCustomerPage({ params }: { params: Pro
         </tbody>
         <tfoot>
           <tr className="border-t-2 border-gray-800 font-semibold">
-            <td colSpan={4} className="text-right py-2">Total</td>
+            <td colSpan={5} className="text-right py-2">Total</td>
             <td className="text-right py-2">{fmt(total)}</td>
           </tr>
         </tfoot>
