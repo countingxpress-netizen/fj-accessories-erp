@@ -4,6 +4,7 @@ const links = [
   { label: "Warehouses", href: "/dashboard/inventory/warehouses", desc: "গুদামের তালিকা তৈরি ও পরিচালনা" },
   { label: "Raw Material Stock", href: "/dashboard/inventory/raw-material", desc: "LLDPE, LDPE, PP, Recycled Chips-এর স্টক (Lbs/Kg/Bags)" },
   { label: "Stock Ledger", href: "/dashboard/inventory/stock-ledger", desc: "সব স্টক লেনদেনের ইতিহাস" },
+  { label: "Warehouse Transfer", href: "/dashboard/inventory/warehouse-transfer", desc: "গুদাম থেকে গুদামে স্টক/ওয়েস্টেজ ট্রান্সফার রেজিস্টার" },
 ];
 
 export default function InventoryHomePage() {

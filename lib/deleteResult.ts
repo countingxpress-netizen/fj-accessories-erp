@@ -30,6 +30,7 @@ const FK_TABLE_LABELS: Record<string, string> = {
   buyers: "Buyer",
   garments: "Garments",
   finished_goods: "Product",
+  warehouse_transfers: "Warehouse Transfer",
 };
 
 /**

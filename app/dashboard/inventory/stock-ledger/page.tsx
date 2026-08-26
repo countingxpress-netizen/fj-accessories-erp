@@ -8,6 +8,8 @@ const referenceLabels: Record<string, string> = {
   production: "Production",
   delivery: "Delivery",
   wastage: "Wastage",
+  stock_transfer: "Warehouse Transfer",
+  wastage_transfer: "Wastage Transfer",
 };
 
 export default async function StockLedgerPage({

@@ -18,6 +18,7 @@ export default function BuyerRow({
   const [adhesiveRatePerInch, setAdhesiveRatePerInch] = useState(String(buyer.adhesive_rate_per_inch ?? ""));
   const [printColorsDefault, setPrintColorsDefault] = useState(String(buyer.print_colors_default ?? ""));
   const [colorQuantity, setColorQuantity] = useState(String(buyer.color_quantity ?? ""));
+  const [markupPercentage, setMarkupPercentage] = useState(String(buyer.markup_percentage ?? 2));
   const [loading, setLoading] = useState(false);
   const router = useRouter();
   const supabase = createClient();
@@ -37,6 +38,7 @@ export default function BuyerRow({
       adhesive_rate_per_inch: parseFloat(adhesiveRatePerInch) || null,
       print_colors_default: normalizedPrintColorsDefault,
       color_quantity: normalizedColorQuantity,
+      markup_percentage: parseFloat(markupPercentage) || 0,
     }).eq("id", buyer.id);
     setLoading(false);
 
@@ -94,6 +96,7 @@ export default function BuyerRow({
         <td className="px-4 py-2"><input type="number" step="0.001" value={adhesiveRatePerInch} onChange={(e) => setAdhesiveRatePerInch(e.target.value)} className="w-28 rounded border px-2 py-1 text-sm" placeholder="Adh Rate" /></td>
         <td className="px-4 py-2"><input type="number" min="0" step="0.0001" value={printColorsDefault} onChange={(e) => setPrintColorsDefault(e.target.value)} className="w-32 rounded border px-2 py-1 text-sm" placeholder="0.20/color/pc" /></td>
         <td className="px-4 py-2"><input type="number" min="0" step="1" value={String(buyer.color_quantity ?? colorQuantity)} onChange={(e) => setColorQuantity(e.target.value)} className="w-24 rounded border px-2 py-1 text-sm" /></td>
+        <td className="px-4 py-2"><input type="number" step="0.01" value={markupPercentage} onChange={(e) => setMarkupPercentage(e.target.value)} className="w-20 rounded border px-2 py-1 text-sm" /></td>
         <td className="px-4 py-2 text-right whitespace-nowrap">
           <button onClick={handleSave} disabled={loading} className="rounded bg-green-600 px-3 py-1 text-xs text-white mr-1">সেভ</button>
           <button onClick={() => setEditing(false)} className="rounded bg-gray-200 px-3 py-1 text-xs text-gray-700">বাতিল</button>
@@ -113,6 +116,7 @@ export default function BuyerRow({
       <td className="px-4 py-2 text-gray-700">{buyer.adhesive_rate_per_inch ?? "0.02"}</td>
       <td className="px-4 py-2 text-gray-700">{buyer.print_colors_default ?? "-"}</td>
       <td className="px-4 py-2 text-gray-700">{buyer.color_quantity ?? "-"}</td>
+      <td className="px-4 py-2 text-gray-700">{buyer.markup_percentage ?? 2}%</td>
       <td className="px-4 py-2 text-right whitespace-nowrap">
         <button onClick={() => setEditing(true)} className="rounded bg-blue-50 px-3 py-1 text-xs text-blue-700 mr-2 hover:bg-blue-100">Edit</button>
         <button onClick={handleDelete} className="rounded bg-red-50 px-3 py-1 text-xs text-red-700 hover:bg-red-100">Delete</button>

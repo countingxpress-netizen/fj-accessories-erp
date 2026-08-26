@@ -17,6 +17,7 @@ export default function AddBuyerForm({ customers }: { customers: Customer[] }) {
   const [adhesiveRatePerInch, setAdhesiveRatePerInch] = useState("");
   const [printColorsDefault, setPrintColorsDefault] = useState("");
   const [colorQuantity, setColorQuantity] = useState("");
+  const [markupPercentage, setMarkupPercentage] = useState("2");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const router = useRouter();
@@ -42,6 +43,7 @@ export default function AddBuyerForm({ customers }: { customers: Customer[] }) {
       adhesive_rate_per_inch: parseFloat(adhesiveRatePerInch) || null,
       print_colors_default: normalizedPrintColorsDefault,
       color_quantity: normalizedColorQuantity,
+      markup_percentage: parseFloat(markupPercentage) || 0,
     });
     setLoading(false);
     if (error) {
@@ -51,7 +53,7 @@ export default function AddBuyerForm({ customers }: { customers: Customer[] }) {
       setError(`${error.message}${hint}`);
       return;
     }
-    setName(""); setPercentageValue("0"); setRateValue("0"); setPiThicknessMm(""); setBookingThicknessMm(""); setProductionThicknessMm(""); setAdhesiveRatePerInch("0.02"); setPrintColorsDefault(""); setColorQuantity("");
+    setName(""); setPercentageValue("0"); setRateValue("0"); setPiThicknessMm(""); setBookingThicknessMm(""); setProductionThicknessMm(""); setAdhesiveRatePerInch("0.02"); setPrintColorsDefault(""); setColorQuantity(""); setMarkupPercentage("2");
     router.refresh();
   }
 
@@ -122,6 +124,11 @@ export default function AddBuyerForm({ customers }: { customers: Customer[] }) {
         <div className="flex flex-col">
           <label className="text-xs text-gray-500">Color Quantity</label>
           <input type="number" min="0" value={colorQuantity} onChange={(e) => setColorQuantity(e.target.value)} className="rounded-lg border px-2 py-1 text-sm w-28" />
+        </div>
+
+        <div className="flex flex-col">
+          <label className="text-xs text-gray-500">AT Markup %</label>
+          <input type="number" step="0.01" value={markupPercentage} onChange={(e) => setMarkupPercentage(e.target.value)} className="rounded-lg border px-2 py-1 text-sm w-24" placeholder="2" />
         </div>
 
         <div className="flex items-end">

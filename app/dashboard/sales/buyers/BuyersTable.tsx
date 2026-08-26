@@ -63,6 +63,7 @@ export default function BuyersTable({
                     <th className="px-4 py-2">Adhesive Rate/Inch</th>
                     <th className="px-4 py-2">Print/Color/Pc</th>
                     <th className="px-4 py-2">Color Quantity</th>
+                    <th className="px-4 py-2">AT Markup %</th>
                     <th className="px-4 py-2 text-right">Action</th>
                   </tr>
                 </thead>

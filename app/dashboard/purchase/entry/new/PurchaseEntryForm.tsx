@@ -4,10 +4,13 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { generateNextDocNo } from "@/lib/docNumber";
 
+const LBS_PER_BAG = 55;
+
 type Supplier = { id: string; name: string };
 type Warehouse = { id: string; name: string };
 type Material = { id: string; material_name: string };
-type Line = { material_id: string; quantity: string; rate: string };
+type Unit = "lbs" | "bags";
+type Line = { material_id: string; quantity: string; unit: Unit; rate: string };
 
 // Material নাম অনুযায়ী Chart of Accounts কোড ম্যাপিং
 const materialAccountCode: Record<string, string> = {
@@ -16,6 +19,11 @@ const materialAccountCode: Record<string, string> = {
   "PP": "1202",
   "Recycled Chips": "1203",
 };
+
+function lineQuantityLbs(l: Line): number {
+  const qty = parseFloat(l.quantity) || 0;
+  return l.unit === "bags" ? qty * LBS_PER_BAG : qty;
+}
 
 export default function PurchaseEntryForm({
   suppliers,
@@ -30,7 +38,12 @@ export default function PurchaseEntryForm({
   const [warehouseId, setWarehouseId] = useState("");
   const [entryDate, setEntryDate] = useState(new Date().toISOString().slice(0, 10));
   const [invoiceNo, setInvoiceNo] = useState("");
-  const [lines, setLines] = useState<Line[]>([{ material_id: "", quantity: "", rate: "" }]);
+  const [isCash, setIsCash] = useState(false);
+  const [purchaseSource, setPurchaseSource] = useState<"local" | "import">("local");
+  const [lcNo, setLcNo] = useState("");
+  const [lcDate, setLcDate] = useState("");
+  const [billOfEntryNo, setBillOfEntryNo] = useState("");
+  const [lines, setLines] = useState<Line[]>([{ material_id: "", quantity: "", unit: "lbs", rate: "" }]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const router = useRouter();
@@ -40,14 +53,14 @@ export default function PurchaseEntryForm({
     setLines((prev) => prev.map((l, idx) => (idx === i ? { ...l, [field]: value } : l)));
   }
   function addLine() {
-    setLines((prev) => [...prev, { material_id: "", quantity: "", rate: "" }]);
+    setLines((prev) => [...prev, { material_id: "", quantity: "", unit: "lbs", rate: "" }]);
   }
   function removeLine(i: number) {
     setLines((prev) => prev.filter((_, idx) => idx !== i));
   }
 
   const totalAmount = lines.reduce(
-    (sum, l) => sum + (parseFloat(l.quantity) || 0) * (parseFloat(l.rate) || 0),
+    (sum, l) => sum + lineQuantityLbs(l) * (parseFloat(l.rate) || 0),
     0
   );
 
@@ -60,6 +73,10 @@ export default function PurchaseEntryForm({
       setError("Supplier, Warehouse এবং অন্তত ১টা সঠিক লাইন থাকতে হবে।");
       return;
     }
+    if (purchaseSource === "import" && !lcNo) {
+      setError("Import Purchase-এর জন্য LC No দিতে হবে।");
+      return;
+    }
 
     setLoading(true);
 
@@ -67,7 +84,17 @@ export default function PurchaseEntryForm({
     const entryNo = await generateNextDocNo(supabase, "purchase_entries", "entry_no", "PE", "entry_date", entryDate);
     const { data: entry, error: entryError } = await supabase
       .from("purchase_entries")
-      .insert({ entry_no: entryNo, supplier_id: supplierId, entry_date: entryDate, invoice_no: invoiceNo })
+      .insert({
+        entry_no: entryNo,
+        supplier_id: supplierId,
+        entry_date: entryDate,
+        invoice_no: invoiceNo,
+        payment_type: isCash ? "cash" : "credit",
+        purchase_source: purchaseSource,
+        lc_no: purchaseSource === "import" ? lcNo || null : null,
+        lc_date: purchaseSource === "import" ? lcDate || null : null,
+        bill_of_entry_no: purchaseSource === "import" ? billOfEntryNo || null : null,
+      })
       .select()
       .single();
 
@@ -81,7 +108,9 @@ export default function PurchaseEntryForm({
     const itemsToInsert = validLines.map((l) => ({
       entry_id: entry.id,
       material_id: l.material_id,
-      quantity_lbs: parseFloat(l.quantity),
+      quantity_lbs: lineQuantityLbs(l),
+      unit: l.unit,
+      entered_quantity: parseFloat(l.quantity),
       rate_per_lbs: parseFloat(l.rate),
     }));
     const { error: itemsError } = await supabase.from("purchase_entry_items").insert(itemsToInsert);
@@ -93,7 +122,7 @@ export default function PurchaseEntryForm({
 
     // ৩. প্রতিটা material-এর জন্য raw_material_stock আপডেট + stock_ledger এন্ট্রি
     for (const l of validLines) {
-      const qty = parseFloat(l.quantity);
+      const qty = lineQuantityLbs(l);
 
       const { data: existingStock } = await supabase
         .from("raw_material_stock")
@@ -125,16 +154,18 @@ export default function PurchaseEntryForm({
       });
     }
 
-    // ৪. Accounts Payable অ্যাকাউন্ট খুঁজুন
-    const { data: apAccount } = await supabase
+    // ৪. Cash হলে Cash (1000), না হলে Accounts Payable (2000) অ্যাকাউন্ট খুঁজুন
+    const creditAccountCode = isCash ? "1000" : "2000";
+    const creditAccountLabel = isCash ? "Cash (কোড 1000)" : "Accounts Payable (কোড 2000)";
+    const { data: creditAccount } = await supabase
       .from("chart_of_accounts")
       .select("id")
-      .eq("account_code", "2000")
+      .eq("account_code", creditAccountCode)
       .single();
 
-    if (!apAccount) {
+    if (!creditAccount) {
       setLoading(false);
-      setError("Accounts Payable (কোড 2000) অ্যাকাউন্ট খুঁজে পাওয়া যায়নি।");
+      setError(`${creditAccountLabel} অ্যাকাউন্ট খুঁজে পাওয়া যায়নি।`);
       return;
     }
 
@@ -146,10 +177,11 @@ export default function PurchaseEntryForm({
       if (!code) continue;
       const { data: acc } = await supabase.from("chart_of_accounts").select("id").eq("account_code", code).single();
       if (acc) {
+        const qtyLbs = lineQuantityLbs(l);
         debitLines.push({
           account_id: acc.id,
-          amount: (parseFloat(l.quantity) * parseFloat(l.rate)).toFixed(2),
-          memo: `${material?.material_name} - ${l.quantity} Lbs @ ${l.rate}`,
+          amount: (qtyLbs * parseFloat(l.rate)).toFixed(2),
+          memo: `${material?.material_name} - ${l.quantity} ${l.unit === "bags" ? "Bags" : "Lbs"} @ ${l.rate}/Lbs`,
         });
       }
     }
@@ -176,7 +208,7 @@ export default function PurchaseEntryForm({
       .insert({
         voucher_no: voucherNo,
         voucher_date: entryDate,
-        narration: `Purchase from ${supplierName}${invoiceNo ? ", Invoice " + invoiceNo : ""}`,
+        narration: `Purchase from ${supplierName}${invoiceNo ? ", Invoice " + invoiceNo : ""} (${isCash ? "Cash" : "Credit"})`,
       })
       .select()
       .single();
@@ -199,10 +231,10 @@ export default function PurchaseEntryForm({
       })),
       {
         voucher_id: voucher.id,
-        account_id: apAccount.id,
+        account_id: creditAccount.id,
         debit: 0,
         credit: totalAmount,
-        memo: `Payable to ${supplierName}`,
+        memo: isCash ? `Cash paid to ${supplierName}` : `Payable to ${supplierName}`,
       },
     ];
 
@@ -246,12 +278,52 @@ export default function PurchaseEntryForm({
         </div>
       </div>
 
+      <div className="flex flex-wrap items-end gap-4 rounded-lg border bg-gray-50 p-3">
+        <div>
+          <span className="block text-sm text-gray-600 mb-1">Payment</span>
+          <label className="flex items-center gap-2 text-sm">
+            <input type="checkbox" checked={isCash} onChange={(e) => setIsCash(e.target.checked)} />
+            নগদে ক্রয় (Cash) — টিক না থাকলে বাকিতে (Credit)
+          </label>
+        </div>
+        <div>
+          <span className="block text-sm text-gray-600 mb-1">Purchase Source</span>
+          <div className="flex gap-3 text-sm">
+            <label className="flex items-center gap-1">
+              <input type="radio" name="purchaseSource" checked={purchaseSource === "local"} onChange={() => setPurchaseSource("local")} />
+              Local
+            </label>
+            <label className="flex items-center gap-1">
+              <input type="radio" name="purchaseSource" checked={purchaseSource === "import"} onChange={() => setPurchaseSource("import")} />
+              Import
+            </label>
+          </div>
+        </div>
+        {purchaseSource === "import" && (
+          <>
+            <div>
+              <label className="block text-sm text-gray-600 mb-1">LC No</label>
+              <input value={lcNo} onChange={(e) => setLcNo(e.target.value)} className="rounded-lg border px-3 py-2 text-sm" required />
+            </div>
+            <div>
+              <label className="block text-sm text-gray-600 mb-1">LC Date</label>
+              <input type="date" value={lcDate} onChange={(e) => setLcDate(e.target.value)} className="rounded-lg border px-3 py-2 text-sm" />
+            </div>
+            <div>
+              <label className="block text-sm text-gray-600 mb-1">Bill of Entry No</label>
+              <input value={billOfEntryNo} onChange={(e) => setBillOfEntryNo(e.target.value)} className="rounded-lg border px-3 py-2 text-sm" />
+            </div>
+          </>
+        )}
+      </div>
+
       <div className="overflow-hidden rounded-lg border">
         <table className="w-full text-sm">
           <thead className="bg-gray-50 text-left text-gray-600">
             <tr>
               <th className="px-3 py-2">Material</th>
-              <th className="px-3 py-2 w-32">Quantity (Lbs)</th>
+              <th className="px-3 py-2 w-28">Quantity</th>
+              <th className="px-3 py-2 w-24">Unit</th>
               <th className="px-3 py-2 w-32">Rate/Lbs</th>
               <th className="px-3 py-2 w-32">Amount</th>
               <th className="px-3 py-2 w-16"></th>
@@ -270,10 +342,16 @@ export default function PurchaseEntryForm({
                   <input type="number" step="0.01" value={l.quantity} onChange={(e) => updateLine(i, "quantity", e.target.value)} className="w-full rounded border px-2 py-1 text-sm" />
                 </td>
                 <td className="px-3 py-2">
+                  <select value={l.unit} onChange={(e) => updateLine(i, "unit", e.target.value)} className="w-full rounded border px-2 py-1 text-sm">
+                    <option value="lbs">Lbs</option>
+                    <option value="bags">Bags</option>
+                  </select>
+                </td>
+                <td className="px-3 py-2">
                   <input type="number" step="0.01" value={l.rate} onChange={(e) => updateLine(i, "rate", e.target.value)} className="w-full rounded border px-2 py-1 text-sm" />
                 </td>
                 <td className="px-3 py-2 text-right">
-                  {((parseFloat(l.quantity) || 0) * (parseFloat(l.rate) || 0)).toFixed(2)}
+                  {(lineQuantityLbs(l) * (parseFloat(l.rate) || 0)).toFixed(2)}
                 </td>
                 <td className="px-3 py-2 text-right">
                   {lines.length > 1 && (
@@ -285,7 +363,7 @@ export default function PurchaseEntryForm({
           </tbody>
           <tfoot className="bg-gray-50 border-t font-medium">
             <tr>
-              <td colSpan={3} className="px-3 py-2 text-right">Total</td>
+              <td colSpan={4} className="px-3 py-2 text-right">Total</td>
               <td className="px-3 py-2 text-right">{totalAmount.toFixed(2)}</td>
               <td></td>
             </tr>

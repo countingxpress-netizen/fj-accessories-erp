@@ -44,6 +44,9 @@ export default function InvoiceRow({
       <td className="px-4 py-2 text-right">{total.toFixed(2)}</td>
       <td className="px-4 py-2 text-right whitespace-nowrap">
         <Link href={`/dashboard/sales/invoices/${invoice.id}/print`} target="_blank" className="text-blue-700 hover:underline text-xs mr-2">View</Link>
+        {invoice.customers?.name === "AT Accessories" && (
+          <Link href={`/dashboard/sales/invoices/${invoice.id}/print-customer`} target="_blank" className="text-purple-700 hover:underline text-xs mr-2">Submit to Customer</Link>
+        )}
         <Link href={`/dashboard/sales/invoices/${invoice.id}/edit`} className="rounded bg-blue-50 px-2 py-1 text-xs text-blue-700 hover:bg-blue-100 mr-2">Edit</Link>
         <button onClick={handleDelete} className="rounded bg-red-50 px-2 py-1 text-xs text-red-700 hover:bg-red-100">Delete</button>
       </td>

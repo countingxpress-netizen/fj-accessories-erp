@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { formatDate } from "@/lib/formatDate";
 import { notFound } from "next/navigation";
+import Link from "next/link";
 import PrintButton from "@/app/dashboard/PrintButton";
 import { amountInWords } from "@/lib/numberToWords";
 
@@ -72,6 +73,13 @@ export default async function InvoicePrintPage({ params }: { params: Promise<{ i
   return (
     <div className="max-w-3xl mx-auto p-8 bg-white text-gray-900 print:p-0">
       <PrintButton />
+      {invoice.customers?.name === "AT Accessories" && (
+        <div className="print:hidden mb-4 flex justify-end">
+          <Link href={`/dashboard/sales/invoices/${invoice.id}/print-customer`} target="_blank" className="text-sm text-purple-700 hover:underline">
+            Submit to Customer ভিউ দেখুন →
+          </Link>
+        </div>
+      )}
 
       <div className="text-center mb-6 border-b pb-4">
         <h1 className="text-2xl font-bold">{company?.name}</h1>
