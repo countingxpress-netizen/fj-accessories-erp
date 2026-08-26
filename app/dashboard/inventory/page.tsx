@@ -3,7 +3,6 @@ import Link from "next/link";
 const links = [
   { label: "Warehouses", href: "/dashboard/inventory/warehouses", desc: "গুদামের তালিকা তৈরি ও পরিচালনা" },
   { label: "Raw Material Stock", href: "/dashboard/inventory/raw-material", desc: "LLDPE, LDPE, PP, Recycled Chips-এর স্টক (Lbs/Kg/Bags)" },
-  { label: "Finished Goods", href: "/dashboard/inventory/finished-goods", desc: "তৈরি পণ্যের স্পেসিফিকেশন ও স্টক" },
   { label: "Stock Ledger", href: "/dashboard/inventory/stock-ledger", desc: "সব স্টক লেনদেনের ইতিহাস" },
 ];
 

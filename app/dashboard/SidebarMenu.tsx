@@ -23,7 +23,6 @@ const menu: MenuGroup[] = [
     items: [
       { label: "Warehouses", href: "/dashboard/inventory/warehouses" },
       { label: "Raw Material Stock", href: "/dashboard/inventory/raw-material" },
-      { label: "Finished Goods", href: "/dashboard/inventory/finished-goods" },
       { label: "Stock Ledger", href: "/dashboard/inventory/stock-ledger" },
     ],
   },

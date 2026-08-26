@@ -79,9 +79,7 @@ export default async function StockReportPage() {
           <tbody>
             {(products ?? []).map((p) => (
               <tr key={p.id} className="border-t">
-                <td className="px-4 py-2">
-                  <Link href={`/dashboard/inventory/finished-goods/${p.id}`} className="hover:underline hover:text-blue-700">{p.product_name}</Link>
-                </td>
+                <td className="px-4 py-2">{p.product_name}</td>
                 <td className="px-4 py-2 text-right">{(fgTotals[p.id] ?? 0).toLocaleString()}</td>
               </tr>
             ))}
