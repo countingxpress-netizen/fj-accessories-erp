@@ -159,6 +159,7 @@ export default async function ProductionOrdersPage({
               <th className="px-4 py-2">Product</th>
               <th className="px-4 py-2">Measurement</th>
               <th className="px-4 py-2 text-right">Target</th>
+              <th className="px-4 py-2 text-right">Remaining</th>
               <th className="px-4 py-2 w-40">Produced</th>
               <th className="px-4 py-2">Stage</th>
               <th className="px-4 py-2 text-right">Action</th>
@@ -170,7 +171,7 @@ export default async function ProductionOrdersPage({
             ))}
             {currentRows.length === 0 && (
               <tr>
-                <td colSpan={8} className="px-4 py-3 text-gray-400 italic">
+                <td colSpan={9} className="px-4 py-3 text-gray-400 italic">
                   এই তালিকায় এখনো কিছু নেই
                 </td>
               </tr>
