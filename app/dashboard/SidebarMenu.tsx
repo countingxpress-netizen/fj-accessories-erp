@@ -55,6 +55,7 @@ const menu: MenuGroup[] = [
     label: "Production", href: "/dashboard/production",
     items: [
       { label: "Production Orders", href: "/dashboard/production/orders" },
+      { label: "Complete Production", href: "/dashboard/production/complete" },
       { label: "Finished Goods Receive", href: "/dashboard/production/finished-goods-receive" },
       { label: "Wastage", href: "/dashboard/production/wastage" },
     ],
