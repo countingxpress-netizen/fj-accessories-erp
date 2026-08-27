@@ -8,7 +8,7 @@ type Customer = { id: string; name: string };
 export default function AddBuyerForm({ customers }: { customers: Customer[] }) {
   const [customerId, setCustomerId] = useState("");
   const [name, setName] = useState("");
-  const [pricingRule, setPricingRule] = useState<"manual" | "percentage" | "rate_per_lbs">("manual");
+  const [pricingRule, setPricingRule] = useState<"manual" | "percentage" | "rate_per_lbs" | "rate_per_lbs_markup">("manual");
   const [percentageValue, setPercentageValue] = useState("0");
   const [rateValue, setRateValue] = useState("0");
   const [piThicknessMm, setPiThicknessMm] = useState("");
@@ -79,17 +79,18 @@ export default function AddBuyerForm({ customers }: { customers: Customer[] }) {
             <option value="manual">Manual</option>
             <option value="percentage">PI Price + %</option>
             <option value="rate_per_lbs">PI Rate/Lbs</option>
+            <option value="rate_per_lbs_markup">PI Rate/Lbs + Markup%</option>
           </select>
         </div>
 
-        {pricingRule === "percentage" && (
+        {(pricingRule === "percentage" || pricingRule === "rate_per_lbs_markup") && (
           <div className="flex flex-col">
-            <label className="text-xs text-gray-500">Value (%)</label>
+            <label className="text-xs text-gray-500">{pricingRule === "rate_per_lbs_markup" ? "Markup %" : "Value (%)"}</label>
             <input type="number" step="0.01" value={percentageValue} onChange={(e) => setPercentageValue(e.target.value)} className="rounded-lg border px-2 py-1 text-sm w-28" />
           </div>
         )}
 
-        {pricingRule === "rate_per_lbs" && (
+        {(pricingRule === "rate_per_lbs" || pricingRule === "rate_per_lbs_markup") && (
           <div className="flex flex-col">
             <label className="text-xs text-gray-500">Value (Rate/Lbs)</label>
             <input type="number" step="0.01" value={rateValue} onChange={(e) => setRateValue(e.target.value)} className="rounded-lg border px-2 py-1 text-sm w-32" />

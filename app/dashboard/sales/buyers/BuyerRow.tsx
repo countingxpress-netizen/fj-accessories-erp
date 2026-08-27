@@ -85,9 +85,10 @@ export default function BuyerRow({
               <option value="manual">Manual</option>
               <option value="percentage">% on PI</option>
               <option value="rate_per_lbs">Rate/Lbs (PI)</option>
+              <option value="rate_per_lbs_markup">Rate/Lbs + Markup% (PI)</option>
             </select>
-            {pricingRule === "percentage" && <input type="number" step="0.01" value={percentageValue} onChange={(e) => setPercentageValue(e.target.value)} className="w-20 rounded border px-2 py-1 text-sm" />}
-            {pricingRule === "rate_per_lbs" && <input type="number" step="0.01" value={rateValue} onChange={(e) => setRateValue(e.target.value)} className="w-20 rounded border px-2 py-1 text-sm" />}
+            {(pricingRule === "percentage" || pricingRule === "rate_per_lbs_markup") && <input type="number" step="0.01" value={percentageValue} onChange={(e) => setPercentageValue(e.target.value)} className="w-20 rounded border px-2 py-1 text-sm" placeholder="Markup %" />}
+            {(pricingRule === "rate_per_lbs" || pricingRule === "rate_per_lbs_markup") && <input type="number" step="0.01" value={rateValue} onChange={(e) => setRateValue(e.target.value)} className="w-20 rounded border px-2 py-1 text-sm" placeholder="Rate/Lbs" />}
           </div>
         </td>
         <td className="px-4 py-2"><input type="number" step="0.001" value={piThicknessMm} onChange={(e) => setPiThicknessMm(e.target.value)} className="w-28 rounded border px-2 py-1 text-sm" placeholder="PI Thick" /></td>
@@ -109,7 +110,12 @@ export default function BuyerRow({
     <tr className="border-t">
       {checkboxCell}
       <td className="px-4 py-2 font-medium">{buyer.name}</td>
-      <td className="px-4 py-2 text-gray-500">{buyer.pricing_rule === "percentage" ? `${buyer.percentage_value}%` : (buyer.pricing_rule === "rate_per_lbs" ? buyer.rate_per_lbs_value : "-")}</td>
+      <td className="px-4 py-2 text-gray-500">
+        {buyer.pricing_rule === "percentage" && `${buyer.percentage_value}%`}
+        {buyer.pricing_rule === "rate_per_lbs" && buyer.rate_per_lbs_value}
+        {buyer.pricing_rule === "rate_per_lbs_markup" && `${buyer.rate_per_lbs_value}/Lbs + ${buyer.percentage_value}%`}
+        {buyer.pricing_rule === "manual" && "-"}
+      </td>
       <td className="px-4 py-2 text-gray-700">{buyer.pi_thickness_mm ?? "-"}</td>
       <td className="px-4 py-2 text-gray-700">{buyer.booking_thickness_mm ?? "-"}</td>
       <td className="px-4 py-2 text-gray-700">{buyer.production_thickness_mm ?? "-"}</td>

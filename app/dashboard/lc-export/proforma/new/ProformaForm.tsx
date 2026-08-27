@@ -3,7 +3,7 @@ import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { generateNextDocNo } from "@/lib/docNumber";
-import { calcPiUnitPrice } from "@/lib/calcTubeCutting";
+import { calcPiUnitPrice, calcPiUnitPriceWithMarkup } from "@/lib/calcTubeCutting";
 import { amountInWords } from "@/lib/numberToWords";
 
 type Booking = {
@@ -12,7 +12,7 @@ type Booking = {
   buyers: { name: string } | null; merchants: { name: string } | null;
   measurement_type: string; measurement_unit: string; length_val: number; width_val: number;
   flap_val: number | null; gusset_val: number | null; pi_thickness_mm: number | null;
-  material_type: string; has_print: boolean;
+  material_type: string; has_print: boolean; print_colors: number | null; rate_per_color: number | null;
   finished_goods: { product_name: string; length_cm: number; width_cm: number; thickness: number } | null;
 };
 type Customer = { id: string; name: string; price_per_lbs: number | null };
@@ -116,6 +116,12 @@ export default function ProformaForm({
     }
     if (rule.pricing_rule === "rate_per_lbs") {
       return calcPiUnitPrice(b, rule.rate_per_lbs_value || 0);
+    }
+    if (rule.pricing_rule === "rate_per_lbs_markup") {
+      const bdtPrice = calcPiUnitPriceWithMarkup(b, rule.rate_per_lbs_value || 0, rule.percentage_value || 0, rule.adhesive_rate_per_inch);
+      if (!bdtPrice) return 0;
+      const rate = parseFloat(exchangeRate) || 122;
+      return currency === "USD" ? bdtPrice / rate : bdtPrice;
     }
     return 0;
   }

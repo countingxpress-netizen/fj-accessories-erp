@@ -53,3 +53,25 @@ export function calcPiUnitPrice(booking: any, pricePerLbs: number): number {
   const { tubeInch, cuttingInch } = toInches(width_cm, length_cm, "cm", booking.material_type, booking.has_print);
   return (pricePerLbs * tubeInch * cuttingInch * booking.pi_thickness_mm) / 75000;
 }
+
+// "PI Rate/Lbs + Markup%" pricing rule — Walmart-স্টাইল PI: calcPiUnitPrice-এর মূল খরচের
+// সাথে Adhesive/Print charge যোগ করে ২ দশমিকে রাউন্ড (পুরনো Excel-এর N কলাম), তারপর
+// Buyer-এর markup % যোগ করে BDT দাম রিটার্ন করে (Excel-এর Q কলাম — যেমন markup%=150
+// মানে ×2.5)। এক্সচেঞ্জ রেট দিয়ে ভাগ করা caller-এর কাজ (ProformaForm-এর getSuggestedPrice)।
+export function calcPiUnitPriceWithMarkup(
+  booking: any,
+  pricePerLbs: number,
+  markupPercentage: number,
+  adhesiveRatePerInch: number | null
+): number {
+  if (!booking.finished_goods || !booking.pi_thickness_mm || !pricePerLbs) return 0;
+  const { length_cm, width_cm } = booking.finished_goods;
+  const { tubeInch, cuttingInch } = toInches(width_cm, length_cm, "cm", booking.material_type, booking.has_print);
+
+  const baseBdt = (pricePerLbs * tubeInch * cuttingInch * booking.pi_thickness_mm) / 75000;
+  const adhesiveCharge = booking.measurement_type === "adhesive" ? cuttingInch * (adhesiveRatePerInch || 0) : 0;
+  const printCharge = booking.has_print ? (booking.print_colors || 0) * (booking.rate_per_color || 0) : 0;
+
+  const bdtUnitPrice = Math.round((baseBdt + adhesiveCharge + printCharge) * 100) / 100;
+  return bdtUnitPrice * (1 + (markupPercentage || 0) / 100);
+}
