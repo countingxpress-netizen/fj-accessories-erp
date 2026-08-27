@@ -50,6 +50,7 @@ export default function InvoicesTable({ invoices }: { invoices: any[] }) {
               <th className="px-4 py-2">Bookings</th>
               <th className="px-4 py-2 text-right">Qty</th>
               <th className="px-4 py-2 text-right">Total Amount</th>
+              <th className="px-4 py-2 text-right">Commission</th>
               <th className="px-4 py-2 text-right">Action</th>
             </tr>
           </thead>
@@ -58,7 +59,7 @@ export default function InvoicesTable({ invoices }: { invoices: any[] }) {
               <InvoiceRow key={inv.id} invoice={inv} selected={isSelected(inv.id)} onToggleSelect={() => toggle(inv.id)} />
             ))}
             {invoices.length === 0 && (
-              <tr><td colSpan={8} className="px-4 py-3 text-gray-400 italic">এখনো কোনো Sales Invoice নেই</td></tr>
+              <tr><td colSpan={9} className="px-4 py-3 text-gray-400 italic">এখনো কোনো Sales Invoice নেই</td></tr>
             )}
           </tbody>
         </table>

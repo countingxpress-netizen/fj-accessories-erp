@@ -3,9 +3,7 @@ import { formatDate } from "@/lib/formatDate";
 import { notFound } from "next/navigation";
 import PrintButton from "@/app/dashboard/PrintButton";
 import { amountInWords } from "@/lib/numberToWords";
-
-const DEFAULT_MARKUP_PERCENTAGE = 2;
-const FREIGHT_PER_PIECE = 0.05;
+import { AT_DEFAULT_MARKUP_PERCENTAGE, calcAtCustomerLine } from "@/lib/atCommission";
 
 function fmt(n: number) {
   return n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -45,19 +43,17 @@ export default async function InvoicePrintCustomerPage({ params }: { params: Pro
     ? await supabase.from("buyers").select("id, markup_percentage").in("id", buyerIds)
     : { data: [] };
   const markupMap: Record<string, number> = {};
-  (buyers ?? []).forEach((b: any) => (markupMap[b.id] = b.markup_percentage ?? DEFAULT_MARKUP_PERCENTAGE));
+  (buyers ?? []).forEach((b: any) => (markupMap[b.id] = b.markup_percentage ?? AT_DEFAULT_MARKUP_PERCENTAGE));
 
   // Actual Price-এর উপর Buyer-ভিত্তিক Markup % এবং প্রতি পিস Order Lbs-ভিত্তিক অতিরিক্ত চার্জ যোগ করে
-  // Customer-কে দেখানোর Unit Price বের করা হচ্ছে। এই পেজ শুধুই একটা print variant —
-  // হিসাব/Ledger-এর জন্য আসল Unit Price (normal invoice print) ব্যবহার হয়।
+  // Customer-কে দেখানোর Unit Price বের করা হচ্ছে (lib/atCommission.ts-এর শেয়ার্ড ফর্মুলা)।
+  // এই পেজ শুধুই একটা print variant — হিসাব/Ledger-এর জন্য আসল Unit Price (normal invoice print) ব্যবহার হয়।
   const items = (invoice.sales_invoice_items ?? []).map((item: any) => {
     const actualPrice = item.unit_price || 0;
     const qty = item.quantity_pcs || 0;
     const orderLbs = item.bookings?.required_lbs || 0;
-    const markupPct = item.bookings?.buyer_id ? (markupMap[item.bookings.buyer_id] ?? DEFAULT_MARKUP_PERCENTAGE) : DEFAULT_MARKUP_PERCENTAGE;
-    const freightPerPc = qty > 0 && orderLbs > 0 ? Math.round(((orderLbs / qty) + FREIGHT_PER_PIECE) * 100) / 100 : 0;
-    const customerUnitPrice = Math.round(actualPrice * (1 + markupPct / 100) * 100) / 100 + freightPerPc;
-    const customerAmount = Math.round(customerUnitPrice * qty);
+    const markupPct = item.bookings?.buyer_id ? (markupMap[item.bookings.buyer_id] ?? AT_DEFAULT_MARKUP_PERCENTAGE) : AT_DEFAULT_MARKUP_PERCENTAGE;
+    const { customerUnitPrice, customerAmount } = calcAtCustomerLine(actualPrice, qty, orderLbs, markupPct);
     return { ...item, customerUnitPrice, customerAmount };
   });
 
