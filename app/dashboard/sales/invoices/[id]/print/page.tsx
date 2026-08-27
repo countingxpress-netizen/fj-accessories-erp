@@ -122,6 +122,7 @@ export default async function InvoicePrintPage({ params }: { params: Promise<{ i
       <table className="w-full text-sm border-collapse mb-2">
         <thead>
           <tr className="border-b-2 border-gray-800">
+            <th className="text-left py-2">Sl</th>
             <th className="text-left py-2">Style</th>
             <th className="text-left py-2">Product</th>
             <th className="text-left py-2">Measurement</th>
@@ -133,6 +134,7 @@ export default async function InvoicePrintPage({ params }: { params: Promise<{ i
         <tbody>
           {(invoice.sales_invoice_items ?? []).map((item: any, i: number) => (
             <tr key={i} className="border-b">
+              <td className="py-2 text-gray-600">{i + 1}</td>
               <td className="py-2 text-gray-600">{item.bookings?.style || item.bookings?.booking_no || "-"}</td>
               <td className="py-2">{item.finished_goods?.product_name}</td>
               <td className="py-2 text-gray-600 text-xs">{formatMeasurement(item.bookings)}</td>
@@ -144,7 +146,7 @@ export default async function InvoicePrintPage({ params }: { params: Promise<{ i
         </tbody>
         <tfoot>
           <tr className="border-t-2 border-gray-800 font-semibold">
-            <td colSpan={5} className="text-right py-2">Total</td>
+            <td colSpan={6} className="text-right py-2">Total</td>
             <td className="text-right py-2">{fmt(total)}</td>
           </tr>
         </tfoot>

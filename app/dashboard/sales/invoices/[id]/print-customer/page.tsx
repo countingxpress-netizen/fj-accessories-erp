@@ -3,7 +3,7 @@ import { formatDate } from "@/lib/formatDate";
 import { notFound } from "next/navigation";
 import PrintButton from "@/app/dashboard/PrintButton";
 import { amountInWords } from "@/lib/numberToWords";
-import { AT_DEFAULT_MARKUP_PERCENTAGE, calcAtCustomerLine } from "@/lib/atCommission";
+import { AT_DEFAULT_MARKUP_PERCENTAGE, AT_COMMISSION_LBS_DIVISOR, calcAtCustomerLine } from "@/lib/atCommission";
 
 function fmt(n: number) {
   return n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -54,10 +54,13 @@ export default async function InvoicePrintCustomerPage({ params }: { params: Pro
     const orderLbs = item.bookings?.required_lbs || 0;
     const markupPct = item.bookings?.buyer_id ? (markupMap[item.bookings.buyer_id] ?? AT_DEFAULT_MARKUP_PERCENTAGE) : AT_DEFAULT_MARKUP_PERCENTAGE;
     const { customerUnitPrice, customerAmount } = calcAtCustomerLine(actualPrice, qty, orderLbs, markupPct);
-    return { ...item, customerUnitPrice, customerAmount };
+    const commissionLbs = orderLbs / AT_COMMISSION_LBS_DIVISOR;
+    return { ...item, customerUnitPrice, customerAmount, orderLbs, commissionLbs };
   });
 
   const total = items.reduce((s: number, i: any) => s + i.customerAmount, 0);
+  const totalOrderLbs = items.reduce((s: number, i: any) => s + i.orderLbs, 0);
+  const totalCommissionLbs = items.reduce((s: number, i: any) => s + i.commissionLbs, 0);
 
   return (
     <div className="max-w-3xl mx-auto p-8 bg-white text-gray-900 print:p-0">
@@ -88,6 +91,7 @@ export default async function InvoicePrintCustomerPage({ params }: { params: Pro
       <table className="w-full text-sm border-collapse mb-2">
         <thead>
           <tr className="border-b-2 border-gray-800">
+            <th className="text-left py-2">Sl</th>
             <th className="text-left py-2">Style</th>
             <th className="text-left py-2">Item Description</th>
             <th className="text-left py-2">Measurement</th>
@@ -99,6 +103,7 @@ export default async function InvoicePrintCustomerPage({ params }: { params: Pro
         <tbody>
           {items.map((item: any, i: number) => (
             <tr key={i} className="border-b">
+              <td className="py-2 text-gray-600">{i + 1}</td>
               <td className="py-2 text-gray-600">{item.bookings?.style || item.bookings?.booking_no || "-"}</td>
               <td className="py-2">{item.finished_goods?.product_name}</td>
               <td className="py-2 text-gray-600 text-xs">{formatMeasurement(item.bookings)}</td>
@@ -110,11 +115,15 @@ export default async function InvoicePrintCustomerPage({ params }: { params: Pro
         </tbody>
         <tfoot>
           <tr className="border-t-2 border-gray-800 font-semibold">
-            <td colSpan={5} className="text-right py-2">Total</td>
+            <td colSpan={6} className="text-right py-2">Total</td>
             <td className="text-right py-2">{fmt(total)}</td>
           </tr>
         </tfoot>
       </table>
+
+      <p className="text-sm text-gray-700 mb-3">
+        Total Order Lbs + Commission Lbs = {fmt(totalOrderLbs)} + {fmt(totalCommissionLbs)} = <strong>{fmt(totalOrderLbs + totalCommissionLbs)} Lbs</strong>
+      </p>
 
       <div className="mb-8">
         <p className="text-sm font-semibold mb-1">Amount In Word (BDT):</p>

@@ -4,6 +4,7 @@ import { formatDate } from "@/lib/formatDate";
 import { getBookingStatusLabel } from "@/lib/bookingStatus";
 import { calcTubeCutting, calcRequiredLbs } from "@/lib/calcTubeCutting";
 import { notFound } from "next/navigation";
+import PrintButton from "@/app/dashboard/PrintButton";
 
 export default async function BookingViewPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -50,17 +51,19 @@ export default async function BookingViewPage({ params }: { params: Promise<{ id
   const uniqueChallans = Array.from(new Map(challanListForGroup.map((c) => [c.challan_no, c])).values())
     .sort((a, b) => a.challan_date.localeCompare(b.challan_date));
 
-  // Sales Invoice থেকে Price/Pcs ও Total Amount টেনে আনা
+  // Sales Invoice থেকে Price/Pcs, Total Amount ও Invoice No টেনে আনা
   const { data: invoiceItems } = await supabase
     .from("sales_invoice_items")
-    .select("booking_id, unit_price, quantity_pcs, sales_invoices(invoice_date)")
+    .select("booking_id, unit_price, quantity_pcs, sales_invoices(invoice_no, invoice_date)")
     .in("booking_id", bookingIds);
 
   const priceByBooking: Record<string, { unitPrice: number; totalAmount: number; latestDate: string }> = {};
+  const salesInvoiceNoSet = new Set<string>();
   (invoiceItems ?? []).forEach((item: any) => {
     if (!item.booking_id) return;
     const amount = Math.floor((item.quantity_pcs || 0) * (item.unit_price || 0));
     const thisDate = item.sales_invoices?.invoice_date ?? "";
+    if (item.sales_invoices?.invoice_no) salesInvoiceNoSet.add(item.sales_invoices.invoice_no);
     const existing = priceByBooking[item.booking_id];
     if (!existing) {
       priceByBooking[item.booking_id] = { unitPrice: item.unit_price, totalAmount: amount, latestDate: thisDate };
@@ -72,13 +75,21 @@ export default async function BookingViewPage({ params }: { params: Promise<{ id
       }
     }
   });
+  const salesInvoiceNos = Array.from(salesInvoiceNoSet).sort();
+
+  // Proforma Invoice নম্বর টেনে আনা
+  const { data: piItemRows } = await supabase
+    .from("pi_items")
+    .select("booking_id, proforma_invoices(pi_no)")
+    .in("booking_id", bookingIds);
+
+  const piNoSet = new Set<string>();
+  (piItemRows ?? []).forEach((item: any) => {
+    if (item.proforma_invoices?.pi_no) piNoSet.add(item.proforma_invoices.pi_no);
+  });
+  const piNos = Array.from(piNoSet).sort();
 
   const first = bookings[0];
-
-  const statusParts = bookings.map((b: any) => {
-    const s = getBookingStatusLabel(b, deliveredMap[b.id] ?? 0, Array.from(challanNosByBooking[b.id] ?? []));
-    return s.label;
-  });
 
   // পরবর্তী Schedule ধাপ নির্ণয়
   const anyHasPrint = bookings.some((b: any) => b.has_print);
@@ -99,19 +110,28 @@ export default async function BookingViewPage({ params }: { params: Promise<{ id
     nextScheduleLabel = "Create Cutting Schedule";
   }
 
+  // টেবিলের Total row-এর জন্য যোগফল
+  let totalQuantity = 0;
+  let totalAmountSum = 0;
+  let totalOrderLbs = 0;
+  let totalProductionLbs = 0;
+
   return (
     <div>
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between print:hidden">
         <Link href="/dashboard/sales/bookings" className="text-sm text-gray-500 hover:underline">← সব Booking-এর তালিকায় ফিরুন</Link>
-        {nextScheduleType && (
-          <Link
-            href={`/dashboard/production/schedule-group/${groupId}?type=${nextScheduleType}`}
-            target="_blank"
-            className="rounded-lg bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-700"
-          >
-            {nextScheduleLabel}
-          </Link>
-        )}
+        <div className="flex items-center gap-2">
+          <PrintButton />
+          {nextScheduleType && (
+            <Link
+              href={`/dashboard/production/schedule-group/${groupId}?type=${nextScheduleType}`}
+              target="_blank"
+              className="rounded-lg bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-700"
+            >
+              {nextScheduleLabel}
+            </Link>
+          )}
+        </div>
       </div>
 
       <div className="rounded-xl border-2 border-gray-800 bg-white mt-2 overflow-hidden">
@@ -133,7 +153,7 @@ export default async function BookingViewPage({ params }: { params: Promise<{ id
             </tr>
             <tr>
               <td className="border border-gray-800 px-3 py-2"><strong>Buyer-</strong> {first.buyers?.name || "-"}</td>
-              <td className="border border-gray-800 px-3 py-2"><strong>Status-</strong> {statusParts.join(" | ")}</td>
+              <td className="border border-gray-800 px-3 py-2"></td>
             </tr>
             <tr>
               <td className="border border-gray-800 px-3 py-2">
@@ -156,13 +176,14 @@ export default async function BookingViewPage({ params }: { params: Promise<{ id
               <th className="border border-gray-800 px-2 py-2">Quantity</th>
               <th className="border border-gray-800 px-2 py-2">Price/Pcs</th>
               <th className="border border-gray-800 px-2 py-2">Total Amount</th>
-              <th className="border border-gray-800 px-2 py-2">Tube</th>
-              <th className="border border-gray-800 px-2 py-2">Cutting</th>
+              <th className="border border-gray-800 px-2 py-2 print:hidden">Tube</th>
+              <th className="border border-gray-800 px-2 py-2 print:hidden">Cutting</th>
               <th className="border border-gray-800 px-2 py-2">Order Thickness</th>
-              <th className="border border-gray-800 px-2 py-2">Production Thickness</th>
-              <th className="border border-gray-800 px-2 py-2">PI Thickness</th>
+              <th className="border border-gray-800 px-2 py-2 print:hidden">Production Thickness</th>
+              <th className="border border-gray-800 px-2 py-2 print:hidden">PI Thickness</th>
               <th className="border border-gray-800 px-2 py-2">Order LBS</th>
-              <th className="border border-gray-800 px-2 py-2">Production LBS</th>
+              <th className="border border-gray-800 px-2 py-2 print:hidden">Production LBS</th>
+              <th className="border border-gray-800 px-2 py-2">Status</th>
             </tr>
           </thead>
           <tbody>
@@ -176,6 +197,13 @@ export default async function BookingViewPage({ params }: { params: Promise<{ id
               const { tube, cutting } = calcTubeCutting(b);
               const orderLbs = calcRequiredLbs(b, b.thickness_mm);
               const price = priceByBooking[b.id];
+              const statusLabel = getBookingStatusLabel(b, deliveredMap[b.id] ?? 0, Array.from(challanNosByBooking[b.id] ?? [])).label;
+
+              totalQuantity += b.quantity_pcs || 0;
+              totalAmountSum += price?.totalAmount || 0;
+              totalOrderLbs += orderLbs || 0;
+              totalProductionLbs += b.required_lbs || 0;
+
               return (
                 <tr key={b.id}>
                   <td className="border border-gray-800 px-2 py-2 text-center">{i + 1}</td>
@@ -185,37 +213,82 @@ export default async function BookingViewPage({ params }: { params: Promise<{ id
                   <td className="border border-gray-800 px-2 py-2 text-right">{b.quantity_pcs}</td>
                   <td className="border border-gray-800 px-2 py-2 text-right">{price ? price.unitPrice.toFixed(2) : "-"}</td>
                   <td className="border border-gray-800 px-2 py-2 text-right">{price ? price.totalAmount.toFixed(2) : "-"}</td>
-                  <td className="border border-gray-800 px-2 py-2 text-center">{tube.toFixed(2)} {unit}</td>
-                  <td className="border border-gray-800 px-2 py-2 text-center">{cutting.toFixed(2)} {unit}</td>
+                  <td className="border border-gray-800 px-2 py-2 text-center print:hidden">{tube.toFixed(2)} {unit}</td>
+                  <td className="border border-gray-800 px-2 py-2 text-center print:hidden">{cutting.toFixed(2)} {unit}</td>
                   <td className="border border-gray-800 px-2 py-2 text-center">{b.thickness_mm}</td>
-                  <td className="border border-gray-800 px-2 py-2 text-center">{b.production_thickness_mm}</td>
-                  <td className="border border-gray-800 px-2 py-2 text-center">{b.pi_thickness_mm ?? "-"}</td>
+                  <td className="border border-gray-800 px-2 py-2 text-center print:hidden">{b.production_thickness_mm}</td>
+                  <td className="border border-gray-800 px-2 py-2 text-center print:hidden">{b.pi_thickness_mm ?? "-"}</td>
                   <td className="border border-gray-800 px-2 py-2 text-right">{orderLbs.toFixed(2)}</td>
-                  <td className="border border-gray-800 px-2 py-2 text-right">{b.required_lbs}</td>
+                  <td className="border border-gray-800 px-2 py-2 text-right print:hidden">{b.required_lbs}</td>
+                  <td className="border border-gray-800 px-2 py-2 text-center">{statusLabel}</td>
                 </tr>
               );
             })}
+            <tr className="font-semibold bg-gray-50">
+              <td className="border border-gray-800 px-2 py-2 text-right" colSpan={4}>Total</td>
+              <td className="border border-gray-800 px-2 py-2 text-right">{totalQuantity.toLocaleString()}</td>
+              <td className="border border-gray-800 px-2 py-2"></td>
+              <td className="border border-gray-800 px-2 py-2 text-right">{totalAmountSum.toFixed(2)}</td>
+              <td className="border border-gray-800 px-2 py-2 print:hidden"></td>
+              <td className="border border-gray-800 px-2 py-2 print:hidden"></td>
+              <td className="border border-gray-800 px-2 py-2"></td>
+              <td className="border border-gray-800 px-2 py-2 print:hidden"></td>
+              <td className="border border-gray-800 px-2 py-2 print:hidden"></td>
+              <td className="border border-gray-800 px-2 py-2 text-right">{totalOrderLbs.toFixed(2)}</td>
+              <td className="border border-gray-800 px-2 py-2 text-right print:hidden">{totalProductionLbs.toFixed(2)}</td>
+              <td className="border border-gray-800 px-2 py-2"></td>
+            </tr>
           </tbody>
         </table>
         </div>
 
-        <div className="px-3 py-3 text-sm">
-          <p className="font-semibold mb-1">Delivery Challan No/Nos: -</p>
-          {uniqueChallans.length > 0 ? (
-            <ol className="list-decimal list-inside">
-              {uniqueChallans.map((c) => (
-                <li key={c.challan_no}>
-                  <Link href="/dashboard/sales/delivery-challan" className="text-blue-700 hover:underline">{c.challan_no}</Link> – DT-{formatDate(c.challan_date)}
-                </li>
-              ))}
-            </ol>
-          ) : (
-            <p className="text-gray-400 italic">এখনো কোনো Delivery Challan তৈরি হয়নি</p>
-          )}
+        <div className="px-3 py-3 text-sm space-y-3">
+          <div>
+            <p className="font-semibold mb-1">Sales Invoice No/Nos: -</p>
+            {salesInvoiceNos.length > 0 ? (
+              <ol className="list-decimal list-inside">
+                {salesInvoiceNos.map((no) => (
+                  <li key={no}>
+                    <Link href="/dashboard/sales/invoices" className="text-blue-700 hover:underline">{no}</Link>
+                  </li>
+                ))}
+              </ol>
+            ) : (
+              <p className="text-gray-400 italic">এখনো কোনো Sales Invoice তৈরি হয়নি</p>
+            )}
+          </div>
+          <div>
+            <p className="font-semibold mb-1">Proforma Invoice No/Nos: -</p>
+            {piNos.length > 0 ? (
+              <ol className="list-decimal list-inside">
+                {piNos.map((no) => (
+                  <li key={no}>
+                    <Link href="/dashboard/lc-export/proforma" className="text-blue-700 hover:underline">{no}</Link>
+                  </li>
+                ))}
+              </ol>
+            ) : (
+              <p className="text-gray-400 italic">এখনো কোনো Proforma Invoice তৈরি হয়নি</p>
+            )}
+          </div>
+          <div>
+            <p className="font-semibold mb-1">Delivery Challan No/Nos: -</p>
+            {uniqueChallans.length > 0 ? (
+              <ol className="list-decimal list-inside">
+                {uniqueChallans.map((c) => (
+                  <li key={c.challan_no}>
+                    <Link href="/dashboard/sales/delivery-challan" className="text-blue-700 hover:underline">{c.challan_no}</Link> – DT-{formatDate(c.challan_date)}
+                  </li>
+                ))}
+              </ol>
+            ) : (
+              <p className="text-gray-400 italic">এখনো কোনো Delivery Challan তৈরি হয়নি</p>
+            )}
+          </div>
         </div>
       </div>
 
-      <div className="flex justify-end gap-2 mt-4">
+      <div className="flex justify-end gap-2 mt-4 print:hidden">
         <Link href={`/dashboard/sales/bookings/${first.id}/edit`} className="rounded-lg bg-gray-900 px-4 py-2 text-sm text-white">Edit</Link>
       </div>
     </div>
