@@ -67,6 +67,7 @@ export default function ProformaForm({
   const [customerId, setCustomerId] = useState("");
   const [garmentsId, setGarmentsId] = useState("");
   const [buyerFilter, setBuyerFilter] = useState("");
+  const [merchantFilter, setMerchantFilter] = useState("");
   const [styleFilter, setStyleFilter] = useState("");
   const today = new Date().toISOString().slice(0, 10);
   const [piDate, setPiDate] = useState(today);
@@ -109,10 +110,14 @@ export default function ProformaForm({
     .filter((b) => b.customer_id === customerId)
     .filter((b) => !selectedGarment || b.garments_name === selectedGarment.name)
     .filter((b) => !buyerFilter || b.buyer_id === buyerFilter)
+    .filter((b) => !merchantFilter || (b.merchants?.name ?? "") === merchantFilter)
     .filter((b) => !styleFilter || b.style === styleFilter);
 
   const availableGarments = garments.filter((g) => g.customer_id === customerId);
   const availableBuyers = buyersMaster.filter((b) => b.customer_id === customerId);
+  const availableMerchants = Array.from(
+    new Set(bookings.filter((b) => b.customer_id === customerId).map((b) => b.merchants?.name).filter(Boolean))
+  ) as string[];
   const availableStyles = Array.from(
     new Set(bookings.filter((b) => b.customer_id === customerId).map((b) => b.style).filter(Boolean))
   ) as string[];
@@ -391,7 +396,7 @@ export default function ProformaForm({
           <label className="block text-sm text-gray-600 mb-1">Customer {mode === "manual" && "(ঐচ্ছিক)"}</label>
           <select
             value={customerId}
-            onChange={(e) => { setCustomerId(e.target.value); setSelectedBookings({}); setGarmentsId(""); setGarmentsAddress(""); setBuyerFilter(""); setStyleFilter(""); }}
+            onChange={(e) => { setCustomerId(e.target.value); setSelectedBookings({}); setGarmentsId(""); setGarmentsAddress(""); setBuyerFilter(""); setMerchantFilter(""); setStyleFilter(""); }}
             className="w-full rounded-lg border px-3 py-2 text-sm"
             required={mode === "booking"}
           >
@@ -415,6 +420,13 @@ export default function ProformaForm({
               <select value={buyerFilter} onChange={(e) => onBuyerFilterChange(e.target.value)} className="rounded-lg border px-3 py-2 text-sm">
                 <option value="">সব</option>
                 {availableBuyers.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm text-gray-600 mb-1">Merchant Filter</label>
+              <select value={merchantFilter} onChange={(e) => setMerchantFilter(e.target.value)} className="rounded-lg border px-3 py-2 text-sm">
+                <option value="">সব</option>
+                {availableMerchants.map((m) => <option key={m} value={m}>{m}</option>)}
               </select>
             </div>
             <div>
