@@ -73,6 +73,7 @@ const menu: MenuGroup[] = [
     label: "LC & Export", href: "/dashboard/lc-export",
     items: [
       { label: "Proforma Invoice", href: "/dashboard/lc-export/proforma" },
+      { label: "Advising Banks", href: "/dashboard/lc-export/advising-banks" },
       { label: "LC Register", href: "/dashboard/lc-export/lc-register" },
       { label: "Export Invoice", href: "/dashboard/lc-export/export-invoice" },
       { label: "Packing List", href: "/dashboard/lc-export/packing-list" },

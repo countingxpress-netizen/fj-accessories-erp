@@ -9,10 +9,15 @@ export default async function EditProformaPage({ params }: { params: Promise<{ i
   if (!pi) return notFound();
   const { data: items } = await supabase.from("pi_items").select("*").eq("pi_id", id).order("sl_no");
 
+  const { data: garments } = pi.customer_id
+    ? await supabase.from("garments").select("id, customer_id, name, address").eq("customer_id", pi.customer_id).order("name")
+    : { data: [] };
+  const { data: advisingBanks } = await supabase.from("advising_banks").select("id, name, branch, address, swift").order("name");
+
   return (
     <div>
       <h1 className="text-2xl font-semibold mb-4">PI এডিট করুন — {pi.pi_no}</h1>
-      <EditProformaForm pi={pi} items={items ?? []} />
+      <EditProformaForm pi={pi} items={items ?? []} garments={garments ?? []} advisingBanks={advisingBanks ?? []} />
     </div>
   );
 }

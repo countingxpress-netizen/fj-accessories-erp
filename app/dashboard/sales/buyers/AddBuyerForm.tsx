@@ -18,6 +18,8 @@ export default function AddBuyerForm({ customers }: { customers: Customer[] }) {
   const [printColorsDefault, setPrintColorsDefault] = useState("");
   const [colorQuantity, setColorQuantity] = useState("");
   const [markupPercentage, setMarkupPercentage] = useState("2");
+  const [usdBdtRate, setUsdBdtRate] = useState("");
+  const [priceBasisDefault, setPriceBasisDefault] = useState<"pcs" | "dzn">("pcs");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const router = useRouter();
@@ -44,6 +46,8 @@ export default function AddBuyerForm({ customers }: { customers: Customer[] }) {
       print_colors_default: normalizedPrintColorsDefault,
       color_quantity: normalizedColorQuantity,
       markup_percentage: parseFloat(markupPercentage) || 0,
+      usd_bdt_rate: parseFloat(usdBdtRate) || null,
+      price_basis_default: priceBasisDefault,
     });
     setLoading(false);
     if (error) {
@@ -53,7 +57,7 @@ export default function AddBuyerForm({ customers }: { customers: Customer[] }) {
       setError(`${error.message}${hint}`);
       return;
     }
-    setName(""); setPercentageValue("0"); setRateValue("0"); setPiThicknessMm(""); setBookingThicknessMm(""); setProductionThicknessMm(""); setAdhesiveRatePerInch("0.02"); setPrintColorsDefault(""); setColorQuantity(""); setMarkupPercentage("2");
+    setName(""); setPercentageValue("0"); setRateValue("0"); setPiThicknessMm(""); setBookingThicknessMm(""); setProductionThicknessMm(""); setAdhesiveRatePerInch("0.02"); setPrintColorsDefault(""); setColorQuantity(""); setMarkupPercentage("2"); setUsdBdtRate(""); setPriceBasisDefault("pcs");
     router.refresh();
   }
 
@@ -125,6 +129,19 @@ export default function AddBuyerForm({ customers }: { customers: Customer[] }) {
         <div className="flex flex-col">
           <label className="text-xs text-gray-500">Color Quantity</label>
           <input type="number" min="0" value={colorQuantity} onChange={(e) => setColorQuantity(e.target.value)} className="rounded-lg border px-2 py-1 text-sm w-28" />
+        </div>
+
+        <div className="flex flex-col">
+          <label className="text-xs text-gray-500">USD→BDT Default Rate</label>
+          <input type="number" step="0.01" value={usdBdtRate} onChange={(e) => setUsdBdtRate(e.target.value)} className="rounded-lg border px-2 py-1 text-sm w-28" placeholder="122" />
+        </div>
+
+        <div className="flex flex-col">
+          <label className="text-xs text-gray-500">Default Basis</label>
+          <select value={priceBasisDefault} onChange={(e) => setPriceBasisDefault(e.target.value as "pcs" | "dzn")} className="rounded-lg border px-2 py-1 text-sm">
+            <option value="pcs">Per Pc</option>
+            <option value="dzn">Per Dzn</option>
+          </select>
         </div>
 
         <div className="flex flex-col">

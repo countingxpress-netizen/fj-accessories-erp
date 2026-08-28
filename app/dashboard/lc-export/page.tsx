@@ -2,6 +2,7 @@ import Link from "next/link";
 
 const links = [
   { label: "Proforma Invoice", href: "/dashboard/lc-export/proforma", desc: "একক বা একাধিক বুকিং নিয়ে PI তৈরি" },
+  { label: "Advising Banks", href: "/dashboard/lc-export/advising-banks", desc: "PI-র Advising Bank master — Branch/Address/SWIFT অটো" },
   { label: "LC Register", href: "/dashboard/lc-export/lc-register", desc: "Import ও Export LC-র তালিকা ও ট্র্যাকিং" },
   { label: "Export Invoice", href: "/dashboard/lc-export/export-invoice", desc: "রপ্তানি চালান, LC-এর সাথে যুক্ত" },
   { label: "Packing List", href: "/dashboard/lc-export/packing-list", desc: "কার্টন ও ওজনের বিবরণ" },

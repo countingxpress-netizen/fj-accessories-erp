@@ -1,14 +1,14 @@
 "use client";
-import { useState, useMemo } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { generateNextDocNo } from "@/lib/docNumber";
-import { calcPiUnitPrice, calcPiUnitPriceWithMarkup } from "@/lib/calcTubeCutting";
+import { calcPiUnitPrice, calcPiUnitPriceWithMarkup, calcPiWeightLbs } from "@/lib/calcTubeCutting";
 import { amountInWords } from "@/lib/numberToWords";
 
 type Booking = {
   id: string; booking_no: string; quantity_pcs: number; product_id: string; customer_id: string;
-  style: string | null; garments_name: string | null; buyer_id: string | null;
+  style: string | null; customer_booking_ref: string | null; garments_name: string | null; buyer_id: string | null;
   buyers: { name: string } | null; merchants: { name: string } | null;
   measurement_type: string; measurement_unit: string; length_val: number; width_val: number;
   flap_val: number | null; gusset_val: number | null; pi_thickness_mm: number | null;
@@ -16,7 +16,9 @@ type Booking = {
   finished_goods: { product_name: string; length_cm: number; width_cm: number; thickness: number } | null;
 };
 type Customer = { id: string; name: string; price_per_lbs: number | null };
-type BuyerMaster = { id: string; customer_id: string; name: string; pricing_rule: string; percentage_value: number; rate_per_lbs_value: number; pi_thickness_mm: number | null; adhesive_rate_per_inch: number | null; print_colors_default: number | null };
+type BuyerMaster = { id: string; customer_id: string; name: string; pricing_rule: string; percentage_value: number; rate_per_lbs_value: number; pi_thickness_mm: number | null; adhesive_rate_per_inch: number | null; print_colors_default: number | null; usd_bdt_rate: number | null; price_basis_default: string | null };
+type Garment = { id: string; customer_id: string; name: string; address: string | null };
+type AdvisingBank = { id: string; name: string; branch: string | null; address: string | null; swift: string | null };
 type ManualLine = { description: string; measurement: string; qtyPcs: string; priceUnit: string; priceBasis: "pcs" | "dzn" };
 
 const DEFAULT_TERMS = `01) 100% IRREVOCABLE LETTER OF CREDIT AT SIGHT.
@@ -29,6 +31,12 @@ const DEFAULT_TERMS = `01) 100% IRREVOCABLE LETTER OF CREDIT AT SIGHT.
 08) L/C RECEIVE FROM UD
 09) PAYMENT MUST BE BY USD.`;
 
+function addMonthsISO(iso: string, months: number): string {
+  const d = new Date(iso + "T00:00:00");
+  d.setMonth(d.getMonth() + months);
+  return d.toISOString().slice(0, 10);
+}
+
 function formatMeasurement(b: Booking) {
   const unit = b.measurement_unit;
   const L = b.length_val, W = b.width_val, F = b.flap_val, G = b.gusset_val;
@@ -38,29 +46,47 @@ function formatMeasurement(b: Booking) {
   return "-";
 }
 
+// Description = Style No + Customer Booking Ref (দুই লাইনে) — যেমন "St-xxxx" / "BN-2566556/12"
+function buildBookingDescription(b: Booking): string {
+  const parts: string[] = [];
+  const style = b.style?.trim();
+  const ref = b.customer_booking_ref?.trim();
+  if (style) parts.push(/^st[-\s]/i.test(style) ? style : `St-${style}`);
+  if (ref) parts.push(/^bn[-\s]/i.test(ref) ? ref : `BN-${ref}`);
+  return parts.join("\n") || b.booking_no;
+}
+
 export default function ProformaForm({
-  customers, bookings, buyersMaster, lastUnitPriceByBooking,
+  customers, bookings, buyersMaster, garments, advisingBanks, lastUnitPriceByBooking,
 }: {
   customers: Customer[]; bookings: Booking[]; buyersMaster: BuyerMaster[];
+  garments: Garment[]; advisingBanks: AdvisingBank[];
   lastUnitPriceByBooking: Record<string, number>;
 }) {
   const [mode, setMode] = useState<"booking" | "manual">("booking");
   const [customerId, setCustomerId] = useState("");
-  const [garmentsFilter, setGarmentsFilter] = useState("");
+  const [garmentsId, setGarmentsId] = useState("");
   const [buyerFilter, setBuyerFilter] = useState("");
   const [styleFilter, setStyleFilter] = useState("");
-  const [piDate, setPiDate] = useState(new Date().toISOString().slice(0, 10));
+  const today = new Date().toISOString().slice(0, 10);
+  const [piDate, setPiDate] = useState(today);
+  const [validTill, setValidTill] = useState(addMonthsISO(today, 2));
+  const [validTillTouched, setValidTillTouched] = useState(false);
   const [currency, setCurrency] = useState("USD");
   const [exchangeRate, setExchangeRate] = useState("122");
+  const [rateTouched, setRateTouched] = useState(false);
   const [discountType, setDiscountType] = useState<"none" | "percentage" | "fixed">("none");
   const [discountValue, setDiscountValue] = useState("0");
   const [termsConditions, setTermsConditions] = useState(DEFAULT_TERMS);
   const [garmentsAddress, setGarmentsAddress] = useState("");
+  const [itemDescription, setItemDescription] = useState("Poly Bags");
+  const [advisingBankId, setAdvisingBankId] = useState("");
   const [advisingBankName, setAdvisingBankName] = useState("");
   const [advisingBankBranch, setAdvisingBankBranch] = useState("");
   const [advisingBankAddress, setAdvisingBankAddress] = useState("");
   const [advisingBankSwift, setAdvisingBankSwift] = useState("");
   const [totalWeightKg, setTotalWeightKg] = useState("");
+  const [weightTouched, setWeightTouched] = useState(false);
   const [hsCode, setHsCode] = useState("3923.21.00");
   const [binNo, setBinNo] = useState("000131803-1201");
 
@@ -77,33 +103,25 @@ export default function ProformaForm({
   const router = useRouter();
   const supabase = createClient();
 
-  const selectedCustomer = customers.find((c) => c.id === customerId);
+  const selectedGarment = garments.find((g) => g.id === garmentsId);
 
-  const customerBookings = useMemo(() => {
-    return bookings
-      .filter((b) => b.customer_id === customerId)
-      .filter((b) => !garmentsFilter || b.garments_name === garmentsFilter)
-      .filter((b) => !buyerFilter || b.buyer_id === buyerFilter)
-      .filter((b) => !styleFilter || b.style === styleFilter);
-  }, [bookings, customerId, garmentsFilter, buyerFilter, styleFilter]);
+  const customerBookings = bookings
+    .filter((b) => b.customer_id === customerId)
+    .filter((b) => !selectedGarment || b.garments_name === selectedGarment.name)
+    .filter((b) => !buyerFilter || b.buyer_id === buyerFilter)
+    .filter((b) => !styleFilter || b.style === styleFilter);
 
-  const availableGarments = useMemo(
-    () => Array.from(new Set(bookings.filter((b) => b.customer_id === customerId).map((b) => b.garments_name).filter(Boolean))) as string[],
-    [bookings, customerId]
-  );
-  const availableBuyers = useMemo(
-    () => buyersMaster.filter((b) => b.customer_id === customerId),
-    [buyersMaster, customerId]
-  );
-  const availableStyles = useMemo(
-    () => Array.from(new Set(bookings.filter((b) => b.customer_id === customerId).map((b) => b.style).filter(Boolean))) as string[],
-    [bookings, customerId]
-  );
+  const availableGarments = garments.filter((g) => g.customer_id === customerId);
+  const availableBuyers = buyersMaster.filter((b) => b.customer_id === customerId);
+  const availableStyles = Array.from(
+    new Set(bookings.filter((b) => b.customer_id === customerId).map((b) => b.style).filter(Boolean))
+  ) as string[];
 
   function getBuyerRule(b: Booking): BuyerMaster | undefined {
     return buyersMaster.find((bm) => bm.id === b.buyer_id);
   }
 
+  // buyer rule অনুযায়ী per-piece suggested price (currency অনুযায়ী)
   function getSuggestedPrice(b: Booking): number {
     const rule = getBuyerRule(b);
     if (!rule || rule.pricing_rule === "manual") return 0;
@@ -126,11 +144,65 @@ export default function ProformaForm({
     return 0;
   }
 
-  function applySuggested(bookingId: string) {
-    const b = customerBookings.find((bk) => bk.id === bookingId);
+  function basisFactor(basis: "pcs" | "dzn") {
+    return basis === "dzn" ? 12 : 1;
+  }
+
+  // Basis অনুযায়ী suggested price বসাও (Per Dzn হলে ×12)
+  function applyAutoPrice(bookingId: string, basis: "pcs" | "dzn") {
+    const b = bookings.find((bk) => bk.id === bookingId);
     if (!b) return;
-    const suggested = getSuggestedPrice(b);
-    if (suggested > 0) setBookingPrice((prev) => ({ ...prev, [bookingId]: suggested.toFixed(4) }));
+    const perPc = getSuggestedPrice(b);
+    if (perPc > 0) {
+      setBookingPrice((prev) => ({ ...prev, [bookingId]: (perPc * basisFactor(basis)).toFixed(4) }));
+    }
+  }
+
+  function maybePrefillRate(b: Booking) {
+    if (rateTouched || currency !== "USD") return;
+    const rule = getBuyerRule(b);
+    if (rule?.usd_bdt_rate) setExchangeRate(String(rule.usd_bdt_rate));
+  }
+
+  // চেকবক্সে টিক দিলেই Basis + Price/Unit অটো বসবে
+  function toggleBooking(b: Booking, checked: boolean) {
+    setSelectedBookings((prev) => ({ ...prev, [b.id]: checked }));
+    if (!checked) return;
+    const rule = getBuyerRule(b);
+    const basis: "pcs" | "dzn" =
+      bookingBasis[b.id] || (rule?.price_basis_default === "dzn" ? "dzn" : "pcs");
+    setBookingBasis((prev) => ({ ...prev, [b.id]: basis }));
+    maybePrefillRate(b);
+    applyAutoPrice(b.id, basis);
+  }
+
+  function changeBasis(b: Booking, basis: "pcs" | "dzn") {
+    setBookingBasis((prev) => ({ ...prev, [b.id]: basis }));
+    applyAutoPrice(b.id, basis);
+  }
+
+  function onBuyerFilterChange(id: string) {
+    setBuyerFilter(id);
+    if (rateTouched || currency !== "USD") return;
+    const bm = buyersMaster.find((b) => b.id === id);
+    if (bm?.usd_bdt_rate) setExchangeRate(String(bm.usd_bdt_rate));
+  }
+
+  function onGarmentsChange(id: string) {
+    setGarmentsId(id);
+    const g = garments.find((x) => x.id === id);
+    if (g) setGarmentsAddress(g.address || "");
+  }
+
+  function onAdvisingBankChange(id: string) {
+    setAdvisingBankId(id);
+    const bk = advisingBanks.find((x) => x.id === id);
+    if (bk) {
+      setAdvisingBankName(bk.name || "");
+      setAdvisingBankBranch(bk.branch || "");
+      setAdvisingBankAddress(bk.address || "");
+      setAdvisingBankSwift(bk.swift || "");
+    }
   }
 
   function getBuyerDefaults(b: Booking) {
@@ -167,6 +239,22 @@ export default function ProformaForm({
       const amount = calcLineAmount(qtyPcs, priceUnit, l.priceBasis);
       return { ...l, qtyPcs, priceUnit, amount };
     });
+
+  // Total Weight (Kg) — PI Thickness ধরে অটো: Σ (Qty × Tube" × Cutting" × PI_Thk / 75000) / 2.2
+  const autoWeightKg = mode === "booking"
+    ? bookingLineItems.reduce((s, li) => {
+        const thk = li.booking.pi_thickness_mm ?? getBuyerRule(li.booking)?.pi_thickness_mm ?? 0;
+        return s + calcPiWeightLbs(li.booking, thk) / 2.2;
+      }, 0)
+    : 0;
+
+  useEffect(() => {
+    if (!weightTouched && autoWeightKg > 0) setTotalWeightKg(autoWeightKg.toFixed(2));
+  }, [autoWeightKg, weightTouched]);
+
+  useEffect(() => {
+    if (!validTillTouched) setValidTill(addMonthsISO(piDate, 2));
+  }, [piDate, validTillTouched]);
 
   const subtotal = mode === "booking"
     ? bookingLineItems.reduce((s, li) => s + li.amount, 0)
@@ -225,11 +313,15 @@ export default function ProformaForm({
         pi_no: piNo,
         customer_id: mode === "booking" ? customerId : (customerId || null),
         pi_date: piDate,
+        valid_till: validTill || null,
         style: styles,
         buyer_name: firstBooking?.buyers?.name ?? null,
         merchant_name: firstBooking?.merchants?.name ?? null,
-        garments_name: firstBooking?.garments_name ?? null,
+        garments_id: garmentsId || null,
+        garments_name: selectedGarment?.name ?? firstBooking?.garments_name ?? null,
         garments_address: garmentsAddress || null,
+        item_description: itemDescription || null,
+        advising_bank_id: advisingBankId || null,
         advising_bank_name: advisingBankName || null,
         advising_bank_branch: advisingBankBranch || null,
         advising_bank_address: advisingBankAddress || null,
@@ -253,7 +345,7 @@ export default function ProformaForm({
       const { error: itemsError } = await supabase.from("pi_items").insert(
         bookingLineItems.map((li, i) => ({
           pi_id: pi.id, booking_id: li.booking.id, sl_no: i + 1,
-          description: li.booking.style || li.booking.booking_no,
+          description: buildBookingDescription(li.booking),
           measurement: formatMeasurement(li.booking),
           qty_pcs: li.booking.quantity_pcs, price_unit: li.priceUnit, price_basis: li.basis,
         }))
@@ -299,7 +391,7 @@ export default function ProformaForm({
           <label className="block text-sm text-gray-600 mb-1">Customer {mode === "manual" && "(ঐচ্ছিক)"}</label>
           <select
             value={customerId}
-            onChange={(e) => { setCustomerId(e.target.value); setSelectedBookings({}); setGarmentsFilter(""); setBuyerFilter(""); setStyleFilter(""); }}
+            onChange={(e) => { setCustomerId(e.target.value); setSelectedBookings({}); setGarmentsId(""); setGarmentsAddress(""); setBuyerFilter(""); setStyleFilter(""); }}
             className="w-full rounded-lg border px-3 py-2 text-sm"
             required={mode === "booking"}
           >
@@ -307,18 +399,20 @@ export default function ProformaForm({
             {customers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
         </div>
+        {customerId && (
+          <div>
+            <label className="block text-sm text-gray-600 mb-1">Garments (Print &quot;To&quot;)</label>
+            <select value={garmentsId} onChange={(e) => onGarmentsChange(e.target.value)} className="rounded-lg border px-3 py-2 text-sm min-w-[180px]">
+              <option value="">-- বাছুন --</option>
+              {availableGarments.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
+            </select>
+          </div>
+        )}
         {mode === "booking" && customerId && (
           <>
             <div>
-              <label className="block text-sm text-gray-600 mb-1">Garments Filter</label>
-              <select value={garmentsFilter} onChange={(e) => setGarmentsFilter(e.target.value)} className="rounded-lg border px-3 py-2 text-sm">
-                <option value="">সব</option>
-                {availableGarments.map((g) => <option key={g} value={g}>{g}</option>)}
-              </select>
-            </div>
-            <div>
               <label className="block text-sm text-gray-600 mb-1">Buyer Filter</label>
-              <select value={buyerFilter} onChange={(e) => setBuyerFilter(e.target.value)} className="rounded-lg border px-3 py-2 text-sm">
+              <select value={buyerFilter} onChange={(e) => onBuyerFilterChange(e.target.value)} className="rounded-lg border px-3 py-2 text-sm">
                 <option value="">সব</option>
                 {availableBuyers.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
               </select>
@@ -337,6 +431,11 @@ export default function ProformaForm({
           <input type="date" value={piDate} onChange={(e) => setPiDate(e.target.value)} className="rounded-lg border px-3 py-2 text-sm" required />
         </div>
         <div>
+          <label className="block text-sm text-gray-600 mb-1">PI Validity Date</label>
+          <input type="date" value={validTill} onChange={(e) => { setValidTill(e.target.value); setValidTillTouched(true); }} className="rounded-lg border px-3 py-2 text-sm" />
+          <p className="text-[11px] text-gray-400 mt-1">PI Date + ২ মাস (Terms Clause 10)</p>
+        </div>
+        <div>
           <label className="block text-sm text-gray-600 mb-1">Currency</label>
           <select value={currency} onChange={(e) => setCurrency(e.target.value)} className="rounded-lg border px-3 py-2 text-sm">
             <option value="USD">USD</option>
@@ -347,7 +446,7 @@ export default function ProformaForm({
         {currency === "USD" && (
           <div>
             <label className="block text-sm text-gray-600 mb-1">USD → BDT Rate</label>
-            <input type="number" step="0.01" value={exchangeRate} onChange={(e) => setExchangeRate(e.target.value)} className="rounded-lg border px-3 py-2 text-sm w-28" />
+            <input type="number" step="0.01" value={exchangeRate} onChange={(e) => { setExchangeRate(e.target.value); setRateTouched(true); }} className="rounded-lg border px-3 py-2 text-sm w-28" />
           </div>
         )}
       </div>
@@ -371,12 +470,13 @@ export default function ProformaForm({
             <tbody>
               {customerBookings.map((b) => {
                 const rule = getBuyerRule(b);
-                const suggested = getSuggestedPrice(b);
+                const basis = bookingBasis[b.id] || "pcs";
+                const suggested = getSuggestedPrice(b) * basisFactor(basis);
                 const defaults = getBuyerDefaults(b);
                 return (
                   <tr key={b.id} className="border-t">
                     <td className="px-3 py-2">
-                      <input type="checkbox" checked={!!selectedBookings[b.id]} onChange={(e) => setSelectedBookings((prev) => ({ ...prev, [b.id]: e.target.checked }))} />
+                      <input type="checkbox" checked={!!selectedBookings[b.id]} onChange={(e) => toggleBooking(b, e.target.checked)} />
                     </td>
                     <td className="px-3 py-2 font-medium">{b.booking_no}</td>
                     <td className="px-3 py-2 text-gray-500">{b.garments_name || "-"}</td>
@@ -384,7 +484,7 @@ export default function ProformaForm({
                     <td className="px-3 py-2 text-gray-500">{formatMeasurement(b)}</td>
                     <td className="px-3 py-2 text-right">{b.quantity_pcs}</td>
                     <td className="px-3 py-2">
-                      <select value={bookingBasis[b.id] || "pcs"} onChange={(e) => setBookingBasis((prev) => ({ ...prev, [b.id]: e.target.value as "pcs" | "dzn" }))} className="w-full rounded border px-1 py-1 text-xs">
+                      <select value={basis} onChange={(e) => changeBasis(b, e.target.value as "pcs" | "dzn")} className="w-full rounded border px-1 py-1 text-xs">
                         <option value="pcs">Per Pc</option>
                         <option value="dzn">Per Dzn</option>
                       </select>
@@ -396,10 +496,9 @@ export default function ProformaForm({
                           value={bookingPrice[b.id] || ""}
                           onChange={(e) => setBookingPrice((prev) => ({ ...prev, [b.id]: e.target.value }))}
                           className="w-24 rounded border px-2 py-1 text-sm"
-                          placeholder={defaults.thickness ? `${defaults.thickness}` : undefined}
                         />
                         {rule && rule.pricing_rule !== "manual" && suggested > 0 && (
-                          <button type="button" onClick={() => applySuggested(b.id)} className="text-xs text-blue-600 hover:underline whitespace-nowrap" title={`Buyer Rule: ${rule.pricing_rule}`}>
+                          <button type="button" onClick={() => applyAutoPrice(b.id, basis)} className="text-xs text-blue-600 hover:underline whitespace-nowrap" title={`Buyer Rule: ${rule.pricing_rule}`}>
                             Use {suggested.toFixed(4)}
                           </button>
                         )}
@@ -413,7 +512,7 @@ export default function ProformaForm({
                       )}
                     </td>
                     <td className="px-3 py-2 text-right">
-                      {calcLineAmount(b.quantity_pcs, parseFloat(bookingPrice[b.id] || "0"), bookingBasis[b.id] || "pcs").toFixed(2)}
+                      {calcLineAmount(b.quantity_pcs, parseFloat(bookingPrice[b.id] || "0"), basis).toFixed(2)}
                     </td>
                   </tr>
                 );
@@ -468,13 +567,24 @@ export default function ProformaForm({
       <div className="rounded-lg border p-3 bg-gray-50 space-y-3">
         <p className="text-sm font-semibold text-gray-700">Garments Info (Print-এ &quot;To&quot; সেকশনে দেখাবে)</p>
         <div>
-          <label className="block text-xs text-gray-500 mb-1">Garments Address</label>
+          <label className="block text-xs text-gray-500 mb-1">Garments Address (dropdown থেকে অটো, দরকারে এডিট করুন)</label>
           <textarea value={garmentsAddress} onChange={(e) => setGarmentsAddress(e.target.value)} rows={2} className="w-full rounded-lg border px-3 py-2 text-sm" />
+        </div>
+        <div>
+          <label className="block text-xs text-gray-500 mb-1">Item (Print-এ &quot;Item:- ...&quot; লাইন — যেমন Poly Bags (0.012cm))</label>
+          <input value={itemDescription} onChange={(e) => setItemDescription(e.target.value)} className="w-full rounded-lg border px-3 py-2 text-sm" placeholder="Poly Bags (0.012cm)" />
         </div>
       </div>
 
       <div className="rounded-lg border p-3 bg-gray-50 space-y-3">
         <p className="text-sm font-semibold text-gray-700">Advising Bank</p>
+        <div>
+          <label className="block text-xs text-gray-500 mb-1">Bank বাছুন (বাকিগুলো অটো)</label>
+          <select value={advisingBankId} onChange={(e) => onAdvisingBankChange(e.target.value)} className="rounded-lg border px-3 py-2 text-sm min-w-[220px]">
+            <option value="">-- বাছুন / নিজে লিখুন --</option>
+            {advisingBanks.map((bk) => <option key={bk.id} value={bk.id}>{bk.name}{bk.branch ? ` — ${bk.branch}` : ""}</option>)}
+          </select>
+        </div>
         <div className="flex flex-wrap gap-3">
           <input value={advisingBankName} onChange={(e) => setAdvisingBankName(e.target.value)} placeholder="Bank Name" className="flex-1 min-w-[160px] rounded-lg border px-3 py-2 text-sm" />
           <input value={advisingBankBranch} onChange={(e) => setAdvisingBankBranch(e.target.value)} placeholder="Branch Name" className="flex-1 min-w-[160px] rounded-lg border px-3 py-2 text-sm" />
@@ -487,8 +597,15 @@ export default function ProformaForm({
 
       <div className="flex flex-wrap gap-4">
         <div>
-          <label className="block text-xs text-gray-500 mb-1">Total Weight (Kg)</label>
-          <input type="number" step="0.01" value={totalWeightKg} onChange={(e) => setTotalWeightKg(e.target.value)} className="rounded-lg border px-3 py-2 text-sm w-32" />
+          <label className="block text-xs text-gray-500 mb-1">Total Weight (Kg) — PI Thickness ধরে অটো</label>
+          <div className="flex items-center gap-2">
+            <input type="number" step="0.01" value={totalWeightKg} onChange={(e) => { setTotalWeightKg(e.target.value); setWeightTouched(true); }} className="rounded-lg border px-3 py-2 text-sm w-32" />
+            {weightTouched && autoWeightKg > 0 && (
+              <button type="button" onClick={() => { setWeightTouched(false); setTotalWeightKg(autoWeightKg.toFixed(2)); }} className="text-xs text-blue-600 hover:underline whitespace-nowrap">
+                Auto {autoWeightKg.toFixed(2)}
+              </button>
+            )}
+          </div>
         </div>
         <div>
           <label className="block text-xs text-gray-500 mb-1">H.S. Code</label>
@@ -520,6 +637,7 @@ export default function ProformaForm({
       <div>
         <label className="block text-sm text-gray-600 mb-1">Terms &amp; Conditions</label>
         <textarea value={termsConditions} onChange={(e) => setTermsConditions(e.target.value)} rows={9} className="w-full rounded-lg border px-3 py-2 text-sm font-mono" />
+        <p className="text-[11px] text-gray-400 mt-1">Clause 10 (PI Validity) Print-এ উপরের &quot;PI Validity Date&quot; থেকে অটো যোগ হবে।</p>
       </div>
 
       <div className="rounded-lg bg-gray-50 border p-4 space-y-1 text-sm">

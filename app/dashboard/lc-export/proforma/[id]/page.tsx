@@ -58,7 +58,7 @@ export default async function ProformaViewPage({ params }: { params: Promise<{ i
               return (
                 <tr key={it.id} className="border-t">
                   <td className="px-4 py-2">{it.sl_no}</td>
-                  <td className="px-4 py-2">{it.description}{it.bookings && <span className="text-xs text-gray-400"> ({it.bookings.booking_no})</span>}</td>
+                  <td className="px-4 py-2 whitespace-pre-line">{it.description}{it.bookings && <span className="text-xs text-gray-400"> ({it.bookings.booking_no})</span>}</td>
                   <td className="px-4 py-2">{it.measurement}</td>
                   <td className="px-4 py-2 text-right">{it.qty_pcs}</td>
                   <td className="px-4 py-2 text-right">{(it.qty_pcs / 12).toFixed(2)}</td>

@@ -20,6 +20,13 @@ export default async function PIPrintPage({ params }: { params: Promise<{ id: st
 
   const sym = currencySymbol(pi.currency);
 
+  // Terms Clause 10 = PI Validity Date (PI Date + সর্বোচ্চ ২ মাস) — terms টেক্সটে না থাকলে অটো যোগ
+  const baseTerms = (pi.terms_conditions ?? "").trimEnd();
+  const hasClause10 = /^\s*10[).]/m.test(baseTerms);
+  const termsText = pi.valid_till && !hasClause10
+    ? `${baseTerms}\n10) THIS PROFORMA INVOICE IS VALID UNTIL ${formatDate(pi.valid_till)}.`
+    : baseTerms;
+
   const subtotal = (items ?? []).reduce((s, it: any) => {
     const amt = it.price_basis === "dzn" ? (it.qty_pcs / 12) * it.price_unit : it.qty_pcs * it.price_unit;
     return s + amt;
@@ -43,26 +50,30 @@ export default async function PIPrintPage({ params }: { params: Promise<{ id: st
       <div className="flex justify-between mb-4 text-sm">
         <div>
           <p><strong>INVOICE NO.</strong> {pi.pi_no}{pi.revision > 0 && ` (Rev-${pi.revision})`}</p>
-          <p><strong>Date:</strong> {formatDate(pi.pi_date)}</p>
+          <p><strong>Date-</strong>{formatDate(pi.pi_date)}</p>
           <div className="mt-3">
-            <p className="underline font-semibold">To</p>
-            {pi.buyer_name && <p className="font-medium">{pi.buyer_name}</p>}
-            {pi.garments_name && <p className="font-medium">{pi.garments_name}</p>}
-            {pi.garments_address && <p className="text-gray-600">{pi.garments_address}</p>}
-            {!pi.buyer_name && !pi.garments_name && (
+            <p className="underline font-semibold pl-8">TO</p>
+            {pi.garments_name || pi.garments_address ? (
               <>
-                <p className="font-medium">{pi.customers?.name}</p>
-                <p className="text-gray-600">{pi.customers?.address}</p>
+                {pi.garments_name && <p className="text-base font-bold">{pi.garments_name}</p>}
+                {pi.garments_address && <p className="whitespace-pre-line">{pi.garments_address}</p>}
+              </>
+            ) : (
+              <>
+                <p className="text-base font-bold">{pi.customers?.name}</p>
+                {pi.customers?.address && <p className="whitespace-pre-line">{pi.customers.address}</p>}
               </>
             )}
+            {pi.buyer_name && <p className="font-bold">Buyer: - {pi.buyer_name}</p>}
+            {pi.item_description && <p className="font-bold">Item:- {pi.item_description}</p>}
           </div>
         </div>
         <div className="text-right text-sm">
           <p className="underline font-semibold mb-1">ADVISING BANK:</p>
           {pi.advising_bank_name && <p className="font-bold">{pi.advising_bank_name}</p>}
-          {pi.advising_bank_branch && <p className="font-bold">{pi.advising_bank_branch}</p>}
-          {pi.advising_bank_address && <p className="font-bold">{pi.advising_bank_address}</p>}
-          {pi.advising_bank_swift && <p className="font-bold">SWIFT: {pi.advising_bank_swift}</p>}
+          {pi.advising_bank_branch && <p>{pi.advising_bank_branch}</p>}
+          {pi.advising_bank_address && <p className="whitespace-pre-line">{pi.advising_bank_address}</p>}
+          {pi.advising_bank_swift && <p>SWIFT &ndash; {pi.advising_bank_swift}</p>}
         </div>
       </div>
 
@@ -84,7 +95,7 @@ export default async function PIPrintPage({ params }: { params: Promise<{ id: st
             return (
               <tr key={it.id}>
                 <td className="border border-gray-800 text-center py-1 px-2">{it.sl_no}</td>
-                <td className="border border-gray-800 py-1 px-2">{it.description}</td>
+                <td className="border border-gray-800 py-1 px-2 whitespace-pre-line">{it.description}</td>
                 <td className="border border-gray-800 py-1 px-2">{it.measurement}</td>
                 <td className="border border-gray-800 text-right py-1 px-2">{it.qty_pcs.toLocaleString()}</td>
                 <td className="border border-gray-800 text-right py-1 px-2">{(it.qty_pcs / 12).toFixed(2)}</td>
@@ -120,9 +131,9 @@ export default async function PIPrintPage({ params }: { params: Promise<{ id: st
       <p className="text-sm mb-1">H.S CODE NO: {pi.hs_code || "3923.21.00"}</p>
       <p className="text-sm mb-4">BIN No. {pi.bin_no || "000131803-1201"}</p>
 
-      {pi.terms_conditions && (
+      {termsText && (
         <div className="text-xs whitespace-pre-wrap mb-6">
-          {pi.terms_conditions.split("\n").map((line: string, i: number) => {
+          {termsText.split("\n").map((line: string, i: number) => {
             const isAdvisingBank = /advising\s*bank/i.test(line);
             return (
               <p key={i} className={isAdvisingBank ? "font-bold" : ""}>{line}</p>

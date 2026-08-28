@@ -4,7 +4,14 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { amountInWords, currencySymbol } from "@/lib/numberToWords";
 
-export default function EditProformaForm({ pi, items }: { pi: any; items: any[] }) {
+type Garment = { id: string; customer_id: string; name: string; address: string | null };
+type AdvisingBank = { id: string; name: string; branch: string | null; address: string | null; swift: string | null };
+
+export default function EditProformaForm({
+  pi, items, garments = [], advisingBanks = [],
+}: {
+  pi: any; items: any[]; garments?: Garment[]; advisingBanks?: AdvisingBank[];
+}) {
   const [piDate, setPiDate] = useState(pi.pi_date);
   const [currency, setCurrency] = useState(pi.currency);
   const [discountType, setDiscountType] = useState(pi.discount_type);
@@ -12,7 +19,11 @@ export default function EditProformaForm({ pi, items }: { pi: any; items: any[] 
   const [status, setStatus] = useState(pi.status);
   const [termsConditions, setTermsConditions] = useState(pi.terms_conditions ?? "");
   const [validTill, setValidTill] = useState(pi.valid_till ?? "");
+  const [garmentsId, setGarmentsId] = useState(pi.garments_id ?? "");
+  const [garmentsName, setGarmentsName] = useState(pi.garments_name ?? "");
   const [garmentsAddress, setGarmentsAddress] = useState(pi.garments_address ?? "");
+  const [itemDescription, setItemDescription] = useState(pi.item_description ?? "Poly Bags");
+  const [advisingBankId, setAdvisingBankId] = useState(pi.advising_bank_id ?? "");
   const [advisingBankName, setAdvisingBankName] = useState(pi.advising_bank_name ?? "");
   const [advisingBankBranch, setAdvisingBankBranch] = useState(pi.advising_bank_branch ?? "");
   const [advisingBankAddress, setAdvisingBankAddress] = useState(pi.advising_bank_address ?? "");
@@ -34,6 +45,23 @@ export default function EditProformaForm({ pi, items }: { pi: any; items: any[] 
   const router = useRouter();
   const supabase = createClient();
   const sym = currencySymbol(currency);
+
+  function onGarmentsChange(id: string) {
+    setGarmentsId(id);
+    const g = garments.find((x) => x.id === id);
+    if (g) { setGarmentsName(g.name); setGarmentsAddress(g.address || ""); }
+  }
+
+  function onAdvisingBankChange(id: string) {
+    setAdvisingBankId(id);
+    const bk = advisingBanks.find((x) => x.id === id);
+    if (bk) {
+      setAdvisingBankName(bk.name || "");
+      setAdvisingBankBranch(bk.branch || "");
+      setAdvisingBankAddress(bk.address || "");
+      setAdvisingBankSwift(bk.swift || "");
+    }
+  }
 
   function updateLine(i: number, field: string, value: string) {
     setLines((prev) => prev.map((l, idx) => (idx === i ? { ...l, [field]: value } : l)));
@@ -67,7 +95,10 @@ export default function EditProformaForm({ pi, items }: { pi: any; items: any[] 
     const { error: updateError } = await supabase.from("proforma_invoices").update({
       pi_date: piDate, currency, discount_type: discountType, discount_value: parseFloat(discountValue) || 0,
       status, terms_conditions: termsConditions, total_amount: totalAmount,
-      valid_till: validTill || null, garments_address: garmentsAddress || null,
+      valid_till: validTill || null,
+      garments_id: garmentsId || null, garments_name: garmentsName || null, garments_address: garmentsAddress || null,
+      item_description: itemDescription || null,
+      advising_bank_id: advisingBankId || null,
       advising_bank_name: advisingBankName || null, advising_bank_branch: advisingBankBranch || null,
       advising_bank_address: advisingBankAddress || null, advising_bank_swift: advisingBankSwift || null,
       total_weight_kg: parseFloat(totalWeightKg) || null, hs_code: hsCode, bin_no: binNo,
@@ -161,14 +192,38 @@ export default function EditProformaForm({ pi, items }: { pi: any; items: any[] 
 
       <div className="rounded-lg border p-3 bg-gray-50 space-y-3">
         <p className="text-sm font-semibold text-gray-700">Garments Info</p>
+        {garments.length > 0 && (
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Garments (Print &quot;To&quot;)</label>
+            <select value={garmentsId} onChange={(e) => onGarmentsChange(e.target.value)} className="rounded-lg border px-3 py-2 text-sm min-w-[200px]">
+              <option value="">-- বাছুন / নিজে লিখুন --</option>
+              {garments.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
+            </select>
+          </div>
+        )}
+        <div>
+          <label className="block text-xs text-gray-500 mb-1">Garments Name</label>
+          <input value={garmentsName} onChange={(e) => setGarmentsName(e.target.value)} className="w-full rounded-lg border px-3 py-2 text-sm" />
+        </div>
         <div>
           <label className="block text-xs text-gray-500 mb-1">Garments Address</label>
           <textarea value={garmentsAddress} onChange={(e) => setGarmentsAddress(e.target.value)} rows={2} className="w-full rounded-lg border px-3 py-2 text-sm" />
+        </div>
+        <div>
+          <label className="block text-xs text-gray-500 mb-1">Item (Print-এ &quot;Item:- ...&quot; লাইন)</label>
+          <input value={itemDescription} onChange={(e) => setItemDescription(e.target.value)} className="w-full rounded-lg border px-3 py-2 text-sm" placeholder="Poly Bags (0.012cm)" />
         </div>
       </div>
 
       <div className="rounded-lg border p-3 bg-gray-50 space-y-3">
         <p className="text-sm font-semibold text-gray-700">Advising Bank</p>
+        <div>
+          <label className="block text-xs text-gray-500 mb-1">Bank বাছুন (বাকিগুলো অটো)</label>
+          <select value={advisingBankId} onChange={(e) => onAdvisingBankChange(e.target.value)} className="rounded-lg border px-3 py-2 text-sm min-w-[220px]">
+            <option value="">-- বাছুন / নিজে লিখুন --</option>
+            {advisingBanks.map((bk) => <option key={bk.id} value={bk.id}>{bk.name}{bk.branch ? ` — ${bk.branch}` : ""}</option>)}
+          </select>
+        </div>
         <div className="flex flex-wrap gap-3">
           <input value={advisingBankName} onChange={(e) => setAdvisingBankName(e.target.value)} placeholder="Bank Name" className="flex-1 min-w-[160px] rounded-lg border px-3 py-2 text-sm" />
           <input value={advisingBankBranch} onChange={(e) => setAdvisingBankBranch(e.target.value)} placeholder="Branch Name" className="flex-1 min-w-[160px] rounded-lg border px-3 py-2 text-sm" />
