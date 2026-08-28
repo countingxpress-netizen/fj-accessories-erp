@@ -23,6 +23,7 @@ export default function EditProformaForm({
   const [garmentsName, setGarmentsName] = useState(pi.garments_name ?? "");
   const [garmentsAddress, setGarmentsAddress] = useState(pi.garments_address ?? "");
   const [itemDescription, setItemDescription] = useState(pi.item_description ?? "Poly Bags");
+  const [merchantName, setMerchantName] = useState(pi.merchant_name ?? "");
   const [advisingBankId, setAdvisingBankId] = useState(pi.advising_bank_id ?? "");
   const [advisingBankName, setAdvisingBankName] = useState(pi.advising_bank_name ?? "");
   const [advisingBankBranch, setAdvisingBankBranch] = useState(pi.advising_bank_branch ?? "");
@@ -98,6 +99,7 @@ export default function EditProformaForm({
       valid_till: validTill || null,
       garments_id: garmentsId || null, garments_name: garmentsName || null, garments_address: garmentsAddress || null,
       item_description: itemDescription || null,
+      merchant_name: merchantName || null,
       advising_bank_id: advisingBankId || null,
       advising_bank_name: advisingBankName || null, advising_bank_branch: advisingBankBranch || null,
       advising_bank_address: advisingBankAddress || null, advising_bank_swift: advisingBankSwift || null,
@@ -212,6 +214,10 @@ export default function EditProformaForm({
         <div>
           <label className="block text-xs text-gray-500 mb-1">Item (Print-এ &quot;Item:- ...&quot; লাইন)</label>
           <input value={itemDescription} onChange={(e) => setItemDescription(e.target.value)} className="w-full rounded-lg border px-3 py-2 text-sm" placeholder="Poly Bags (0.012cm)" />
+        </div>
+        <div>
+          <label className="block text-xs text-gray-500 mb-1">Merchant Name</label>
+          <input value={merchantName} onChange={(e) => setMerchantName(e.target.value)} className="w-full rounded-lg border px-3 py-2 text-sm" placeholder="Merchant নাম" />
         </div>
       </div>
 

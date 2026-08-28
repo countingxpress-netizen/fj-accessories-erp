@@ -68,6 +68,7 @@ export default function ProformaForm({
   const [garmentsId, setGarmentsId] = useState("");
   const [buyerFilter, setBuyerFilter] = useState("");
   const [merchantFilter, setMerchantFilter] = useState("");
+  const [merchantName, setMerchantName] = useState("");
   const [styleFilter, setStyleFilter] = useState("");
   const today = new Date().toISOString().slice(0, 10);
   const [piDate, setPiDate] = useState(today);
@@ -321,7 +322,7 @@ export default function ProformaForm({
         valid_till: validTill || null,
         style: styles,
         buyer_name: firstBooking?.buyers?.name ?? null,
-        merchant_name: firstBooking?.merchants?.name ?? null,
+        merchant_name: merchantName || firstBooking?.merchants?.name || null,
         garments_id: garmentsId || null,
         garments_name: selectedGarment?.name ?? firstBooking?.garments_name ?? null,
         garments_address: garmentsAddress || null,
@@ -396,7 +397,7 @@ export default function ProformaForm({
           <label className="block text-sm text-gray-600 mb-1">Customer {mode === "manual" && "(ঐচ্ছিক)"}</label>
           <select
             value={customerId}
-            onChange={(e) => { setCustomerId(e.target.value); setSelectedBookings({}); setGarmentsId(""); setGarmentsAddress(""); setBuyerFilter(""); setMerchantFilter(""); setStyleFilter(""); }}
+            onChange={(e) => { setCustomerId(e.target.value); setSelectedBookings({}); setGarmentsId(""); setGarmentsAddress(""); setBuyerFilter(""); setMerchantFilter(""); setMerchantName(""); setStyleFilter(""); }}
             className="w-full rounded-lg border px-3 py-2 text-sm"
             required={mode === "booking"}
           >
@@ -424,7 +425,7 @@ export default function ProformaForm({
             </div>
             <div>
               <label className="block text-sm text-gray-600 mb-1">Merchant Filter</label>
-              <select value={merchantFilter} onChange={(e) => setMerchantFilter(e.target.value)} className="rounded-lg border px-3 py-2 text-sm">
+              <select value={merchantFilter} onChange={(e) => { setMerchantFilter(e.target.value); setMerchantName(e.target.value); }} className="rounded-lg border px-3 py-2 text-sm">
                 <option value="">সব</option>
                 {availableMerchants.map((m) => <option key={m} value={m}>{m}</option>)}
               </select>
@@ -585,6 +586,10 @@ export default function ProformaForm({
         <div>
           <label className="block text-xs text-gray-500 mb-1">Item (Print-এ &quot;Item:- ...&quot; লাইন — যেমন Poly Bags (0.012cm))</label>
           <input value={itemDescription} onChange={(e) => setItemDescription(e.target.value)} className="w-full rounded-lg border px-3 py-2 text-sm" placeholder="Poly Bags (0.012cm)" />
+        </div>
+        <div>
+          <label className="block text-xs text-gray-500 mb-1">Merchant Name (Merchant Filter থেকে অটো, দরকারে এডিট করুন)</label>
+          <input value={merchantName} onChange={(e) => setMerchantName(e.target.value)} className="w-full rounded-lg border px-3 py-2 text-sm" placeholder="Merchant নাম" />
         </div>
       </div>
 
