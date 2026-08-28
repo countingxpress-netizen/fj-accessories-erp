@@ -129,7 +129,7 @@ export default async function PIPrintPage({ params }: { params: Promise<{ id: st
       <p className="text-sm font-semibold mb-1">SAY: {amountInWords(pi.total_amount ?? 0, pi.currency)}</p>
       {pi.total_weight_kg && <p className="text-sm mb-1">Total Invoice Weight = {pi.total_weight_kg} Kgs</p>}
       <p className="text-sm mb-1">H.S CODE NO: {pi.hs_code || "3923.21.00"}</p>
-      <p className="text-sm mb-4">BIN No. {pi.bin_no || "000131803-1201"}</p>
+      <p className="text-sm mb-4">BIN No. {pi.bin_no || "000113803-1201"}</p>
 
       {termsText && (
         <div className="text-xs whitespace-pre-wrap mb-6">

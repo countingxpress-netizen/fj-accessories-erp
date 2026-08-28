@@ -102,7 +102,7 @@ export default function BuyerRow({
         <td className="px-4 py-2"><input type="number" min="0" step="0.0001" value={printColorsDefault} onChange={(e) => setPrintColorsDefault(e.target.value)} className="w-32 rounded border px-2 py-1 text-sm" placeholder="0.20/color/pc" /></td>
         <td className="px-4 py-2"><input type="number" min="0" step="1" value={String(buyer.color_quantity ?? colorQuantity)} onChange={(e) => setColorQuantity(e.target.value)} className="w-24 rounded border px-2 py-1 text-sm" /></td>
         <td className="px-4 py-2"><input type="number" step="0.01" value={markupPercentage} onChange={(e) => setMarkupPercentage(e.target.value)} className="w-20 rounded border px-2 py-1 text-sm" /></td>
-        <td className="px-4 py-2"><input type="number" step="0.01" value={usdBdtRate} onChange={(e) => setUsdBdtRate(e.target.value)} className="w-20 rounded border px-2 py-1 text-sm" placeholder="122" /></td>
+        <td className="px-4 py-2"><input type="number" step="0.01" value={usdBdtRate} onChange={(e) => setUsdBdtRate(e.target.value)} className="w-20 rounded border px-2 py-1 text-sm" placeholder="107" /></td>
         <td className="px-4 py-2">
           <select value={priceBasisDefault} onChange={(e) => setPriceBasisDefault(e.target.value)} className="rounded border px-2 py-1 text-sm">
             <option value="pcs">Per Pc</option>

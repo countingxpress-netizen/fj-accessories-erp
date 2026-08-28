@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { deleteSimpleRow } from "@/lib/simpleDelete";
 
 type Customer = {
-  id: string; name: string; address: string | null;
+  id: string; name: string; code: string | null; address: string | null;
   phone: string | null; email: string | null; price_per_lbs: number | null;
   default_print_rate: number | null; default_adhesive_rate: number | null;
   opening_balance: number | null;
@@ -16,6 +16,7 @@ export default function CustomerRow({
 }: { customer: Customer; selected?: boolean; onToggleSelect?: () => void }) {
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(customer.name);
+  const [code, setCode] = useState(customer.code ?? "");
   const [address, setAddress] = useState(customer.address ?? "");
   const [phone, setPhone] = useState(customer.phone ?? "");
   const [email, setEmail] = useState(customer.email ?? "");
@@ -33,7 +34,7 @@ export default function CustomerRow({
     const { error } = await supabase
       .from("customers")
       .update({
-        name, address, phone, email,
+        name, code: code.toUpperCase().trim() || null, address, phone, email,
         price_per_lbs: price ? parseFloat(price) : null,
         default_print_rate: parseFloat(printRate) || 0.20,
         default_adhesive_rate: parseFloat(adhesiveRate) || 0.02,
@@ -71,6 +72,7 @@ export default function CustomerRow({
       <tr className="border-t bg-yellow-50">
         {checkboxCell}
         <td className="px-4 py-2"><input value={name} onChange={(e) => setName(e.target.value)} className="w-full rounded border px-2 py-1 text-sm" /></td>
+        <td className="px-4 py-2"><input value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} className="w-20 rounded border px-2 py-1 text-sm" placeholder="AT" /></td>
         <td className="px-4 py-2"><input value={address} onChange={(e) => setAddress(e.target.value)} className="w-full rounded border px-2 py-1 text-sm" /></td>
         <td className="px-4 py-2"><input value={phone} onChange={(e) => setPhone(e.target.value)} className="w-full rounded border px-2 py-1 text-sm" /></td>
         <td className="px-4 py-2"><input type="number" step="0.01" value={price} onChange={(e) => setPrice(e.target.value)} className="w-24 rounded border px-2 py-1 text-sm" /></td>
@@ -90,6 +92,7 @@ export default function CustomerRow({
     <tr className="border-t">
       {checkboxCell}
       <td className="px-4 py-2 font-medium">{customer.name}</td>
+      <td className="px-4 py-2 text-gray-500">{customer.code || "-"}</td>
       <td className="px-4 py-2 text-gray-500">{customer.address || "-"}</td>
       <td className="px-4 py-2 text-gray-500">{customer.phone || "-"}</td>
       <td className="px-4 py-2 text-gray-500">{customer.price_per_lbs ?? "-"}</td>

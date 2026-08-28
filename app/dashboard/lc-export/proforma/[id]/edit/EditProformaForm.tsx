@@ -31,8 +31,8 @@ export default function EditProformaForm({
   const [advisingBankSwift, setAdvisingBankSwift] = useState(pi.advising_bank_swift ?? "");
   const [totalWeightKg, setTotalWeightKg] = useState(pi.total_weight_kg ? String(pi.total_weight_kg) : "");
   const [hsCode, setHsCode] = useState(pi.hs_code ?? "3923.21.00");
-  const [binNo, setBinNo] = useState(pi.bin_no ?? "000131803-1201");
-  const [exchangeRate, setExchangeRate] = useState(pi.exchange_rate_to_bdt ? String(pi.exchange_rate_to_bdt) : "122");
+  const [binNo, setBinNo] = useState(pi.bin_no ?? "000113803-1201");
+  const [exchangeRate, setExchangeRate] = useState(pi.exchange_rate_to_bdt ? String(pi.exchange_rate_to_bdt) : "107");
 
   const [lines, setLines] = useState(items.map((it) => ({
     id: it.id, description: it.description, measurement: it.measurement,
@@ -104,7 +104,7 @@ export default function EditProformaForm({
       advising_bank_name: advisingBankName || null, advising_bank_branch: advisingBankBranch || null,
       advising_bank_address: advisingBankAddress || null, advising_bank_swift: advisingBankSwift || null,
       total_weight_kg: parseFloat(totalWeightKg) || null, hs_code: hsCode, bin_no: binNo,
-      exchange_rate_to_bdt: parseFloat(exchangeRate) || 122,
+      exchange_rate_to_bdt: parseFloat(exchangeRate) || 107,
     }).eq("id", pi.id);
 
     setLoading(false);

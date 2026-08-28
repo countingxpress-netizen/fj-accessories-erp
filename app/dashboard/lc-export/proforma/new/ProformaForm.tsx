@@ -2,8 +2,8 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { generateNextDocNo } from "@/lib/docNumber";
-import { calcPiUnitPrice, calcPiUnitPriceWithMarkup, calcPiWeightLbs } from "@/lib/calcTubeCutting";
+import { generatePiNo } from "@/lib/docNumber";
+import { calcPiUnitPrice, calcPiUnitPriceWithMarkup, calcPiWeightLbs, piRound2, piRound4 } from "@/lib/calcTubeCutting";
 import { amountInWords } from "@/lib/numberToWords";
 
 type Booking = {
@@ -15,7 +15,7 @@ type Booking = {
   material_type: string; has_print: boolean; print_colors: number | null; rate_per_color: number | null;
   finished_goods: { product_name: string; length_cm: number; width_cm: number; thickness: number } | null;
 };
-type Customer = { id: string; name: string; price_per_lbs: number | null };
+type Customer = { id: string; name: string; code: string | null; price_per_lbs: number | null; default_print_rate: number | null };
 type BuyerMaster = { id: string; customer_id: string; name: string; pricing_rule: string; percentage_value: number; rate_per_lbs_value: number; pi_thickness_mm: number | null; adhesive_rate_per_inch: number | null; print_colors_default: number | null; usd_bdt_rate: number | null; price_basis_default: string | null };
 type Garment = { id: string; customer_id: string; name: string; address: string | null };
 type AdvisingBank = { id: string; name: string; branch: string | null; address: string | null; swift: string | null };
@@ -75,7 +75,7 @@ export default function ProformaForm({
   const [validTill, setValidTill] = useState(addMonthsISO(today, 2));
   const [validTillTouched, setValidTillTouched] = useState(false);
   const [currency, setCurrency] = useState("USD");
-  const [exchangeRate, setExchangeRate] = useState("122");
+  const [exchangeRate, setExchangeRate] = useState("107");
   const [rateTouched, setRateTouched] = useState(false);
   const [discountType, setDiscountType] = useState<"none" | "percentage" | "fixed">("none");
   const [discountValue, setDiscountValue] = useState("0");
@@ -90,11 +90,12 @@ export default function ProformaForm({
   const [totalWeightKg, setTotalWeightKg] = useState("");
   const [weightTouched, setWeightTouched] = useState(false);
   const [hsCode, setHsCode] = useState("3923.21.00");
-  const [binNo, setBinNo] = useState("000131803-1201");
+  const [binNo, setBinNo] = useState("000113803-1201");
 
   const [selectedBookings, setSelectedBookings] = useState<Record<string, boolean>>({});
   const [bookingPrice, setBookingPrice] = useState<Record<string, string>>({});
   const [bookingBasis, setBookingBasis] = useState<Record<string, "pcs" | "dzn">>({});
+  const [bookingThickness, setBookingThickness] = useState<Record<string, string>>({});
 
   const [manualLines, setManualLines] = useState<ManualLine[]>([
     { description: "", measurement: "", qtyPcs: "", priceUnit: "", priceBasis: "pcs" },
@@ -105,7 +106,15 @@ export default function ProformaForm({
   const router = useRouter();
   const supabase = createClient();
 
+  const selectedCustomer = customers.find((c) => c.id === customerId);
   const selectedGarment = garments.find((g) => g.id === garmentsId);
+
+  // per-line PI thickness (এডিটেবল) — না দিলে buyer-এর default
+  function lineThickness(b: Booking): number {
+    const raw = bookingThickness[b.id];
+    if (raw !== undefined && raw !== "") return parseFloat(raw) || 0;
+    return getBuyerRule(b)?.pi_thickness_mm ?? b.pi_thickness_mm ?? 0;
+  }
 
   const customerBookings = bookings
     .filter((b) => b.customer_id === customerId)
@@ -131,21 +140,26 @@ export default function ProformaForm({
   function getSuggestedPrice(b: Booking): number {
     const rule = getBuyerRule(b);
     if (!rule || rule.pricing_rule === "manual") return 0;
+    const rate = parseFloat(exchangeRate) || 107;
+    const thickness = lineThickness(b);
+    const printRate = selectedCustomer?.default_print_rate ?? 0.2;
     if (rule.pricing_rule === "percentage") {
       const lastPrice = lastUnitPriceByBooking[b.id] ?? 0;
       if (!lastPrice) return 0;
       const bdtPrice = lastPrice * (1 + (rule.percentage_value || 0) / 100);
-      const rate = parseFloat(exchangeRate) || 122;
       return currency === "USD" ? bdtPrice / rate : bdtPrice;
     }
     if (rule.pricing_rule === "rate_per_lbs") {
-      return calcPiUnitPrice(b, rule.rate_per_lbs_value || 0);
+      const bdt = calcPiUnitPrice(b, rule.rate_per_lbs_value || 0, thickness);
+      return currency === "USD" ? piRound4(bdt / rate) : piRound2(bdt);
     }
     if (rule.pricing_rule === "rate_per_lbs_markup") {
-      const bdtPrice = calcPiUnitPriceWithMarkup(b, rule.rate_per_lbs_value || 0, rule.percentage_value || 0, rule.adhesive_rate_per_inch);
+      const bdtPrice = calcPiUnitPriceWithMarkup(
+        b, rule.rate_per_lbs_value || 0, rule.percentage_value || 0,
+        rule.adhesive_rate_per_inch, thickness, printRate
+      );
       if (!bdtPrice) return 0;
-      const rate = parseFloat(exchangeRate) || 122;
-      return currency === "USD" ? bdtPrice / rate : bdtPrice;
+      return currency === "USD" ? piRound4(bdtPrice / rate) : piRound2(bdtPrice);
     }
     return 0;
   }
@@ -178,6 +192,10 @@ export default function ProformaForm({
     const basis: "pcs" | "dzn" =
       bookingBasis[b.id] || (rule?.price_basis_default === "dzn" ? "dzn" : "pcs");
     setBookingBasis((prev) => ({ ...prev, [b.id]: basis }));
+    if (bookingThickness[b.id] === undefined) {
+      const thk = rule?.pi_thickness_mm ?? b.pi_thickness_mm ?? 0;
+      if (thk) setBookingThickness((prev) => ({ ...prev, [b.id]: String(thk) }));
+    }
     maybePrefillRate(b);
     applyAutoPrice(b.id, basis);
   }
@@ -185,6 +203,27 @@ export default function ProformaForm({
   function changeBasis(b: Booking, basis: "pcs" | "dzn") {
     setBookingBasis((prev) => ({ ...prev, [b.id]: basis }));
     applyAutoPrice(b.id, basis);
+  }
+
+  function changeThickness(b: Booking, value: string) {
+    setBookingThickness((prev) => ({ ...prev, [b.id]: value }));
+    if (selectedBookings[b.id]) {
+      // thickness বদলালে suggested দাম + weight রি-ক্যালকুলেট (setState async, তাই সরাসরি হিসাব)
+      const rule = getBuyerRule(b);
+      const basis = bookingBasis[b.id] || "pcs";
+      if (rule && rule.pricing_rule === "rate_per_lbs_markup") {
+        const rate = parseFloat(exchangeRate) || 107;
+        const printRate = selectedCustomer?.default_print_rate ?? 0.2;
+        const bdt = calcPiUnitPriceWithMarkup(
+          b, rule.rate_per_lbs_value || 0, rule.percentage_value || 0,
+          rule.adhesive_rate_per_inch, parseFloat(value) || 0, printRate
+        );
+        if (bdt > 0) {
+          const perPc = currency === "USD" ? piRound4(bdt / rate) : piRound2(bdt);
+          setBookingPrice((prev) => ({ ...prev, [b.id]: (perPc * basisFactor(basis)).toFixed(4) }));
+        }
+      }
+    }
   }
 
   function onBuyerFilterChange(id: string) {
@@ -248,10 +287,7 @@ export default function ProformaForm({
 
   // Total Weight (Kg) — PI Thickness ধরে অটো: Σ (Qty × Tube" × Cutting" × PI_Thk / 75000) / 2.2
   const autoWeightKg = mode === "booking"
-    ? bookingLineItems.reduce((s, li) => {
-        const thk = li.booking.pi_thickness_mm ?? getBuyerRule(li.booking)?.pi_thickness_mm ?? 0;
-        return s + calcPiWeightLbs(li.booking, thk) / 2.2;
-      }, 0)
+    ? bookingLineItems.reduce((s, li) => s + calcPiWeightLbs(li.booking, lineThickness(li.booking)) / 2.2, 0)
     : 0;
 
   useEffect(() => {
@@ -311,7 +347,7 @@ export default function ProformaForm({
       : null;
     const firstBooking = mode === "booking" ? bookingLineItems[0]?.booking : null;
 
-    const piNo = await generateNextDocNo(supabase, "proforma_invoices", "pi_no", "PI", "pi_date", piDate);
+    const piNo = await generatePiNo(supabase, selectedCustomer ?? null, piDate);
 
     const { data: pi, error: piError } = await supabase
       .from("proforma_invoices")
@@ -336,7 +372,7 @@ export default function ProformaForm({
         hs_code: hsCode, bin_no: binNo,
         total_amount: totalAmount,
         currency, discount_type: discountType, discount_value: parseFloat(discountValue) || 0,
-        exchange_rate_to_bdt: parseFloat(exchangeRate) || 122,
+        exchange_rate_to_bdt: parseFloat(exchangeRate) || 107,
         terms_conditions: termsConditions, is_manual: mode === "manual", status: "draft",
       })
       .select().single();
@@ -354,6 +390,7 @@ export default function ProformaForm({
           description: buildBookingDescription(li.booking),
           measurement: formatMeasurement(li.booking),
           qty_pcs: li.booking.quantity_pcs, price_unit: li.priceUnit, price_basis: li.basis,
+          pi_thickness_mm: lineThickness(li.booking) || null,
         }))
       );
       if (itemsError) {
@@ -476,6 +513,7 @@ export default function ProformaForm({
                 <th className="px-3 py-2">Measurement</th>
                 <th className="px-3 py-2 text-right">Qty</th>
                 <th className="px-3 py-2 w-20">Basis</th>
+                <th className="px-3 py-2 w-24">PI Thick</th>
                 <th className="px-3 py-2 w-32">Price/Unit</th>
                 <th className="px-3 py-2 text-right">Amount</th>
               </tr>
@@ -501,6 +539,15 @@ export default function ProformaForm({
                         <option value="pcs">Per Pc</option>
                         <option value="dzn">Per Dzn</option>
                       </select>
+                    </td>
+                    <td className="px-3 py-2">
+                      <input
+                        type="number" step="0.1"
+                        value={bookingThickness[b.id] ?? ""}
+                        onChange={(e) => changeThickness(b, e.target.value)}
+                        className="w-16 rounded border px-1 py-1 text-xs"
+                        placeholder={rule?.pi_thickness_mm != null ? String(rule.pi_thickness_mm) : ""}
+                      />
                     </td>
                     <td className="px-3 py-2">
                       <div className="flex gap-1 items-center">
@@ -531,7 +578,7 @@ export default function ProformaForm({
                 );
               })}
               {customerBookings.length === 0 && (
-                <tr><td colSpan={9} className="px-3 py-3 text-gray-400 italic">এই ফিল্টারে কোনো বুকিং নেই</td></tr>
+                <tr><td colSpan={10} className="px-3 py-3 text-gray-400 italic">এই ফিল্টারে কোনো বুকিং নেই</td></tr>
               )}
             </tbody>
           </table>

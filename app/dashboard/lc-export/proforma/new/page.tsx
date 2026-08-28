@@ -3,7 +3,7 @@ import ProformaForm from "./ProformaForm";
 
 export default async function NewProformaPage() {
   const supabase = await createClient();
-  const { data: customers } = await supabase.from("customers").select("id, name, price_per_lbs").order("name");
+  const { data: customers } = await supabase.from("customers").select("id, name, code, price_per_lbs, default_print_rate").order("name");
 
   const { data: allBookings } = await supabase
     .from("bookings")

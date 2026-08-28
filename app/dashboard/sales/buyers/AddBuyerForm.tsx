@@ -133,7 +133,7 @@ export default function AddBuyerForm({ customers }: { customers: Customer[] }) {
 
         <div className="flex flex-col">
           <label className="text-xs text-gray-500">USD→BDT Default Rate</label>
-          <input type="number" step="0.01" value={usdBdtRate} onChange={(e) => setUsdBdtRate(e.target.value)} className="rounded-lg border px-2 py-1 text-sm w-28" placeholder="122" />
+          <input type="number" step="0.01" value={usdBdtRate} onChange={(e) => setUsdBdtRate(e.target.value)} className="rounded-lg border px-2 py-1 text-sm w-28" placeholder="107" />
         </div>
 
         <div className="flex flex-col">
