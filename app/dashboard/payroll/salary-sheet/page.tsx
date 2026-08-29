@@ -5,7 +5,10 @@ import SalaryRow from "./SalaryRow";
 
 export default async function SalarySheetPage() {
   const supabase = await createClient();
-  const { data: employees } = await supabase.from("employees").select("id, name, employee_code, basic_salary").eq("is_active", true).order("employee_code");
+  const { data: employees } = await supabase
+    .from("employees")
+    .select("id, name, employee_code, basic_salary, designation, department, join_date")
+    .eq("is_active", true).order("employee_code");
   const { data: sheets } = await supabase
     .from("salary_sheet")
     .select("*, employees(name, employee_code)")
@@ -28,8 +31,11 @@ export default async function SalarySheetPage() {
               <th className="px-4 py-2">Employee</th>
               <th className="px-4 py-2">Month</th>
               <th className="px-4 py-2 text-right">Basic</th>
-              <th className="px-4 py-2 text-right">Overtime</th>
-              <th className="px-4 py-2 text-right">Deductions</th>
+              <th className="px-4 py-2 text-right">OT hrs</th>
+              <th className="px-4 py-2 text-right">Absent</th>
+              <th className="px-4 py-2 text-right">Net Adj.</th>
+              <th className="px-4 py-2 text-right">Advance</th>
+              <th className="px-4 py-2 text-right">Other Ded.</th>
               <th className="px-4 py-2 text-right">Net Salary</th>
               <th className="px-4 py-2">Status</th>
               <th className="px-4 py-2 text-right">Action</th>
@@ -38,7 +44,7 @@ export default async function SalarySheetPage() {
           <tbody>
             {(sheets ?? []).map((s) => <SalaryRow key={s.id} row={s} />)}
             {(!sheets || sheets.length === 0) && (
-              <tr><td colSpan={8} className="px-4 py-3 text-gray-400 italic">এখনো কোনো Salary Sheet জেনারেট হয়নি</td></tr>
+              <tr><td colSpan={11} className="px-4 py-3 text-gray-400 italic">এখনো কোনো Salary Sheet জেনারেট হয়নি</td></tr>
             )}
           </tbody>
         </table>

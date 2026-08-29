@@ -64,9 +64,11 @@ const menu: MenuGroup[] = [
     label: "Payroll", href: "/dashboard/payroll",
     items: [
       { label: "Employees", href: "/dashboard/payroll/employees" },
+      { label: "Salary Revisions", href: "/dashboard/payroll/salary-revisions" },
       { label: "Attendance", href: "/dashboard/payroll/attendance" },
-      { label: "Overtime", href: "/dashboard/payroll/overtime" },
+      { label: "Overtime রিপোর্ট", href: "/dashboard/payroll/overtime" },
       { label: "Salary Sheet", href: "/dashboard/payroll/salary-sheet" },
+      { label: "Eid Bonus", href: "/dashboard/payroll/bonus" },
     ],
   },
   {

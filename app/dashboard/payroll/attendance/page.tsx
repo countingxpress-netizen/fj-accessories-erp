@@ -4,7 +4,10 @@ import AttendanceForm from "./AttendanceForm";
 
 export default async function AttendancePage() {
   const supabase = await createClient();
-  const { data: employees } = await supabase.from("employees").select("id, name, employee_code").eq("is_active", true).order("employee_code");
+  const { data: employees } = await supabase
+    .from("employees")
+    .select("id, name, employee_code, designation, department, basic_salary")
+    .eq("is_active", true).order("employee_code");
 
   return (
     <div>

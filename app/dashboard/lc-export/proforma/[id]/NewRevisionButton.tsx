@@ -29,6 +29,7 @@ export default function NewRevisionButton({ piId }: { piId: string }) {
         exchange_rate_to_bdt: original.exchange_rate_to_bdt,
         total_amount: original.total_amount, currency: original.currency,
         discount_type: original.discount_type, discount_value: original.discount_value,
+        price_decimals: original.price_decimals,
         terms_conditions: original.terms_conditions, is_manual: original.is_manual,
         status: "draft", revision: (original.revision ?? 0) + 1, parent_pi_id: piId,
       })

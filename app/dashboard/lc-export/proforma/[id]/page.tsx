@@ -62,7 +62,7 @@ export default async function ProformaViewPage({ params }: { params: Promise<{ i
                   <td className="px-4 py-2">{it.measurement}</td>
                   <td className="px-4 py-2 text-right">{it.qty_pcs}</td>
                   <td className="px-4 py-2 text-right">{(it.qty_pcs / 12).toFixed(2)}</td>
-                  <td className="px-4 py-2 text-right">{sym}{it.price_unit}/{it.price_basis}</td>
+                  <td className="px-4 py-2 text-right">{sym}{Number(it.price_unit).toFixed(pi.price_decimals ?? 4)}/{it.price_basis}</td>
                   <td className="px-4 py-2 text-right">{sym}{amount.toFixed(2)}</td>
                 </tr>
               );

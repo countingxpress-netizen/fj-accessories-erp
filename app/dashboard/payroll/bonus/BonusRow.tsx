@@ -3,50 +3,50 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { generateNextDocNo } from "@/lib/docNumber";
+import { formatDate } from "@/lib/formatDate";
 import { todayLocal } from "@/lib/payroll";
 
-const monthNames = ["","January","February","March","April","May","June","July","August","September","October","November","December"];
+const festivalLabel: Record<string, string> = {
+  eid_ul_fitr: "Eid-ul-Fitr",
+  eid_ul_azha: "Eid-ul-Azha",
+};
 
-export default function SalaryRow({ row }: { row: any }) {
+export default function BonusRow({ row }: { row: any }) {
   const [loading, setLoading] = useState(false);
   const router = useRouter();
   const supabase = createClient();
 
   async function handleMarkPaid() {
     setLoading(true);
-
     const today = todayLocal();
     const { data: salaryAccount } = await supabase.from("chart_of_accounts").select("id").eq("account_code", "5100").single();
     const { data: cashAccount } = await supabase.from("chart_of_accounts").select("id").eq("account_code", "1000").single();
 
     if (salaryAccount && cashAccount) {
       const voucherNo = await generateNextDocNo(supabase, "journal_vouchers", "voucher_no", "JV", "voucher_date", today);
+      const label = `${festivalLabel[row.festival] ?? row.festival} ${row.year}`;
       const { data: voucher } = await supabase
         .from("journal_vouchers")
-        .insert({
-          voucher_no: voucherNo, voucher_date: today,
-          narration: `Salary paid to ${row.employees?.name} — ${monthNames[row.month]} ${row.year}`,
-        })
+        .insert({ voucher_no: voucherNo, voucher_date: today, narration: `Festival bonus paid to ${row.employees?.name} — ${label}` })
         .select().single();
 
       if (voucher) {
         await supabase.from("journal_entry_lines").insert([
-          { voucher_id: voucher.id, account_id: salaryAccount.id, debit: row.net_salary, credit: 0, memo: `Salary ${monthNames[row.month]} ${row.year}` },
-          { voucher_id: voucher.id, account_id: cashAccount.id, debit: 0, credit: row.net_salary, memo: `Salary ${monthNames[row.month]} ${row.year}` },
+          { voucher_id: voucher.id, account_id: salaryAccount.id, debit: row.bonus_amount, credit: 0, memo: `Bonus ${label}` },
+          { voucher_id: voucher.id, account_id: cashAccount.id, debit: 0, credit: row.bonus_amount, memo: `Bonus ${label}` },
         ]);
-        await supabase.from("salary_sheet").update({ paid: true, voucher_id: voucher.id }).eq("id", row.id);
+        await supabase.from("bonus_sheet").update({ paid: true, voucher_id: voucher.id }).eq("id", row.id);
       }
     }
-
     setLoading(false);
     router.refresh();
   }
 
   async function handleDelete() {
-    if (!window.confirm("এই Salary Sheet এন্ট্রি মুছে ফেলতে চান?")) return;
+    if (!window.confirm("এই Bonus এন্ট্রি মুছে ফেলতে চান?")) return;
     setLoading(true);
     // sheet row আগে মুছুন — voucher_id FK থাকলে voucher আগে মুছতে গেলে আটকে যায়
-    await supabase.from("salary_sheet").delete().eq("id", row.id);
+    await supabase.from("bonus_sheet").delete().eq("id", row.id);
     if (row.voucher_id) {
       await supabase.from("journal_entry_lines").delete().eq("voucher_id", row.voucher_id);
       await supabase.from("journal_vouchers").delete().eq("id", row.voucher_id);
@@ -58,18 +58,15 @@ export default function SalaryRow({ row }: { row: any }) {
   return (
     <tr className="border-t">
       <td className="px-4 py-2">{row.employees?.employee_code} — {row.employees?.name}</td>
-      <td className="px-4 py-2">{monthNames[row.month]} {row.year}</td>
+      <td className="px-4 py-2">{festivalLabel[row.festival] ?? row.festival} {row.year}</td>
+      <td className="px-4 py-2 text-gray-500">{formatDate(row.bonus_date)}</td>
       <td className="px-4 py-2 text-right">{row.basic?.toFixed(2)}</td>
-      <td className="px-4 py-2 text-right">{row.salary_type === "fixed" ? "—" : (row.ot_hours ?? 0)}</td>
-      <td className="px-4 py-2 text-right">{row.salary_type === "fixed" ? "—" : `${row.absent_days ?? 0}d`}</td>
-      <td className={`px-4 py-2 text-right ${(row.net_adjustment ?? 0) < 0 ? "text-red-600" : ""}`}>
-        {row.salary_type === "fixed" ? "—" : (row.net_adjustment ?? 0).toFixed(2)}
-      </td>
-      <td className="px-4 py-2 text-right">{(row.advance ?? 0).toFixed(2)}</td>
-      <td className="px-4 py-2 text-right">{(row.other_deduction ?? 0).toFixed(2)}</td>
-      <td className="px-4 py-2 text-right font-medium">{row.net_salary?.toFixed(2)}</td>
+      <td className="px-4 py-2 text-right">{row.tenure_months?.toFixed(1)}</td>
+      <td className="px-4 py-2 text-right font-medium">{row.bonus_amount?.toFixed(2)}</td>
       <td className="px-4 py-2">
-        {row.paid ? <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs text-green-700">Paid</span> : <span className="rounded-full bg-orange-100 px-2 py-0.5 text-xs text-orange-700">Unpaid</span>}
+        {row.paid
+          ? <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs text-green-700">Paid</span>
+          : <span className="rounded-full bg-orange-100 px-2 py-0.5 text-xs text-orange-700">Unpaid</span>}
       </td>
       <td className="px-4 py-2 text-right whitespace-nowrap">
         {!row.paid && (

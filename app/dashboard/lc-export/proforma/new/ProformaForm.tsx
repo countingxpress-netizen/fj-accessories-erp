@@ -3,7 +3,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { generatePiNo } from "@/lib/docNumber";
-import { calcPiUnitPrice, calcPiUnitPriceWithMarkup, calcPiWeightLbs, piRound2, piRound4 } from "@/lib/calcTubeCutting";
+import { calcPiUnitPrice, calcPiUnitPriceWithMarkup, calcPiWeightLbs } from "@/lib/calcTubeCutting";
 import { amountInWords } from "@/lib/numberToWords";
 
 type Booking = {
@@ -79,6 +79,7 @@ export default function ProformaForm({
   const [rateTouched, setRateTouched] = useState(false);
   const [discountType, setDiscountType] = useState<"none" | "percentage" | "fixed">("none");
   const [discountValue, setDiscountValue] = useState("0");
+  const [priceDecimals, setPriceDecimals] = useState("4");
   const [termsConditions, setTermsConditions] = useState(DEFAULT_TERMS);
   const [garmentsAddress, setGarmentsAddress] = useState("");
   const [itemDescription, setItemDescription] = useState("Poly Bags");
@@ -108,6 +109,10 @@ export default function ProformaForm({
 
   const selectedCustomer = customers.find((c) => c.id === customerId);
   const selectedGarment = garments.find((g) => g.id === garmentsId);
+
+  // Price/Unit-এ দশমিকের পর কয় ঘর (auto-round + print display)
+  const pd = Math.max(0, Math.min(8, parseInt(priceDecimals) || 4));
+  const roundPrice = (n: number) => { const f = Math.pow(10, pd); return Math.round(n * f) / f; };
 
   // per-line PI thickness (এডিটেবল) — না দিলে buyer-এর default
   function lineThickness(b: Booking): number {
@@ -147,11 +152,11 @@ export default function ProformaForm({
       const lastPrice = lastUnitPriceByBooking[b.id] ?? 0;
       if (!lastPrice) return 0;
       const bdtPrice = lastPrice * (1 + (rule.percentage_value || 0) / 100);
-      return currency === "USD" ? bdtPrice / rate : bdtPrice;
+      return currency === "USD" ? roundPrice(bdtPrice / rate) : roundPrice(bdtPrice);
     }
     if (rule.pricing_rule === "rate_per_lbs") {
       const bdt = calcPiUnitPrice(b, rule.rate_per_lbs_value || 0, thickness);
-      return currency === "USD" ? piRound4(bdt / rate) : piRound2(bdt);
+      return currency === "USD" ? roundPrice(bdt / rate) : roundPrice(bdt);
     }
     if (rule.pricing_rule === "rate_per_lbs_markup") {
       const bdtPrice = calcPiUnitPriceWithMarkup(
@@ -161,8 +166,8 @@ export default function ProformaForm({
       if (!bdtPrice) return 0;
       const surcharge = rule.usd_surcharge_per_pc || 0; // recycled ইত্যাদি flat USD/pc
       return currency === "USD"
-        ? piRound4(bdtPrice / rate + surcharge)
-        : piRound2(bdtPrice + surcharge * rate);
+        ? roundPrice(bdtPrice / rate + surcharge)
+        : roundPrice(bdtPrice + surcharge * rate);
     }
     return 0;
   }
@@ -177,7 +182,7 @@ export default function ProformaForm({
     if (!b) return;
     const perPc = getSuggestedPrice(b);
     if (perPc > 0) {
-      setBookingPrice((prev) => ({ ...prev, [bookingId]: (perPc * basisFactor(basis)).toFixed(4) }));
+      setBookingPrice((prev) => ({ ...prev, [bookingId]: (perPc * basisFactor(basis)).toFixed(pd) }));
     }
   }
 
@@ -215,7 +220,7 @@ export default function ProformaForm({
       const basis = bookingBasis[b.id] || "pcs";
       const perPc = getSuggestedPrice(b, parseFloat(value) || 0);
       if (perPc > 0) {
-        setBookingPrice((prev) => ({ ...prev, [b.id]: (perPc * basisFactor(basis)).toFixed(4) }));
+        setBookingPrice((prev) => ({ ...prev, [b.id]: (perPc * basisFactor(basis)).toFixed(pd) }));
       }
     }
   }
@@ -263,7 +268,7 @@ export default function ProformaForm({
     .map((id) => {
       const b = customerBookings.find((bk) => bk.id === id);
       if (!b) return null;
-      const priceUnit = parseFloat(bookingPrice[id] || "0");
+      const priceUnit = roundPrice(parseFloat(bookingPrice[id] || "0"));
       const basis = bookingBasis[id] || "pcs";
       const amount = calcLineAmount(b.quantity_pcs, priceUnit, basis);
       return { booking: b, priceUnit, basis, amount };
@@ -366,6 +371,7 @@ export default function ProformaForm({
         hs_code: hsCode, bin_no: binNo,
         total_amount: totalAmount,
         currency, discount_type: discountType, discount_value: parseFloat(discountValue) || 0,
+        price_decimals: pd,
         exchange_rate_to_bdt: parseFloat(exchangeRate) || 107,
         terms_conditions: termsConditions, is_manual: mode === "manual", status: "draft",
       })
@@ -553,7 +559,7 @@ export default function ProformaForm({
                         />
                         {rule && rule.pricing_rule !== "manual" && suggested > 0 && (
                           <button type="button" onClick={() => applyAutoPrice(b.id, basis)} className="text-xs text-blue-600 hover:underline whitespace-nowrap" title={`Buyer Rule: ${rule.pricing_rule}`}>
-                            Use {suggested.toFixed(4)}
+                            Use {suggested.toFixed(pd)}
                           </button>
                         )}
                       </div>
@@ -566,7 +572,7 @@ export default function ProformaForm({
                       )}
                     </td>
                     <td className="px-3 py-2 text-right">
-                      {calcLineAmount(b.quantity_pcs, parseFloat(bookingPrice[b.id] || "0"), basis).toFixed(2)}
+                      {calcLineAmount(b.quantity_pcs, roundPrice(parseFloat(bookingPrice[b.id] || "0")), basis).toFixed(2)}
                     </td>
                   </tr>
                 );
@@ -676,6 +682,10 @@ export default function ProformaForm({
       </div>
 
       <div className="flex flex-wrap gap-4 items-end">
+        <div>
+          <label className="block text-sm text-gray-600 mb-1">Price/Unit দশমিক ঘর</label>
+          <input type="number" min="0" max="8" step="1" value={priceDecimals} onChange={(e) => setPriceDecimals(e.target.value)} className="rounded-lg border px-3 py-2 text-sm w-20" />
+        </div>
         <div>
           <label className="block text-sm text-gray-600 mb-1">Discount Type</label>
           <select value={discountType} onChange={(e) => setDiscountType(e.target.value as any)} className="rounded-lg border px-3 py-2 text-sm">

@@ -99,7 +99,7 @@ export default async function PIPrintPage({ params }: { params: Promise<{ id: st
                 <td className="border border-gray-800 py-1 px-2">{it.measurement}</td>
                 <td className="border border-gray-800 text-right py-1 px-2">{it.qty_pcs.toLocaleString()}</td>
                 <td className="border border-gray-800 text-right py-1 px-2">{(it.qty_pcs / 12).toFixed(2)}</td>
-                <td className="border border-gray-800 text-right py-1 px-2">{sym}{it.price_unit}/{it.price_basis}</td>
+                <td className="border border-gray-800 text-right py-1 px-2">{sym}{Number(it.price_unit).toFixed(pi.price_decimals ?? 4)}/{it.price_basis}</td>
                 <td className="border border-gray-800 text-right py-1 px-2">{sym}{amount.toFixed(2)}</td>
               </tr>
             );

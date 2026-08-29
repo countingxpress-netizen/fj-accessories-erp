@@ -16,6 +16,7 @@ export default function EditProformaForm({
   const [currency, setCurrency] = useState(pi.currency);
   const [discountType, setDiscountType] = useState(pi.discount_type);
   const [discountValue, setDiscountValue] = useState(String(pi.discount_value ?? 0));
+  const [priceDecimals, setPriceDecimals] = useState(String(pi.price_decimals ?? 4));
   const [status, setStatus] = useState(pi.status);
   const [termsConditions, setTermsConditions] = useState(pi.terms_conditions ?? "");
   const [validTill, setValidTill] = useState(pi.valid_till ?? "");
@@ -95,6 +96,7 @@ export default function EditProformaForm({
 
     const { error: updateError } = await supabase.from("proforma_invoices").update({
       pi_date: piDate, currency, discount_type: discountType, discount_value: parseFloat(discountValue) || 0,
+      price_decimals: Math.max(0, Math.min(8, parseInt(priceDecimals) || 4)),
       status, terms_conditions: termsConditions, total_amount: totalAmount,
       valid_till: validTill || null,
       garments_id: garmentsId || null, garments_name: garmentsName || null, garments_address: garmentsAddress || null,
@@ -178,6 +180,10 @@ export default function EditProformaForm({
       </div>
 
       <div className="flex flex-wrap gap-4 items-end">
+        <div>
+          <label className="block text-sm text-gray-600 mb-1">Price/Unit দশমিক ঘর</label>
+          <input type="number" min="0" max="8" step="1" value={priceDecimals} onChange={(e) => setPriceDecimals(e.target.value)} className="rounded-lg border px-3 py-2 text-sm w-20" />
+        </div>
         <div>
           <label className="block text-sm text-gray-600 mb-1">Discount Type</label>
           <select value={discountType} onChange={(e) => setDiscountType(e.target.value)} className="rounded-lg border px-3 py-2 text-sm">
