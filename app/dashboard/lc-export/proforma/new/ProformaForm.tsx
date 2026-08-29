@@ -16,7 +16,7 @@ type Booking = {
   finished_goods: { product_name: string; length_cm: number; width_cm: number; thickness: number } | null;
 };
 type Customer = { id: string; name: string; code: string | null; price_per_lbs: number | null; default_print_rate: number | null };
-type BuyerMaster = { id: string; customer_id: string; name: string; pricing_rule: string; percentage_value: number; rate_per_lbs_value: number; pi_thickness_mm: number | null; adhesive_rate_per_inch: number | null; print_colors_default: number | null; usd_bdt_rate: number | null; price_basis_default: string | null };
+type BuyerMaster = { id: string; customer_id: string; name: string; pricing_rule: string; percentage_value: number; rate_per_lbs_value: number; pi_thickness_mm: number | null; adhesive_rate_per_inch: number | null; print_colors_default: number | null; usd_bdt_rate: number | null; price_basis_default: string | null; usd_surcharge_per_pc: number | null };
 type Garment = { id: string; customer_id: string; name: string; address: string | null };
 type AdvisingBank = { id: string; name: string; branch: string | null; address: string | null; swift: string | null };
 type ManualLine = { description: string; measurement: string; qtyPcs: string; priceUnit: string; priceBasis: "pcs" | "dzn" };
@@ -137,11 +137,11 @@ export default function ProformaForm({
   }
 
   // buyer rule অনুযায়ী per-piece suggested price (currency অনুযায়ী)
-  function getSuggestedPrice(b: Booking): number {
+  function getSuggestedPrice(b: Booking, thicknessOverride?: number): number {
     const rule = getBuyerRule(b);
     if (!rule || rule.pricing_rule === "manual") return 0;
     const rate = parseFloat(exchangeRate) || 107;
-    const thickness = lineThickness(b);
+    const thickness = thicknessOverride ?? lineThickness(b);
     const printRate = selectedCustomer?.default_print_rate ?? 0.2;
     if (rule.pricing_rule === "percentage") {
       const lastPrice = lastUnitPriceByBooking[b.id] ?? 0;
@@ -159,7 +159,10 @@ export default function ProformaForm({
         rule.adhesive_rate_per_inch, thickness, printRate
       );
       if (!bdtPrice) return 0;
-      return currency === "USD" ? piRound4(bdtPrice / rate) : piRound2(bdtPrice);
+      const surcharge = rule.usd_surcharge_per_pc || 0; // recycled ইত্যাদি flat USD/pc
+      return currency === "USD"
+        ? piRound4(bdtPrice / rate + surcharge)
+        : piRound2(bdtPrice + surcharge * rate);
     }
     return 0;
   }
@@ -208,20 +211,11 @@ export default function ProformaForm({
   function changeThickness(b: Booking, value: string) {
     setBookingThickness((prev) => ({ ...prev, [b.id]: value }));
     if (selectedBookings[b.id]) {
-      // thickness বদলালে suggested দাম + weight রি-ক্যালকুলেট (setState async, তাই সরাসরি হিসাব)
-      const rule = getBuyerRule(b);
+      // thickness বদলালে suggested দাম রি-ক্যালকুলেট (setState async, তাই override দিয়ে)
       const basis = bookingBasis[b.id] || "pcs";
-      if (rule && rule.pricing_rule === "rate_per_lbs_markup") {
-        const rate = parseFloat(exchangeRate) || 107;
-        const printRate = selectedCustomer?.default_print_rate ?? 0.2;
-        const bdt = calcPiUnitPriceWithMarkup(
-          b, rule.rate_per_lbs_value || 0, rule.percentage_value || 0,
-          rule.adhesive_rate_per_inch, parseFloat(value) || 0, printRate
-        );
-        if (bdt > 0) {
-          const perPc = currency === "USD" ? piRound4(bdt / rate) : piRound2(bdt);
-          setBookingPrice((prev) => ({ ...prev, [b.id]: (perPc * basisFactor(basis)).toFixed(4) }));
-        }
+      const perPc = getSuggestedPrice(b, parseFloat(value) || 0);
+      if (perPc > 0) {
+        setBookingPrice((prev) => ({ ...prev, [b.id]: (perPc * basisFactor(basis)).toFixed(4) }));
       }
     }
   }

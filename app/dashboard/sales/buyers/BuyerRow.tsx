@@ -20,6 +20,7 @@ export default function BuyerRow({
   const [colorQuantity, setColorQuantity] = useState(String(buyer.color_quantity ?? ""));
   const [markupPercentage, setMarkupPercentage] = useState(String(buyer.markup_percentage ?? 2));
   const [usdBdtRate, setUsdBdtRate] = useState(String(buyer.usd_bdt_rate ?? ""));
+  const [usdSurchargePerPc, setUsdSurchargePerPc] = useState(String(buyer.usd_surcharge_per_pc ?? ""));
   const [priceBasisDefault, setPriceBasisDefault] = useState(buyer.price_basis_default ?? "pcs");
   const [loading, setLoading] = useState(false);
   const router = useRouter();
@@ -42,6 +43,7 @@ export default function BuyerRow({
       color_quantity: normalizedColorQuantity,
       markup_percentage: parseFloat(markupPercentage) || 0,
       usd_bdt_rate: parseFloat(usdBdtRate) || null,
+      usd_surcharge_per_pc: parseFloat(usdSurchargePerPc) || 0,
       price_basis_default: priceBasisDefault,
     }).eq("id", buyer.id);
     setLoading(false);
@@ -103,6 +105,7 @@ export default function BuyerRow({
         <td className="px-4 py-2"><input type="number" min="0" step="1" value={String(buyer.color_quantity ?? colorQuantity)} onChange={(e) => setColorQuantity(e.target.value)} className="w-24 rounded border px-2 py-1 text-sm" /></td>
         <td className="px-4 py-2"><input type="number" step="0.01" value={markupPercentage} onChange={(e) => setMarkupPercentage(e.target.value)} className="w-20 rounded border px-2 py-1 text-sm" /></td>
         <td className="px-4 py-2"><input type="number" step="0.01" value={usdBdtRate} onChange={(e) => setUsdBdtRate(e.target.value)} className="w-20 rounded border px-2 py-1 text-sm" placeholder="107" /></td>
+        <td className="px-4 py-2"><input type="number" step="0.0001" value={usdSurchargePerPc} onChange={(e) => setUsdSurchargePerPc(e.target.value)} className="w-20 rounded border px-2 py-1 text-sm" placeholder="0" /></td>
         <td className="px-4 py-2">
           <select value={priceBasisDefault} onChange={(e) => setPriceBasisDefault(e.target.value)} className="rounded border px-2 py-1 text-sm">
             <option value="pcs">Per Pc</option>
@@ -135,6 +138,7 @@ export default function BuyerRow({
       <td className="px-4 py-2 text-gray-700">{buyer.color_quantity ?? "-"}</td>
       <td className="px-4 py-2 text-gray-700">{buyer.markup_percentage ?? 2}%</td>
       <td className="px-4 py-2 text-gray-700">{buyer.usd_bdt_rate ?? "-"}</td>
+      <td className="px-4 py-2 text-gray-700">{buyer.usd_surcharge_per_pc ? buyer.usd_surcharge_per_pc : "-"}</td>
       <td className="px-4 py-2 text-gray-700">{buyer.price_basis_default === "dzn" ? "Per Dzn" : "Per Pc"}</td>
       <td className="px-4 py-2 text-right whitespace-nowrap">
         <button onClick={() => setEditing(true)} className="rounded bg-blue-50 px-3 py-1 text-xs text-blue-700 mr-2 hover:bg-blue-100">Edit</button>

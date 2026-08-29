@@ -19,6 +19,7 @@ export default function AddBuyerForm({ customers }: { customers: Customer[] }) {
   const [colorQuantity, setColorQuantity] = useState("");
   const [markupPercentage, setMarkupPercentage] = useState("2");
   const [usdBdtRate, setUsdBdtRate] = useState("");
+  const [usdSurchargePerPc, setUsdSurchargePerPc] = useState("");
   const [priceBasisDefault, setPriceBasisDefault] = useState<"pcs" | "dzn">("pcs");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -47,6 +48,7 @@ export default function AddBuyerForm({ customers }: { customers: Customer[] }) {
       color_quantity: normalizedColorQuantity,
       markup_percentage: parseFloat(markupPercentage) || 0,
       usd_bdt_rate: parseFloat(usdBdtRate) || null,
+      usd_surcharge_per_pc: parseFloat(usdSurchargePerPc) || 0,
       price_basis_default: priceBasisDefault,
     });
     setLoading(false);
@@ -57,7 +59,7 @@ export default function AddBuyerForm({ customers }: { customers: Customer[] }) {
       setError(`${error.message}${hint}`);
       return;
     }
-    setName(""); setPercentageValue("0"); setRateValue("0"); setPiThicknessMm(""); setBookingThicknessMm(""); setProductionThicknessMm(""); setAdhesiveRatePerInch("0.02"); setPrintColorsDefault(""); setColorQuantity(""); setMarkupPercentage("2"); setUsdBdtRate(""); setPriceBasisDefault("pcs");
+    setName(""); setPercentageValue("0"); setRateValue("0"); setPiThicknessMm(""); setBookingThicknessMm(""); setProductionThicknessMm(""); setAdhesiveRatePerInch("0.02"); setPrintColorsDefault(""); setColorQuantity(""); setMarkupPercentage("2"); setUsdBdtRate(""); setUsdSurchargePerPc(""); setPriceBasisDefault("pcs");
     router.refresh();
   }
 
@@ -134,6 +136,11 @@ export default function AddBuyerForm({ customers }: { customers: Customer[] }) {
         <div className="flex flex-col">
           <label className="text-xs text-gray-500">USD→BDT Default Rate</label>
           <input type="number" step="0.01" value={usdBdtRate} onChange={(e) => setUsdBdtRate(e.target.value)} className="rounded-lg border px-2 py-1 text-sm w-28" placeholder="107" />
+        </div>
+
+        <div className="flex flex-col">
+          <label className="text-xs text-gray-500">USD Surcharge/Pc</label>
+          <input type="number" step="0.0001" value={usdSurchargePerPc} onChange={(e) => setUsdSurchargePerPc(e.target.value)} className="rounded-lg border px-2 py-1 text-sm w-28" placeholder="0" />
         </div>
 
         <div className="flex flex-col">
