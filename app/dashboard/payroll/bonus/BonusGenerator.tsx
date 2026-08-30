@@ -11,7 +11,10 @@ type Employee = {
   basic_salary: number; join_date: string | null;
 };
 type Revision = SalaryRevision & { employee_id: string };
-type ExistingBonus = { employee_id: string; festival: string; year: number };
+type ExistingBonus = {
+  id: string; employee_id: string; festival: string; year: number;
+  bonus_amount: number; paid: boolean;
+};
 
 export default function BonusGenerator({
   employees, revisions, existing,
@@ -39,17 +42,24 @@ export default function BonusGenerator({
 
   const preview = useMemo(() => {
     return employees.map((emp) => {
-      const exists = existing.some((b) => b.employee_id === emp.id && b.festival === festival && b.year === year);
+      const exRow = existing.find(
+        (b) => b.employee_id === emp.id && b.festival === festival && b.year === year
+      );
+      const exists = !!exRow;
       const basic = effectiveBasic(revByEmp.get(emp.id), bonusDate, emp.basic_salary);
       const tenure = emp.join_date ? monthsBetween(emp.join_date, bonusDate) : 12;
       const def = eidBonusDefault(basic, tenure);
+      const base = exRow ? exRow.bonus_amount : def;
       const amount = amountMap[emp.id] !== undefined && amountMap[emp.id] !== ""
-        ? parseFloat(amountMap[emp.id]) || 0 : def;
-      return { emp, exists, basic, tenure, def, amount };
+        ? parseFloat(amountMap[emp.id]) || 0 : base;
+      return { emp, exists, exRow, basic, tenure, def, amount };
     });
   }, [employees, existing, festival, year, bonusDate, amountMap, revByEmp]);
 
   const toSave = preview.filter((p) => !p.exists);
+  const toUpdate = preview.filter(
+    (p) => p.exRow && !p.exRow.paid && Math.round(p.amount) !== Math.round(p.exRow.bonus_amount)
+  );
   const grand = toSave.reduce((s, p) => s + p.amount, 0);
 
   function loadPreview(e: React.FormEvent) {
@@ -70,6 +80,12 @@ export default function BonusGenerator({
           bonus_amount: p.amount, paid: false,
         });
         if (insErr) throw new Error(`${p.emp.name}: ${insErr.message}`);
+      }
+      for (const p of toUpdate) {
+        const { error: updErr } = await supabase.from("bonus_sheet")
+          .update({ bonus_amount: p.amount })
+          .eq("id", p.exRow!.id);
+        if (updErr) throw new Error(`${p.emp.name}: ${updErr.message}`);
       }
       setRows(null);
       router.refresh();
@@ -102,7 +118,8 @@ export default function BonusGenerator({
 
       <p className="text-xs text-gray-500">
         ডিফল্ট বোনাস = কার্যকর Basic × 50% × min(1, চাকরির মাস ÷ 12)। চাকরির মাস = join_date থেকে Bonus Date পর্যন্ত।
-        প্রতি কর্মীর অঙ্ক এডিটেবল। এক festival+year-এ যাদের বোনাস আগে থেকেই আছে — স্কিপ হবে।
+        প্রতি কর্মীর Eid Bonus অঙ্ক সব সময় এডিটেবল। আগে জেনারেট হওয়া (unpaid) কর্মীর অঙ্ক বদলালে সেভ করলে আপডেট হবে;
+        পরিশোধিত হয়ে গেলে আর বদলানো যাবে না।
       </p>
 
       {error && <p className="text-sm text-red-600">{error}</p>}
@@ -117,41 +134,48 @@ export default function BonusGenerator({
                   <th className="px-2 py-2 text-right">Basic</th>
                   <th className="px-2 py-2 text-right">চাকরির মাস</th>
                   <th className="px-2 py-2 text-right">ডিফল্ট (50%)</th>
-                  <th className="px-2 py-2 text-right">Bonus Amount</th>
+                  <th className="px-2 py-2 text-right">Eid Bonus</th>
                   <th className="px-2 py-2">Note</th>
                 </tr>
               </thead>
               <tbody>
-                {preview.map((p) => (
-                  <tr key={p.emp.id} className={`border-t ${p.exists ? "bg-gray-50 text-gray-400" : ""}`}>
-                    <td className="px-2 py-1.5 whitespace-nowrap">{p.emp.employee_code} — {p.emp.name}</td>
-                    <td className="px-2 py-1.5 text-right">{p.basic.toFixed(0)}</td>
-                    <td className="px-2 py-1.5 text-right">{p.tenure.toFixed(1)}</td>
-                    <td className="px-2 py-1.5 text-right">{p.def.toFixed(0)}</td>
-                    <td className="px-2 py-1.5 text-right">
-                      <input type="number" step="1" disabled={p.exists}
-                        value={amountMap[p.emp.id] ?? (p.exists ? "" : String(p.def))}
-                        onChange={(e) => setAmountMap((m) => ({ ...m, [p.emp.id]: e.target.value }))}
-                        className="w-24 rounded border px-1 py-0.5 text-right text-xs disabled:bg-gray-100" />
-                    </td>
-                    <td className="px-2 py-1.5 text-amber-600">
-                      {p.exists ? "আগেই জেনারেট" : p.tenure < 12 ? `pro-rate ${Math.round(Math.min(1, p.tenure / 12) * 100)}%` : ""}
-                    </td>
-                  </tr>
-                ))}
+                {preview.map((p) => {
+                  const locked = !!p.exRow?.paid;
+                  return (
+                    <tr key={p.emp.id} className={`border-t ${locked ? "bg-gray-50 text-gray-400" : p.exists ? "bg-blue-50/40" : ""}`}>
+                      <td className="px-2 py-1.5 whitespace-nowrap">{p.emp.employee_code} — {p.emp.name}</td>
+                      <td className="px-2 py-1.5 text-right">{p.basic.toFixed(0)}</td>
+                      <td className="px-2 py-1.5 text-right">{p.tenure.toFixed(1)}</td>
+                      <td className="px-2 py-1.5 text-right">{p.def.toFixed(0)}</td>
+                      <td className="px-2 py-1.5 text-right">
+                        <input type="number" step="1" disabled={locked}
+                          value={amountMap[p.emp.id] ?? String(Math.round(p.exRow ? p.exRow.bonus_amount : p.def))}
+                          onChange={(e) => setAmountMap((m) => ({ ...m, [p.emp.id]: e.target.value }))}
+                          className="w-24 rounded border px-1 py-0.5 text-right text-xs disabled:bg-gray-100" />
+                      </td>
+                      <td className="px-2 py-1.5 text-amber-600">
+                        {locked
+                          ? "পরিশোধিত — লক"
+                          : p.exists
+                            ? (Math.round(p.amount) !== Math.round(p.exRow!.bonus_amount) ? "আগেই জেনারেট — আপডেট হবে" : "আগেই জেনারেট")
+                            : p.tenure < 12 ? `pro-rate ${Math.round(Math.min(1, p.tenure / 12) * 100)}%` : ""}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
               <tfoot className="bg-gray-50 font-medium">
                 <tr>
-                  <td className="px-2 py-2" colSpan={4}>নতুন জেনারেট হবে: {toSave.length} জন</td>
+                  <td className="px-2 py-2" colSpan={4}>নতুন জেনারেট: {toSave.length} জন · আপডেট: {toUpdate.length} জন</td>
                   <td className="px-2 py-2 text-right">{grand.toFixed(0)}</td>
                   <td />
                 </tr>
               </tfoot>
             </table>
           </div>
-          <button onClick={handleSave} disabled={saving || toSave.length === 0}
+          <button onClick={handleSave} disabled={saving || (toSave.length === 0 && toUpdate.length === 0)}
             className="rounded-lg bg-gray-900 px-5 py-2 text-sm text-white disabled:opacity-40">
-            {saving ? "সেভ হচ্ছে..." : `Bonus Sheet সেভ করুন (${toSave.length} জন)`}
+            {saving ? "সেভ হচ্ছে..." : `Bonus Sheet সেভ করুন (নতুন ${toSave.length} · আপডেট ${toUpdate.length})`}
           </button>
         </div>
       )}

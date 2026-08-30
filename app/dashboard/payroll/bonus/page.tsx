@@ -18,7 +18,10 @@ export default async function BonusPage() {
     .order("year", { ascending: false })
     .order("festival");
 
-  const existing = (sheets ?? []).map((s: any) => ({ employee_id: s.employee_id, festival: s.festival, year: s.year }));
+  const existing = (sheets ?? []).map((s: any) => ({
+    id: s.id, employee_id: s.employee_id, festival: s.festival, year: s.year,
+    bonus_amount: Number(s.bonus_amount) || 0, paid: !!s.paid,
+  }));
 
   return (
     <div>
