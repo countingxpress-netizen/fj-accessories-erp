@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import {
   effectiveBasic, monthsBetween, eidBonusDefault, FESTIVALS, todayLocal, type SalaryRevision,
 } from "@/lib/payroll";
+import { postPayrollAccrual, reversePayrollJv } from "@/lib/payrollJv";
 
 type Employee = {
   id: string; name: string; employee_code: string;
@@ -13,7 +14,7 @@ type Employee = {
 type Revision = SalaryRevision & { employee_id: string };
 type ExistingBonus = {
   id: string; employee_id: string; festival: string; year: number;
-  bonus_amount: number; paid: boolean;
+  bonus_amount: number; paid: boolean; accrual_voucher_id: string | null;
 };
 
 export default function BonusGenerator({
@@ -72,20 +73,45 @@ export default function BonusGenerator({
   async function handleSave() {
     setSaving(true);
     setError("");
+    const festLabel = FESTIVALS.find((f) => f.value === festival)?.label ?? festival;
+    const bonusLabel = `${festLabel} ${year}`;
     try {
       for (const p of toSave) {
-        const { error: insErr } = await supabase.from("bonus_sheet").insert({
+        const { data: inserted, error: insErr } = await supabase.from("bonus_sheet").insert({
           employee_id: p.emp.id, festival, year, bonus_date: bonusDate,
           basic: p.basic, tenure_months: Math.round(p.tenure * 100) / 100,
           bonus_amount: p.amount, paid: false,
-        });
+        }).select("id").single();
         if (insErr) throw new Error(`${p.emp.name}: ${insErr.message}`);
+
+        // Accrual JV — বোনাসের তারিখে খরচ বসে (Dr 5100 / Cr 2100)
+        const accrualId = await postPayrollAccrual(supabase, {
+          date: bonusDate,
+          narration: `Bonus accrual — ${p.emp.employee_code} ${p.emp.name} — ${bonusLabel}`,
+          amount: p.amount,
+          memo: `Bonus ${bonusLabel}`,
+        });
+        if (accrualId && inserted) {
+          await supabase.from("bonus_sheet").update({ accrual_voucher_id: accrualId }).eq("id", inserted.id);
+        }
       }
       for (const p of toUpdate) {
         const { error: updErr } = await supabase.from("bonus_sheet")
           .update({ bonus_amount: p.amount })
           .eq("id", p.exRow!.id);
         if (updErr) throw new Error(`${p.emp.name}: ${updErr.message}`);
+
+        // অঙ্ক বদলেছে — accrual JV নতুন অঙ্কে আবার বসাই
+        await reversePayrollJv(supabase, p.exRow!.accrual_voucher_id);
+        const accrualId = await postPayrollAccrual(supabase, {
+          date: bonusDate,
+          narration: `Bonus accrual — ${p.emp.employee_code} ${p.emp.name} — ${bonusLabel}`,
+          amount: p.amount,
+          memo: `Bonus ${bonusLabel}`,
+        });
+        await supabase.from("bonus_sheet")
+          .update({ accrual_voucher_id: accrualId ?? null })
+          .eq("id", p.exRow!.id);
       }
       setRows(null);
       router.refresh();
@@ -120,6 +146,7 @@ export default function BonusGenerator({
         ডিফল্ট বোনাস = কার্যকর Basic × 50% × min(1, চাকরির মাস ÷ 12)। চাকরির মাস = join_date থেকে Bonus Date পর্যন্ত।
         প্রতি কর্মীর Eid Bonus অঙ্ক সব সময় এডিটেবল। আগে জেনারেট হওয়া (unpaid) কর্মীর অঙ্ক বদলালে সেভ করলে আপডেট হবে;
         পরিশোধিত হয়ে গেলে আর বদলানো যাবে না।
+        <br />সেভ করলে প্রতি কর্মীর <strong>Accrual JV</strong> হয় (Dr Salary Expense 5100 / Cr Salary &amp; Bonus Payable 2100) Bonus Date-এ; &quot;Mark Paid&quot;-এ Cash/Bank থেকে পরিশোধের JV হয়।
       </p>
 
       {error && <p className="text-sm text-red-600">{error}</p>}

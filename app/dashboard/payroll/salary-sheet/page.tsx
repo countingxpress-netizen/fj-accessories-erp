@@ -14,6 +14,11 @@ export default async function SalarySheetPage() {
     .select("*, employees(name, employee_code)")
     .order("year", { ascending: false })
     .order("month", { ascending: false });
+  const { data: cashBankAccounts } = await supabase
+    .from("chart_of_accounts")
+    .select("id, account_code, account_name")
+    .in("account_code", ["1000", "1010"])
+    .order("account_code");
 
   return (
     <div>
@@ -42,7 +47,7 @@ export default async function SalarySheetPage() {
             </tr>
           </thead>
           <tbody>
-            {(sheets ?? []).map((s) => <SalaryRow key={s.id} row={s} />)}
+            {(sheets ?? []).map((s) => <SalaryRow key={s.id} row={s} cashBankAccounts={cashBankAccounts ?? []} />)}
             {(!sheets || sheets.length === 0) && (
               <tr><td colSpan={11} className="px-4 py-3 text-gray-400 italic">এখনো কোনো Salary Sheet জেনারেট হয়নি</td></tr>
             )}

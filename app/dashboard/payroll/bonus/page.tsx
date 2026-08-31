@@ -17,10 +17,16 @@ export default async function BonusPage() {
     .select("*, employees(name, employee_code)")
     .order("year", { ascending: false })
     .order("festival");
+  const { data: cashBankAccounts } = await supabase
+    .from("chart_of_accounts")
+    .select("id, account_code, account_name")
+    .in("account_code", ["1000", "1010"])
+    .order("account_code");
 
   const existing = (sheets ?? []).map((s: any) => ({
     id: s.id, employee_id: s.employee_id, festival: s.festival, year: s.year,
     bonus_amount: Number(s.bonus_amount) || 0, paid: !!s.paid,
+    accrual_voucher_id: s.accrual_voucher_id ?? null,
   }));
 
   return (
@@ -47,7 +53,7 @@ export default async function BonusPage() {
             </tr>
           </thead>
           <tbody>
-            {(sheets ?? []).map((s: any) => <BonusRow key={s.id} row={s} />)}
+            {(sheets ?? []).map((s: any) => <BonusRow key={s.id} row={s} cashBankAccounts={cashBankAccounts ?? []} />)}
             {(!sheets || sheets.length === 0) && (
               <tr><td colSpan={8} className="px-4 py-3 text-gray-400 italic">এখনো কোনো Bonus Sheet জেনারেট হয়নি</td></tr>
             )}

@@ -7,6 +7,7 @@ import {
   effectiveBasic, daysInMonth as daysInMonthOf, daysInclusive, proratedFixedBasic,
   monthRange, type SalaryRevision,
 } from "@/lib/payroll";
+import { postPayrollAccrual } from "@/lib/payrollJv";
 
 type Employee = {
   id: string; name: string; employee_code: string;
@@ -134,11 +135,12 @@ export default function SalarySheetGenerator({ employees }: { employees: Employe
     setSaving(true);
     setError("");
     try {
+      const monthLabel = `${monthNames[month - 1]} ${year}`;
       for (const { row, res, prorated } of toSave) {
         const countedDays = prorated
           ? Math.max(0, Math.min(row.monthDays, row.employedDays - row.absentDays))
           : null;
-        const { error: insErr } = await supabase.from("salary_sheet").insert({
+        const { data: inserted, error: insErr } = await supabase.from("salary_sheet").insert({
           employee_id: row.emp.id, month, year, paid: false,
           basic: res.basic,
           salary_type: res.salaryType,
@@ -156,8 +158,19 @@ export default function SalarySheetGenerator({ employees }: { employees: Employe
           prorated,
           counted_days: countedDays,
           days_in_month: prorated ? row.monthDays : null,
-        });
+        }).select("id").single();
         if (insErr) throw new Error(`${row.emp.name}: ${insErr.message}`);
+
+        // Accrual JV — খরচ বেতনের মাসেই বসে (payment-এর দিনে নয়), মাস-শেষের তারিখে
+        const accrualId = await postPayrollAccrual(supabase, {
+          date: monthEnd,
+          narration: `Salary accrual — ${row.emp.employee_code} ${row.emp.name} — ${monthLabel}`,
+          amount: res.netSalary,
+          memo: `Salary ${monthLabel}`,
+        });
+        if (accrualId && inserted) {
+          await supabase.from("salary_sheet").update({ accrual_voucher_id: accrualId }).eq("id", inserted.id);
+        }
       }
       setRows(null);
       router.refresh();
@@ -190,6 +203,7 @@ export default function SalarySheetGenerator({ employees }: { employees: Employe
         Basic আসে Salary Revision হিস্টরি থেকে (এই মাসে কার্যকর অঙ্ক) — Basic কলাম এডিটেবল।
         Fixed কর্মী মাঝ-মাসে join করলে Basic = কার্যকর basic ÷ মাসের মোট দিন × (join থেকে মাস-শেষ দিন − absent)।
         Production: রেট = Basic ÷ 26 ÷ 8 · Net adjustment = রেট × (OT ঘণ্টা − Absent ঘণ্টা)। join_date-এর আগের attendance / OT ধরা হয় না।
+        <br />সেভ করলে প্রতি কর্মীর জন্য একটা <strong>Accrual JV</strong> হয় (Dr Salary Expense 5100 / Cr Salary &amp; Bonus Payable 2100), মাস-শেষের তারিখে — বেতন খরচ সঠিক মাসেই বসে। পরে &quot;Mark Paid&quot; চাপলে Cash/Bank থেকে পরিশোধের JV হয়।
       </p>
 
       {error && <p className="text-sm text-red-600">{error}</p>}
