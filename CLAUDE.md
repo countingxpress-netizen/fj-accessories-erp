@@ -71,6 +71,7 @@ Uses `pi\_thickness\_mm` (separate from order/production thickness). Buyer-level
 * Booking status logic lives in `lib/bookingStatus.ts` (`getBookingStatusLabel`) — derives status from production timestamps + delivery challan data, NOT a stored status enum value for these states (the `bookings.status` column only holds `open/in\_production/partially\_delivered/completed/cancelled` — do not write stage names like "blowing" into it, this breaks Delivery Challan/Sales Invoice booking filters which query on those enum values).
 * `buyers` and `garments` are separate master tables scoped under `customers` (one customer can have many buyers and many garments units).
 * Document numbering: MAX-based via `lib/docNumber.ts` `generateNextDocNo()` — never count-based (breaks after deletions).
+* Schema source of truth = `supabase/migrations/` (Supabase CLI, project linked ref `kwsdvehjqzgmxlqevxjl`, PG17). Baseline is `supabase/migrations/00000000000000_baseline.sql` (registered as applied on prod). Do NOT hand out raw `ALTER TABLE` for the dashboard SQL editor — add a migration (`npm run migration:new <name>`, write SQL, user runs `npm run db:push`; push needs no Docker). `db:pull`/`db:diff` need Docker (no Docker on this machine); for a fresh full-schema dump without Docker use `npm run db:snapshot` (needs pg_dump 17, at `C:\Program Files\PostgreSQL\17\bin`). Pre-CLI history: `supabase/legacy-migrations/` (already applied). See `supabase/README.md`.
 
 ## Skills/tools available
 

@@ -16,6 +16,20 @@ bun dev
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
+## Database schema & migrations
+
+Schema is version-controlled under [`supabase/`](supabase/README.md). One-time setup
+(needs your Supabase login):
+
+```bash
+npx --yes supabase login
+npx --yes supabase link --project-ref <project-ref>
+npm run db:pull   # captures current prod schema as the baseline migration — commit it
+```
+
+After that, every schema change is a migration file (`npm run migration:new <name>` →
+write SQL → `npm run db:push`). Full details in [`supabase/README.md`](supabase/README.md).
+
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.

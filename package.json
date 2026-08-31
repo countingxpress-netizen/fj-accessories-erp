@@ -6,7 +6,13 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "db:push": "npx --yes supabase db push",
+    "db:pull": "npx --yes supabase db pull",
+    "db:diff": "npx --yes supabase db diff -f",
+    "db:snapshot": "bash supabase/dump-schema.sh",
+    "migration:new": "npx --yes supabase migration new",
+    "migration:list": "npx --yes supabase migration list --linked"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.3",

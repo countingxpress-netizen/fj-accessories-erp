@@ -36,6 +36,11 @@ yarn-error.log*
 # vercel
 .vercel
 
+# supabase cli (local state — never commit)
+/supabase/.branches
+/supabase/.temp
+/supabase/.env
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts

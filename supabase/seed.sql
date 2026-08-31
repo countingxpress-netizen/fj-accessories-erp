@@ -1,0 +1,14 @@
+-- Seed data for a fresh local database (`supabase db reset` চালালে বসে)।
+-- প্রোডাকশন ডেটা এখানে রাখবেন না — শুধু ডেভেলপমেন্ট/টেস্টের জন্য ন্যূনতম rows।
+--
+-- উদাহরণ (baseline schema তৈরি হওয়ার পর আনকমেন্ট করুন):
+--
+-- insert into public.warehouses (name) values ('Main Store'), ('Production Floor');
+-- insert into public.chart_of_accounts (account_code, account_name, account_type) values
+--   ('1000', 'Cash', 'asset'),
+--   ('1010', 'Bank', 'asset'),
+--   ('1100', 'Accounts Receivable', 'asset'),
+--   ('2000', 'Accounts Payable', 'liability'),
+--   ('4000', 'Sales', 'income'),
+--   ('5100', 'Salary & Wages Expense', 'expense'),
+--   ('5400', 'Bank / LC Charges', 'expense');

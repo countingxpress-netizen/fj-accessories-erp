@@ -1,0 +1,29 @@
+# Supabase local config — F & J Accessories ERP
+# পূর্ণ রেফারেন্স: https://supabase.com/docs/guides/local-development/cli/config
+#
+# এই ফাইলটা মিনিমাল রাখা হয়েছে। CLI ভার্সন আপডেটে কনফ্লিক্ট হলে একবার
+# `npx supabase@latest init` চালিয়ে নতুন করে জেনারেট করে নিন — শুধু
+# project_id একই রাখবেন।
+
+project_id = "fj-erp"
+
+[db]
+# লোকাল shadow/dev ডেটাবেজের পোর্ট
+port = 54322
+# Supabase প্রজেক্ট fj-accessories-erp — Postgres 17 (ref kwsdvehjqzgmxlqevxjl)
+major_version = 17
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public"]
+extra_search_path = ["public", "extensions"]
+
+[studio]
+enabled = true
+port = 54323
+
+[auth]
+enabled = true
+# প্রোডাকশনের সাইট URL — লোকাল টেস্টে দরকার হলে বদলান
+site_url = "http://localhost:3000"
