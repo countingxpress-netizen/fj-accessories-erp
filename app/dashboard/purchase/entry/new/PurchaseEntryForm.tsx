@@ -3,22 +3,26 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { generateNextDocNo } from "@/lib/docNumber";
+import { recomputeRawAvgCost } from "@/lib/inventoryCost";
 
 const LBS_PER_BAG = 55;
 
 type Supplier = { id: string; name: string };
 type Warehouse = { id: string; name: string };
-type Material = { id: string; material_name: string };
+type Material = { id: string; material_name: string; inventory_account_code: string | null };
 type Unit = "lbs" | "bags";
 type Line = { material_id: string; quantity: string; unit: Unit; rate: string };
 
-// Material নাম অনুযায়ী Chart of Accounts কোড ম্যাপিং
-const materialAccountCode: Record<string, string> = {
+// পুরনো materials-এর inventory_account_code না থাকলে নাম থেকে ফলব্যাক
+const fallbackAccountCode: Record<string, string> = {
   "LLDPE": "1200",
   "LDPE": "1201",
   "PP": "1202",
   "Recycled Chips": "1203",
 };
+function materialAccount(m: Material | undefined): string | undefined {
+  return m?.inventory_account_code || (m ? fallbackAccountCode[m.material_name] : undefined) || "1299";
+}
 
 function lineQuantityLbs(l: Line): number {
   const qty = parseFloat(l.quantity) || 0;
@@ -152,6 +156,9 @@ export default function PurchaseEntryForm({
         reference_id: entry.id,
         txn_date: entryDate,
       });
+
+      // এই material-এর weighted average খরচ নতুন করে হিসাব করুন (perpetual costing)
+      await recomputeRawAvgCost(supabase, l.material_id);
     }
 
     // ৪. Cash হলে Cash (1000), না হলে Accounts Payable (2000) অ্যাকাউন্ট খুঁজুন
@@ -173,7 +180,7 @@ export default function PurchaseEntryForm({
     const debitLines: { account_id: string; amount: string; memo: string }[] = [];
     for (const l of validLines) {
       const material = materials.find((m) => m.id === l.material_id);
-      const code = material ? materialAccountCode[material.material_name] : undefined;
+      const code = materialAccount(material);
       if (!code) continue;
       const { data: acc } = await supabase.from("chart_of_accounts").select("id").eq("account_code", code).single();
       if (acc) {

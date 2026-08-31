@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { postFgReceiveJv } from "@/lib/inventoryCost";
 
 type ProductionOrder = {
   id: string;
@@ -60,13 +61,22 @@ export default function ReceiveForm({
       return;
     }
 
-    // ২. finished_goods_receive রেকর্ড
-    const { error: receiveError } = await supabase.from("finished_goods_receive").insert({
+    // ২. Perpetual — WIP cost → Finished Goods Inventory (stock বাড়ানোর আগে)
+    const fg = await postFgReceiveJv(supabase, {
+      date: receivedDate,
+      productionOrderId: orderId,
+      productionNo: selectedOrder?.production_no ?? "",
+      productId,
+      pcs: qty,
+    });
+
+    // ৩. finished_goods_receive রেকর্ড
+    const { data: receiveRow, error: receiveError } = await supabase.from("finished_goods_receive").insert({
       production_id: orderId,
       product_id: productId,
       quantity_pcs: qty,
       received_date: receivedDate,
-    });
+    }).select("id").single();
 
     if (receiveError) {
       setLoading(false);
@@ -74,7 +84,13 @@ export default function ReceiveForm({
       return;
     }
 
-    // ৩. finished_goods_stock আপডেট
+    if (receiveRow) {
+      await supabase.from("finished_goods_receive").update({
+        unit_cost: fg.unitCost, total_cost: fg.totalCost, inventory_voucher_id: fg.voucherId,
+      }).eq("id", receiveRow.id);
+    }
+
+    // ৪. finished_goods_stock আপডেট
     const { data: existingStock } = await supabase
       .from("finished_goods_stock")
       .select("*")
@@ -93,7 +109,7 @@ export default function ReceiveForm({
         .insert({ product_id: productId, warehouse_id: warehouseId, quantity_pcs: qty });
     }
 
-    // ৪. stock_ledger এন্ট্রি
+    // ৫. stock_ledger এন্ট্রি
     await supabase.from("stock_ledger").insert({
       item_type: "finished_goods",
       item_id: productId,

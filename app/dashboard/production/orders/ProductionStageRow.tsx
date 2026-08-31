@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import type { StageRow } from "@/lib/productionStageRows";
+import { postFgReceiveJv } from "@/lib/inventoryCost";
 
 function stageColumn(stageType: string) {
   if (stageType === "blowing") return "blowing_produced_lbs";
@@ -53,10 +54,26 @@ export default function ProductionStageRow({ row, isAdmin }: { row: StageRow; is
       // Finished Goods Receive অটো তৈরি করুন
       const targetWarehouseId = row.warehouseId;
       if (targetWarehouseId) {
-        await supabase.from("finished_goods_receive").insert({
-          production_id: row.productionOrderId, product_id: row.productId,
-          quantity_pcs: row.target, received_date: new Date().toISOString().slice(0, 10),
+        const receivedDate = new Date().toISOString().slice(0, 10);
+
+        // Perpetual — WIP cost → Finished Goods Inventory (stock বাড়ানোর আগে)
+        const fg = await postFgReceiveJv(supabase, {
+          date: receivedDate,
+          productionOrderId: row.productionOrderId,
+          productionNo: row.bookingNo,
+          productId: row.productId,
+          pcs: row.target,
         });
+
+        const { data: receiveRow } = await supabase.from("finished_goods_receive").insert({
+          production_id: row.productionOrderId, product_id: row.productId,
+          quantity_pcs: row.target, received_date: receivedDate,
+        }).select("id").single();
+        if (receiveRow) {
+          await supabase.from("finished_goods_receive").update({
+            unit_cost: fg.unitCost, total_cost: fg.totalCost, inventory_voucher_id: fg.voucherId,
+          }).eq("id", receiveRow.id);
+        }
 
         const { data: stock } = await supabase
           .from("finished_goods_stock").select("*")

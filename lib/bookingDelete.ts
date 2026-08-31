@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/client";
 import { DeleteResult, friendlyDeleteError } from "@/lib/deleteResult";
+import { reverseInventoryJv } from "@/lib/inventoryCost";
 
 type SupabaseClient = ReturnType<typeof createClient>;
 
@@ -21,6 +22,10 @@ export async function deleteBookingCascade(
   if ((challanItems && challanItems.length > 0) || (invoiceItems && invoiceItems.length > 0)) {
     return { ok: false, error: "এই বুকিং-এর সাথে ইতিমধ্যে Delivery Challan বা Sales Invoice যুক্ত আছে, তাই মুছে ফেলা যাবে না।" };
   }
+
+  // booking-এর নিজস্ব RM-issue JV (Dr WIP / Cr material inv)
+  const { data: bookingRow } = await supabase.from("bookings").select("inventory_voucher_id").eq("id", bookingId).maybeSingle();
+  await reverseInventoryJv(supabase, bookingRow?.inventory_voucher_id);
 
   const { data: prodOrders } = await supabase.from("production_orders").select("id").eq("booking_id", bookingId);
   for (const po of prodOrders ?? []) {
@@ -45,6 +50,7 @@ export async function deleteBookingCascade(
 
     const { data: receives } = await supabase.from("finished_goods_receive").select("*").eq("production_id", po.id);
     for (const r of receives ?? []) {
+      await reverseInventoryJv(supabase, r.inventory_voucher_id);
       const { data: ledgerEntry } = await supabase
         .from("stock_ledger").select("*")
         .eq("reference_type", "production").eq("reference_id", po.id)
@@ -65,6 +71,7 @@ export async function deleteBookingCascade(
 
     const { data: wastages } = await supabase.from("wastage").select("*").eq("production_id", po.id);
     for (const w of wastages ?? []) {
+      await reverseInventoryJv(supabase, w.inventory_voucher_id);
       if (w.recycled) {
         const { data: ledgerEntry } = await supabase
           .from("stock_ledger").select("*")

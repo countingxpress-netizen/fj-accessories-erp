@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { generateNextDocNo } from "@/lib/docNumber";
 import { toInches } from "@/lib/calcTubeCutting";
+import { postBookingConsumptionJv } from "@/lib/inventoryCost";
 
 type Customer = { id: string; name: string; default_print_rate: number | null; default_adhesive_rate: number | null };
 type Warehouse = { id: string; name: string };
@@ -516,6 +517,21 @@ export default function BookingForm({
             production_id: productionOrder.id, material_id: materialId,
             quantity_lbs: m.qty, consumption_date: bookingDate,
           });
+        }
+      }
+
+      // Perpetual inventory — issue করা কাঁচামালের মূল্য WIP-এ তোলা (Dr 1300 / Cr material inv)
+      if (productionOrder) {
+        const invVoucherId = await postBookingConsumptionJv(supabase, {
+          date: bookingDate,
+          bookingNo: sharedBookingNo,
+          productionOrderId: productionOrder.id,
+          lines: item.materialsNeeded
+            .map((m) => ({ materialId: materialMap[m.name], qtyLbs: m.qty }))
+            .filter((l) => l.materialId && l.qtyLbs > 0),
+        });
+        if (invVoucherId) {
+          await supabase.from("bookings").update({ inventory_voucher_id: invVoucherId }).eq("id", booking.id);
         }
       }
     }

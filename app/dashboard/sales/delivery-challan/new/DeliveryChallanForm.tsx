@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { generateNextDocNo } from "@/lib/docNumber";
 import { recalcBookingStatus } from "@/lib/recalcBookingStatus";
 import { formatStyle } from "@/lib/formatStyle";
+import { postChallanCogsJv } from "@/lib/inventoryCost";
 
 type Booking = {
   id: string; booking_no: string; quantity_pcs: number; product_id: string; customer_id: string;
@@ -167,6 +168,16 @@ export default function DeliveryChallanForm({
       });
 
       await recalcBookingStatus(supabase, li.booking.id);
+    }
+
+    // Perpetual — shipment-এর COGS (Dr 5000 COGS / Cr 1400 FG Inventory)
+    const cogsVoucherId = await postChallanCogsJv(supabase, {
+      date: challanDate,
+      challanNo,
+      lines: lineItems.map((li) => ({ productId: li.booking.product_id, pcs: li.qty })),
+    });
+    if (cogsVoucherId) {
+      await supabase.from("delivery_challans").update({ inventory_voucher_id: cogsVoucherId }).eq("id", challan.id);
     }
 
     setLoading(false);

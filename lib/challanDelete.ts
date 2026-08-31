@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/client";
 import { DeleteResult, friendlyDeleteError } from "@/lib/deleteResult";
 import { recalcBookingStatus } from "@/lib/recalcBookingStatus";
+import { reverseInventoryJv } from "@/lib/inventoryCost";
 
 type SupabaseClient = ReturnType<typeof createClient>;
 
@@ -14,6 +15,11 @@ export async function deleteChallanCascade(
   challanId: string,
   bookingId?: string | null
 ): Promise<DeleteResult> {
+  // shipment-এর COGS JV উল্টে দিন
+  const { data: challanRow } = await supabase
+    .from("delivery_challans").select("inventory_voucher_id").eq("id", challanId).maybeSingle();
+  await reverseInventoryJv(supabase, challanRow?.inventory_voucher_id);
+
   const { data: ledgerEntries } = await supabase
     .from("stock_ledger").select("*").eq("reference_type", "delivery").eq("reference_id", challanId);
 

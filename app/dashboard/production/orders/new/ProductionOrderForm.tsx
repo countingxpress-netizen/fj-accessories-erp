@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { generateNextDocNo } from "@/lib/docNumber";
+import { postBookingConsumptionJv } from "@/lib/inventoryCost";
 
 
 
@@ -124,6 +125,17 @@ export default function ProductionOrderForm({
 
     // ৫. Booking-এর status আপডেট করুন
     await supabase.from("bookings").update({ status: "in_production" }).eq("id", bookingId);
+
+    // ৬. Perpetual — issued কাঁচামালের মূল্য WIP-এ (Dr 1300 / Cr material inv)
+    const invVoucherId = await postBookingConsumptionJv(supabase, {
+      date: orderDate,
+      bookingNo: selectedBooking?.booking_no ?? productionNo,
+      productionOrderId: order.id,
+      lines: [{ materialId, qtyLbs: qty }],
+    });
+    if (invVoucherId) {
+      await supabase.from("bookings").update({ inventory_voucher_id: invVoucherId }).eq("id", bookingId);
+    }
 
     setLoading(false);
     router.push("/dashboard/production/orders");

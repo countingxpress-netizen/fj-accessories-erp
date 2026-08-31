@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { postWastageJv } from "@/lib/inventoryCost";
 
 type ProductionOrder = {
   id: string; production_no: string; stage: string;
@@ -40,9 +41,9 @@ export default function WastageForm({
 
     setLoading(true);
 
-    const { error: wastageError } = await supabase.from("wastage").insert({
+    const { data: wastageRow, error: wastageError } = await supabase.from("wastage").insert({
       production_id: productionId, stage, quantity_lbs: qty, recycled, wastage_date: wastageDate,
-    });
+    }).select("id").single();
 
     if (wastageError) {
       setLoading(false);
@@ -73,6 +74,18 @@ export default function WastageForm({
           txn_type: "in", quantity: qty, reference_type: "wastage", reference_id: productionId, txn_date: wastageDate,
         });
       }
+    }
+
+    // Perpetual — নষ্ট মালের মূল্য WIP থেকে COGS-এ (Dr 5000 / Cr 1300; recycled অংশ Dr 1203)
+    const wjv = await postWastageJv(supabase, {
+      date: wastageDate,
+      productionOrderId: productionId,
+      productionNo: selectedOrder?.production_no ?? "",
+      qtyLbs: qty,
+      recycledQtyLbs: recycled ? qty : 0,
+    });
+    if (wjv && wastageRow) {
+      await supabase.from("wastage").update({ inventory_voucher_id: wjv }).eq("id", wastageRow.id);
     }
 
     setLoading(false);
