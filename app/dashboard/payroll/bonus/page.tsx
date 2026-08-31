@@ -20,7 +20,8 @@ export default async function BonusPage() {
   const { data: cashBankAccounts } = await supabase
     .from("chart_of_accounts")
     .select("id, account_code, account_name")
-    .in("account_code", ["1000", "1010"])
+    .eq("account_type", "asset")
+    .gte("account_code", "1000").lt("account_code", "1100")
     .order("account_code");
 
   const existing = (sheets ?? []).map((s: any) => ({

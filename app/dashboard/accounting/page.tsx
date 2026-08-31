@@ -45,6 +45,9 @@ export default async function AccountingPage() {
         <a href="/dashboard/accounting/bank-book" className="inline-block rounded-lg border border-gray-900 px-4 py-2 text-sm text-gray-900">
           Bank Book দেখুন →
         </a>
+        <a href="/dashboard/accounting/opening-inventory" className="inline-block rounded-lg border border-dashed border-gray-500 px-4 py-2 text-sm text-gray-600">
+          Opening Inventory (একবার) →
+        </a>
       </div>
 
       <AddAccountForm />

@@ -3,17 +3,16 @@ import { generateNextDocNo } from "@/lib/docNumber";
 // Payroll accounting — খরচ (accrual) আর পরিশোধ (payment) দুই ধাপে ভাগ করা হয়,
 // যাতে বেতন খরচ সঠিক মাসে বসে (payment-এর দিনে নয়) আর Cash/Bank বেছে নেওয়া যায়।
 //
-//   Accrual JV : Dr Salary & Wages Expense (5100) / Cr Salary & Bonus Payable (2100)
+//   Accrual JV : Dr Salary & Wages Expense (5100) / Cr Salary Payable (2200)
 //                voucher date = বেতনের মাস-শেষ / বোনাসের তারিখ
-//   Payment JV : Dr Salary & Bonus Payable (2100) / Cr বেছে নেওয়া Cash (1000) / Bank (1010)
+//   Payment JV : Dr Salary Payable (2200) / Cr বেছে নেওয়া Cash / Bank (1000–1099)
 //                voucher date = পরিশোধের দিন
 //
 // Salary Sheet ও Eid Bonus — দুই জায়গাতেই এই একই লজিক (SalaryRow, BonusRow,
 // SalarySheetGenerator, BonusGenerator)।
 
 export const SALARY_EXPENSE_CODE = "5100";
-export const SALARY_PAYABLE_CODE = "2100";
-export const CASH_BANK_CODES = ["1000", "1010"];
+export const SALARY_PAYABLE_CODE = "2200"; // "Salary Payable" (chart-এ আগে থেকেই আছে)
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type Client = any;

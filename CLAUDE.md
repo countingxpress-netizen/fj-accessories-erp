@@ -64,6 +64,10 @@ Uses `pi\_thickness\_mm` (separate from order/production thickness). Buyer-level
 
 ### 1 Bag = 25 Kg = 55 Lbs (conversion constant, LBS\_PER\_BAG = 55)
 
+### Chart of Accounts codes (VERIFY before writing any JV code — these are the real account\_codes)
+
+`1000` Cash in Hand · `1010` Uttara Bank · `1011` BRAC Bank · `1012` EBL · `1100` Accounts Receivable · `1200/1201/1202/1203` Raw Material Inventory (LLDPE/LDPE/PP/Recycled Chips) · `1210` Finished Goods Inventory · `1220` Work-in-Process Inventory · `1299` Other Raw Material Inventory · `2000` Accounts Payable · `2200` Salary Payable · `3000` Owner's Capital · `3100` Retained Earnings · `3900` Opening Balance Equity · `4000` Sales Revenue-Local · `4010` Sales Revenue-Export · `5050` Cost of Goods Sold · `5100` Salary Expense · `5400` Bank Charges · `5410` LC Charges · `5600` Wastage Loss. New-account inserts use `on conflict (account_code) do nothing` — so a wrong code silently no-ops and the JV posts to whatever real account holds that code. Shared JV-posting logic: `lib/payrollJv.ts`, `lib/inventoryCost.ts`.
+
 ## Database structure notes
 
 * `bookings` table: one row per style/measurement combo. Multiple bookings can share `booking\_group\_id` (created together via "Add Product" multi-item flow) and share the same `booking\_no`.

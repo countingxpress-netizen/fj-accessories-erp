@@ -3,18 +3,19 @@ import { generateNextDocNo } from "@/lib/docNumber";
 // Perpetual inventory & COGS — Booking (কাঁচামাল issue), FG Receive, Delivery
 // Challan, Wastage — সব জায়গায় এই শেয়ার্ড লজিক ব্যবহার হয়।
 //
-//   Booking        Dr 1300 WIP           / Cr <material inv acct>
-//   FG Receive     Dr 1400 FG Inventory  / Cr 1300 WIP
-//   Delivery       Dr 5000 COGS          / Cr 1400 FG Inventory
-//   Wastage        Dr 5000 COGS (+Dr recycled inv) / Cr 1300 WIP
+//   Booking        Dr 1220 WIP           / Cr <material inv acct 1200–1203/1299>
+//   FG Receive     Dr 1210 FG Inventory  / Cr 1220 WIP
+//   Delivery       Dr 5050 COGS          / Cr 1210 FG Inventory
+//   Wastage        Dr 5600 Wastage Loss (+Dr 1203 recycled) / Cr 1220 WIP
 //
 // খরচ: raw material — সব purchase-এর weighted average per lb (raw_materials.avg_cost_per_lbs);
 //      finished good — issue করা WIP cost ÷ pcs, moving average (finished_goods.avg_cost_per_pc)।
 
-export const WIP_CODE = "1300";
-export const FG_INV_CODE = "1400";
-export const COGS_CODE = "5000";
-export const RECYCLED_INV_CODE = "1203";
+export const WIP_CODE = "1220";          // Work-in-Process Inventory
+export const FG_INV_CODE = "1210";        // Finished Goods Inventory (chart-এ আগে থেকেই আছে)
+export const COGS_CODE = "5050";          // Cost of Goods Sold
+export const WASTAGE_LOSS_CODE = "5600";  // Wastage Loss (chart-এ আগে থেকেই আছে)
+export const RECYCLED_INV_CODE = "1203";  // Raw Material Inventory - Recycled Chips
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type Client = any;
@@ -256,15 +257,15 @@ export async function postWastageJv(
     recoveredValue = round2(Math.min(args.recycledQtyLbs, args.qtyLbs) * (Number(rec?.avg_cost_per_lbs) || 0));
   }
 
-  const [cogsId, wipId, recId] = await Promise.all([
-    accountIdByCode(supabase, COGS_CODE),
+  const [lossId, wipId, recId] = await Promise.all([
+    accountIdByCode(supabase, WASTAGE_LOSS_CODE),
     accountIdByCode(supabase, WIP_CODE),
     accountIdByCode(supabase, RECYCLED_INV_CODE),
   ]);
-  if (!cogsId || !wipId) return null;
+  if (!lossId || !wipId) return null;
 
   const lines = [
-    { account_id: cogsId, debit: round2(wastedValue - recoveredValue), credit: 0, memo: `Wastage — ${args.productionNo}` },
+    { account_id: lossId, debit: round2(wastedValue - recoveredValue), credit: 0, memo: `Wastage — ${args.productionNo}` },
     { account_id: wipId, debit: 0, credit: wastedValue, memo: `Wastage — ${args.productionNo}` },
   ];
   if (recoveredValue > 0 && recId) {
