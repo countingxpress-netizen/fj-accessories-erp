@@ -63,9 +63,19 @@ export default function SalarySheetGenerator({ employees }: { employees: Employe
         revByEmp.set(r.employee_id, list);
       });
 
+      // বকেয়া অগ্রিম = মোট দেওয়া − আগের Salary Sheet-গুলোতে recover করা
+      const { data: advGiven } = await supabase.from("employee_advances").select("employee_id, amount");
+      const { data: advRecov } = await supabase.from("salary_sheet").select("employee_id, advance");
+      const advDue = new Map<string, number>();
+      (advGiven ?? []).forEach((a: any) => advDue.set(a.employee_id, (advDue.get(a.employee_id) ?? 0) + (Number(a.amount) || 0)));
+      (advRecov ?? []).forEach((s: any) => {
+        if (s.employee_id) advDue.set(s.employee_id, (advDue.get(s.employee_id) ?? 0) - (Number(s.advance) || 0));
+      });
+
       const monthDays = daysInMonthOf(year, month);
       const out: PreviewRow[] = [];
       const initBasic: Record<string, string> = {};
+      const initAdvance: Record<string, string> = {};
 
       for (const emp of employees) {
         const start = effectiveMonthStart(monthStart, emp.join_date);
@@ -95,13 +105,15 @@ export default function SalarySheetGenerator({ employees }: { employees: Employe
           : effBasic;
 
         initBasic[emp.id] = String(defaultBasic);
+        const due = Math.round((advDue.get(emp.id) ?? 0) * 100) / 100;
+        if (due > 0.005) initAdvance[emp.id] = String(due);
         out.push({
           emp, exists: !!existing, notJoined, attendanceCount, absentDays, otHours, salaryType,
           effBasic, joinedMidMonth, employedDays, monthDays, defaultBasic,
         });
       }
       setBasicMap(initBasic);
-      setAdvance({});
+      setAdvance(initAdvance);
       setOtherDed({});
       setRows(out);
     } catch (err: any) {
@@ -161,12 +173,15 @@ export default function SalarySheetGenerator({ employees }: { employees: Employe
         }).select("id").single();
         if (insErr) throw new Error(`${row.emp.name}: ${insErr.message}`);
 
-        // Accrual JV — খরচ বেতনের মাসেই বসে (payment-এর দিনে নয়), মাস-শেষের তারিখে
+        // Accrual JV — gross খরচ বেতনের মাসেই বসে; advance 1260 থেকে recover
         const accrualId = await postPayrollAccrual(supabase, {
           date: monthEnd,
           narration: `Salary accrual — ${row.emp.employee_code} ${row.emp.name} — ${monthLabel}`,
-          amount: res.netSalary,
           memo: `Salary ${monthLabel}`,
+          gross: res.totalAmount,
+          netSalary: res.netSalary,
+          advance: res.advance,
+          otherDeduction: res.otherDeduction,
         });
         if (accrualId && inserted) {
           await supabase.from("salary_sheet").update({ accrual_voucher_id: accrualId }).eq("id", inserted.id);
@@ -203,7 +218,8 @@ export default function SalarySheetGenerator({ employees }: { employees: Employe
         Basic আসে Salary Revision হিস্টরি থেকে (এই মাসে কার্যকর অঙ্ক) — Basic কলাম এডিটেবল।
         Fixed কর্মী মাঝ-মাসে join করলে Basic = কার্যকর basic ÷ মাসের মোট দিন × (join থেকে মাস-শেষ দিন − absent)।
         Production: রেট = Basic ÷ 26 ÷ 8 · Net adjustment = রেট × (OT ঘণ্টা − Absent ঘণ্টা)। join_date-এর আগের attendance / OT ধরা হয় না।
-        <br />সেভ করলে প্রতি কর্মীর জন্য একটা <strong>Accrual JV</strong> হয় (Dr Salary Expense 5100 / Cr Salary &amp; Bonus Payable 2100), মাস-শেষের তারিখে — বেতন খরচ সঠিক মাসেই বসে। পরে &quot;Mark Paid&quot; চাপলে Cash/Bank থেকে পরিশোধের JV হয়।
+        <br />Advance ঘরে বকেয়া অগ্রিম নিজে থেকে বসে (এডিটেবল) — যত বসাবেন তত ওই মাসে recover হবে।
+        <br />সেভ করলে প্রতি কর্মীর <strong>Accrual JV</strong> হয়: Dr Salary Expense 5100 (gross − other deduction) · Cr Salary Payable 2200 (net) · Cr Advance to Employees 1260 (recovered) — মাস-শেষের তারিখে। পরে &quot;Mark Paid&quot;-এ Cash/Bank থেকে পরিশোধের JV হয়।
       </p>
 
       {error && <p className="text-sm text-red-600">{error}</p>}

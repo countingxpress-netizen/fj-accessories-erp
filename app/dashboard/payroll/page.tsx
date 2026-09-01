@@ -5,6 +5,7 @@ const links = [
   { label: "Salary Revisions", href: "/dashboard/payroll/salary-revisions", desc: "বেতন বৃদ্ধির ইতিহাস (কার্যকর তারিখসহ)" },
   { label: "Attendance", href: "/dashboard/payroll/attendance", desc: "দৈনিক উপস্থিতি + OT ঘণ্টা + মন্তব্য (এক গ্রিডে)" },
   { label: "Overtime রিপোর্ট", href: "/dashboard/payroll/overtime", desc: "মাসিক OT ঘণ্টা ও পরিমাণ (শুধু রিপোর্ট)" },
+  { label: "Employee Advance", href: "/dashboard/payroll/advances", desc: "কর্মীকে অগ্রিম — অটো JV, বেতনে recover" },
   { label: "Salary Sheet", href: "/dashboard/payroll/salary-sheet", desc: "মাসিক বেতন Preview, জেনারেট ও পরিশোধ" },
   { label: "Eid Bonus", href: "/dashboard/payroll/bonus", desc: "দুই ঈদের বোনাস শিট (চাকরির বয়স অনুযায়ী প্রো-রেট)" },
 ];

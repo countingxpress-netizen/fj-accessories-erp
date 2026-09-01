@@ -84,12 +84,13 @@ export default function BonusGenerator({
         }).select("id").single();
         if (insErr) throw new Error(`${p.emp.name}: ${insErr.message}`);
 
-        // Accrual JV — বোনাসের তারিখে খরচ বসে (Dr 5100 / Cr 2100)
+        // Accrual JV — বোনাসের তারিখে খরচ বসে (Dr 5100 / Cr 2200)
         const accrualId = await postPayrollAccrual(supabase, {
           date: bonusDate,
           narration: `Bonus accrual — ${p.emp.employee_code} ${p.emp.name} — ${bonusLabel}`,
-          amount: p.amount,
           memo: `Bonus ${bonusLabel}`,
+          gross: p.amount,
+          netSalary: p.amount,
         });
         if (accrualId && inserted) {
           await supabase.from("bonus_sheet").update({ accrual_voucher_id: accrualId }).eq("id", inserted.id);
@@ -106,8 +107,9 @@ export default function BonusGenerator({
         const accrualId = await postPayrollAccrual(supabase, {
           date: bonusDate,
           narration: `Bonus accrual — ${p.emp.employee_code} ${p.emp.name} — ${bonusLabel}`,
-          amount: p.amount,
           memo: `Bonus ${bonusLabel}`,
+          gross: p.amount,
+          netSalary: p.amount,
         });
         await supabase.from("bonus_sheet")
           .update({ accrual_voucher_id: accrualId ?? null })

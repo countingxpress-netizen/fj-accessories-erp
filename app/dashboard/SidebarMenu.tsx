@@ -67,6 +67,7 @@ const menu: MenuGroup[] = [
       { label: "Salary Revisions", href: "/dashboard/payroll/salary-revisions" },
       { label: "Attendance", href: "/dashboard/payroll/attendance" },
       { label: "Overtime রিপোর্ট", href: "/dashboard/payroll/overtime" },
+      { label: "Employee Advance", href: "/dashboard/payroll/advances" },
       { label: "Salary Sheet", href: "/dashboard/payroll/salary-sheet" },
       { label: "Eid Bonus", href: "/dashboard/payroll/bonus" },
     ],
