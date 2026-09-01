@@ -48,6 +48,12 @@ export default async function AccountingPage() {
         <a href="/dashboard/accounting/opening-inventory" className="inline-block rounded-lg border border-dashed border-gray-500 px-4 py-2 text-sm text-gray-600">
           Opening Inventory (একবার) →
         </a>
+        <a href="/dashboard/accounting/profit-loss" className="inline-block rounded-lg border border-gray-900 px-4 py-2 text-sm text-gray-900">
+          Profit &amp; Loss দেখুন →
+        </a>
+        <a href="/dashboard/accounting/balance-sheet" className="inline-block rounded-lg border border-gray-900 px-4 py-2 text-sm text-gray-900">
+          Balance Sheet দেখুন →
+        </a>
       </div>
 
       <AddAccountForm />

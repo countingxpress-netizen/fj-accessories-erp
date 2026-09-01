@@ -4,6 +4,8 @@ const links = [
   { label: "Suppliers", href: "/dashboard/purchase/suppliers", desc: "সাপ্লায়ারের তালিকা ও তথ্য পরিচালনা" },
   { label: "Purchase Entry", href: "/dashboard/purchase/entry", desc: "কাঁচামাল ক্রয় এন্ট্রি — স্টক ও অ্যাকাউন্টিং অটো আপডেট" },
   { label: "Supplier Ledger", href: "/dashboard/purchase/supplier-ledger", desc: "সাপ্লায়ার-ওয়াইজ পাওনার হিসাব" },
+  { label: "Expenses", href: "/dashboard/purchase/expenses", desc: "খরচের এন্ট্রি — অটো Journal Voucher সহ" },
+  { label: "Supplier Payment Given", href: "/dashboard/purchase/payment-given", desc: "সাপ্লায়ারকে দেওয়া পেমেন্ট" },
 ];
 
 export default function PurchaseHomePage() {
