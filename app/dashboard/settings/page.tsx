@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getCurrentAppUser } from "@/lib/supabase/getCurrentAppUser";
 import CompanyProfileForm from "./CompanyProfileForm";
 import BanksManager from "./BanksManager";
+import UserManager from "./UserManager";
 
 export default async function SettingsPage() {
   const appUser = await getCurrentAppUser();
@@ -12,6 +13,7 @@ export default async function SettingsPage() {
   const supabase = await createClient();
   const { data: company } = await supabase.from("company_profile").select("*").limit(1).maybeSingle();
   const { data: banks } = await supabase.from("banks").select("*").order("bank_name");
+  const { data: users } = await supabase.from("app_users").select("*").order("full_name");
 
   return (
     <div className="max-w-3xl">
@@ -35,10 +37,8 @@ export default async function SettingsPage() {
 
       <section>
         <h2 className="text-sm font-semibold uppercase text-gray-500 mb-2">User Management</h2>
-        <p className="text-sm text-gray-500">
-          নতুন ইউজার যোগ / role পরিবর্তন এখনো এখানে নেই — Supabase Dashboard → Authentication থেকে ইউজার তৈরি করে
-          <span className="font-mono text-xs"> app_users</span> টেবিলে <span className="font-mono text-xs">role</span> (<span className="font-mono text-xs">admin</span> / staff) বসাতে হয়।
-        </p>
+        <p className="text-xs text-gray-500 mb-3">ইউজারের নাম/designation/role/active status পরিবর্তন করুন। নিজের role/active নিজে বদলাতে পারবেন না।</p>
+        <UserManager users={users ?? []} currentUserId={appUser?.id ?? ""} />
       </section>
     </div>
   );

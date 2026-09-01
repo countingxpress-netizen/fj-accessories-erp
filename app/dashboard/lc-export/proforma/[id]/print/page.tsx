@@ -41,10 +41,18 @@ export default async function PIPrintPage({ params }: { params: Promise<{ id: st
     <div className="max-w-3xl mx-auto p-8 bg-white text-gray-900 print:p-0">
       <PrintButton />
 
-      <div className="text-center mb-4 border-b-2 border-gray-800 pb-3">
-        <h1 className="text-3xl font-bold tracking-wide">{company?.name}</h1>
-        <p className="text-sm text-gray-600">{company?.address}</p>
-        <p className="text-lg font-semibold underline mt-2">PROFORMA INVOICE</p>
+      <div className="mb-4 border-b-2 border-gray-800 pb-3">
+        <div className="flex items-center justify-center gap-4">
+          {company?.logo_url && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={company.logo_url} alt="Logo" className="h-16 w-16 object-contain shrink-0" />
+          )}
+          <div className="text-center">
+            <h1 className="text-3xl font-bold tracking-wide">{company?.name}</h1>
+            <p className="text-sm text-gray-600">{company?.address}</p>
+          </div>
+        </div>
+        <p className="text-lg font-semibold underline mt-2 text-center">PROFORMA INVOICE</p>
       </div>
 
       <div className="flex justify-between mb-4 text-sm">
@@ -143,9 +151,16 @@ export default async function PIPrintPage({ params }: { params: Promise<{ id: st
       )}
 
       <div className="mt-16 flex justify-end text-sm">
-        <div className="text-center">
-          <p className="font-semibold">{company?.name}</p>
-          <div className="mt-8 border-t border-gray-400 pt-1 w-40">Authorized Signature</div>
+        <div className="text-center w-40">
+          {company?.signature_url ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={company.signature_url} alt="Authorized Signature" className="h-16 mx-auto object-contain" />
+          ) : (
+            <>
+              <p className="font-semibold">{company?.name}</p>
+              <div className="mt-8 border-t border-gray-400 pt-1">Authorized Signature</div>
+            </>
+          )}
         </div>
       </div>
     </div>

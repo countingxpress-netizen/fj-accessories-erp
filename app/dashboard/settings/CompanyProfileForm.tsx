@@ -7,9 +7,10 @@ type Company = {
   id?: string;
   name?: string | null; address?: string | null; phone?: string | null; email?: string | null;
   tin?: string | null; bin_vat?: string | null; trade_license?: string | null; logo_url?: string | null;
+  signature_url?: string | null;
 };
 
-const FIELDS: { key: keyof Company; label: string; wide?: boolean }[] = [
+const FIELDS: { key: keyof Company; label: string; wide?: boolean; preview?: boolean }[] = [
   { key: "name", label: "Company Name" },
   { key: "phone", label: "Phone" },
   { key: "address", label: "Address", wide: true },
@@ -17,7 +18,8 @@ const FIELDS: { key: keyof Company; label: string; wide?: boolean }[] = [
   { key: "tin", label: "TIN" },
   { key: "bin_vat", label: "BIN / VAT" },
   { key: "trade_license", label: "Trade License" },
-  { key: "logo_url", label: "Logo URL" },
+  { key: "logo_url", label: "Logo URL (Print/Invoice হেডারে দেখাবে)", preview: true },
+  { key: "signature_url", label: "Authorized Signature Image URL (Print/Invoice-এ দেখাবে)", preview: true },
 ];
 
 export default function CompanyProfileForm({ company }: { company: Company | null }) {
@@ -39,16 +41,27 @@ export default function CompanyProfileForm({ company }: { company: Company | nul
     if (!form.name?.trim()) { setError("Company Name দিন।"); return; }
     setLoading(true);
 
-    const payload = {
+    const payload: Record<string, any> = {
       name: form.name?.trim(),
       address: form.address || null, phone: form.phone || null, email: form.email || null,
       tin: form.tin || null, bin_vat: form.bin_vat || null,
       trade_license: form.trade_license || null, logo_url: form.logo_url || null,
+      signature_url: form.signature_url || null,
     };
 
-    const { error: err } = company?.id
+    let { error: err } = company?.id
       ? await supabase.from("company_profile").update(payload).eq("id", company.id)
       : await supabase.from("company_profile").insert(payload);
+
+    // signature_url কলামটি migration না চালানো পর্যন্ত DB-তে না-ও থাকতে পারে —
+    // সেক্ষেত্রে বাকি ফিল্ডগুলো যেন সেভ হতে পারে তার জন্য fallback।
+    if (err?.message?.includes("signature_url")) {
+      delete payload.signature_url;
+      ({ error: err } = company?.id
+        ? await supabase.from("company_profile").update(payload).eq("id", company.id)
+        : await supabase.from("company_profile").insert(payload));
+      if (!err) setError("⚠️ বাকি সব সেভ হয়েছে, কিন্তু Signature URL সেভ হয়নি — company_branding migration পুশ করা দরকার।");
+    }
 
     setLoading(false);
     if (err) { setError(err.message); return; }
@@ -62,11 +75,17 @@ export default function CompanyProfileForm({ company }: { company: Company | nul
         {FIELDS.map((f) => (
           <div key={f.key} className={f.wide ? "sm:col-span-2" : ""}>
             <label className="block text-sm text-gray-600 mb-1">{f.label}</label>
-            <input
-              value={(form[f.key] as string) ?? ""}
-              onChange={(e) => set(f.key, e.target.value)}
-              className="w-full rounded-lg border px-3 py-2 text-sm"
-            />
+            <div className="flex items-center gap-3">
+              <input
+                value={(form[f.key] as string) ?? ""}
+                onChange={(e) => set(f.key, e.target.value)}
+                className="w-full rounded-lg border px-3 py-2 text-sm"
+              />
+              {f.preview && (form[f.key] as string) && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={form[f.key] as string} alt={f.label} className="h-10 w-auto object-contain border rounded" />
+              )}
+            </div>
           </div>
         ))}
       </div>

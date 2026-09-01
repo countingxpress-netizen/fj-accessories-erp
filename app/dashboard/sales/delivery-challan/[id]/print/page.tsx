@@ -68,10 +68,16 @@ export default async function ChallanPrintPage({ params }: { params: Promise<{ i
       <PrintButton />
 
       <div className="flex-1">
-        <div className="text-center mb-6 border-b pb-4">
-          <h1 className="text-2xl font-bold">{company?.name}</h1>
-          <p className="text-sm text-gray-600">{company?.address}</p>
-          <p className="text-sm text-gray-600">Phone: {company?.phone} | Email: {company?.email}</p>
+        <div className="mb-6 border-b pb-4 flex items-center justify-center gap-4">
+          {company?.logo_url && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={company.logo_url} alt="Logo" className="h-16 w-16 object-contain shrink-0" />
+          )}
+          <div className="text-center">
+            <h1 className="text-2xl font-bold">{company?.name}</h1>
+            <p className="text-sm text-gray-600">{company?.address}</p>
+            <p className="text-sm text-gray-600">Phone: {company?.phone} | Email: {company?.email}</p>
+          </div>
         </div>
 
         <h2 className="text-xl font-semibold text-center mb-4">Delivery Challan</h2>
@@ -114,9 +120,16 @@ export default async function ChallanPrintPage({ params }: { params: Promise<{ i
         </table>
       </div>
 
-      <div className="flex justify-between text-sm pb-4">
+      <div className="flex justify-between items-end text-sm pb-4">
         <div className="border-t border-gray-400 pt-2 w-40 text-center">Received By</div>
-        <div className="border-t border-gray-400 pt-2 w-40 text-center">Authorised Signature</div>
+        <div className="w-40 text-center">
+          {company?.signature_url ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={company.signature_url} alt="Authorised Signature" className="h-16 mx-auto object-contain" />
+          ) : (
+            <div className="border-t border-gray-400 pt-2">Authorised Signature</div>
+          )}
+        </div>
       </div>
     </div>
   );
