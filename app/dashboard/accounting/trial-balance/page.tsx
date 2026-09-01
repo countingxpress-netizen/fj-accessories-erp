@@ -10,7 +10,6 @@ const typeLabels: Record<string, string> = {
   expense: "Expenses",
 };
 const typeOrder = ["asset", "liability", "equity", "income", "expense"];
-const debitNormalTypes = ["asset", "expense"];
 
 export default async function TrialBalancePage() {
   const supabase = await createClient();
@@ -36,10 +35,11 @@ export default async function TrialBalancePage() {
     .map((acc) => {
       const t = totals[acc.id] ?? { debit: 0, credit: 0 };
       const net = t.debit - t.credit;
-      const isDebitNormal = debitNormalTypes.includes(acc.account_type);
-      // Trial Balance-এ প্রতিটা অ্যাকাউন্ট তার normal side অনুযায়ী দেখানো হয়
-      const debitBalance = isDebitNormal ? Math.max(net, 0) : Math.max(-net, 0);
-      const creditBalance = isDebitNormal ? Math.max(-net, 0) : Math.max(net, 0);
+      // Trial Balance: net debit (net > 0) Debit কলামে, net credit (net < 0) Credit কলামে।
+      // অ্যাকাউন্টের "normal side" নয় — আসল ব্যালেন্স যে দিকে সেই দিকেই দেখানো হয়,
+      // নাহলে মোট Debit ≠ মোট Credit হয়ে যায়।
+      const debitBalance = Math.max(net, 0);
+      const creditBalance = Math.max(-net, 0);
       return { ...acc, totalDebit: t.debit, totalCredit: t.credit, debitBalance, creditBalance };
     })
     .filter((r) => r.totalDebit > 0 || r.totalCredit > 0); // যেসব অ্যাকাউন্টে কোনো এন্ট্রিই নেই সেগুলো বাদ
