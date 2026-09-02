@@ -4,23 +4,28 @@ import { createClient } from "@/lib/supabase/client";
 import { useBulkSelect } from "@/hooks/useBulkSelect";
 import { BulkActionBar } from "@/components/BulkActionBar";
 import { deleteExpenseCascade } from "@/lib/expenseDelete";
+import { useBulkDeletePermission } from "@/app/dashboard/PermissionProvider";
 import ExpenseRow from "./ExpenseRow";
 
 export default function ExpensesTable({ expenses }: { expenses: any[] }) {
   const router = useRouter();
   const supabase = createClient();
+  const { partition, markFulfilled } = useBulkDeletePermission("expenses");
 
   const {
     selectedIds, selectedCount, isSelected, toggle, toggleAll, isAllSelected, isSomeSelected, clear,
   } = useBulkSelect(expenses, (e: any) => e.id);
 
   async function handleBulkDelete() {
+    const { allowed, blocked } = partition(selectedIds);
     const errors: string[] = [];
-    for (const id of selectedIds) {
+    for (const id of allowed) {
       const expense = expenses.find((e: any) => e.id === id);
       const result = await deleteExpenseCascade(supabase, id, expense?.voucher_id);
       if (!result.ok) errors.push(`${expense?.description ?? id}: ${result.error}`);
     }
+    if (blocked.length > 0) errors.push(`${blocked.length}টা Expense-এ Delete অনুমতি নেই — নিজের Delete বাটন থেকে Request পাঠান।`);
+    await markFulfilled(allowed);
     clear();
     router.refresh();
     if (errors.length > 0) {

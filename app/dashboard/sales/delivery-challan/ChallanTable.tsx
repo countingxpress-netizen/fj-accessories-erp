@@ -4,23 +4,28 @@ import { createClient } from "@/lib/supabase/client";
 import { useBulkSelect } from "@/hooks/useBulkSelect";
 import { BulkActionBar } from "@/components/BulkActionBar";
 import { deleteChallanCascade } from "@/lib/challanDelete";
+import { useBulkDeletePermission } from "@/app/dashboard/PermissionProvider";
 import ChallanRow from "./ChallanRow";
 
 export default function ChallanTable({ challans }: { challans: any[] }) {
   const router = useRouter();
   const supabase = createClient();
+  const { partition, markFulfilled } = useBulkDeletePermission("delivery_challans");
 
   const {
     selectedIds, selectedCount, isSelected, toggle, toggleAll, isAllSelected, isSomeSelected, clear,
   } = useBulkSelect(challans, (c: any) => c.id);
 
   async function handleBulkDelete() {
+    const { allowed, blocked } = partition(selectedIds);
     const errors: string[] = [];
-    for (const id of selectedIds) {
+    for (const id of allowed) {
       const challan = challans.find((c: any) => c.id === id);
       const result = await deleteChallanCascade(supabase, id, challan?.booking_id);
       if (!result.ok) errors.push(`${challan?.challan_no ?? id}: ${result.error}`);
     }
+    if (blocked.length > 0) errors.push(`${blocked.length}টা Challan-এ Delete অনুমতি নেই — নিজের Delete বাটন থেকে Request পাঠান।`);
+    await markFulfilled(allowed);
     clear();
     router.refresh();
     if (errors.length > 0) {

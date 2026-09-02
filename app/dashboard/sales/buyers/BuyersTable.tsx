@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { useBulkSelect } from "@/hooks/useBulkSelect";
 import { BulkActionBar } from "@/components/BulkActionBar";
 import { deleteSimpleRow } from "@/lib/simpleDelete";
+import { useBulkDeletePermission } from "@/app/dashboard/PermissionProvider";
 import BuyerRow from "./BuyerRow";
 
 export default function BuyersTable({
@@ -12,6 +13,7 @@ export default function BuyersTable({
 }: { groups: { customerName: string; items: any[] }[] }) {
   const router = useRouter();
   const supabase = createClient();
+  const { partition, markFulfilled } = useBulkDeletePermission("buyers");
 
   const allBuyers = useMemo(() => groups.flatMap((g) => g.items), [groups]);
   const {
@@ -19,12 +21,15 @@ export default function BuyersTable({
   } = useBulkSelect(allBuyers, (b: any) => b.id);
 
   async function handleBulkDelete() {
+    const { allowed, blocked } = partition(selectedIds);
     const errors: string[] = [];
-    for (const id of selectedIds) {
+    for (const id of allowed) {
       const buyer = allBuyers.find((b: any) => b.id === id);
       const result = await deleteSimpleRow(supabase, "buyers", id);
       if (!result.ok) errors.push(`${buyer?.name ?? id}: ${result.error}`);
     }
+    if (blocked.length > 0) errors.push(`${blocked.length}টা Buyer-এ Delete অনুমতি নেই — নিজের Delete বাটন থেকে Request পাঠান।`);
+    await markFulfilled(allowed);
     clear();
     router.refresh();
     if (errors.length > 0) {

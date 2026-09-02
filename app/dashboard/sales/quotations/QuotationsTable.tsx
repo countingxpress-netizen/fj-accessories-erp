@@ -4,23 +4,28 @@ import { createClient } from "@/lib/supabase/client";
 import { useBulkSelect } from "@/hooks/useBulkSelect";
 import { BulkActionBar } from "@/components/BulkActionBar";
 import { deleteQuotationCascade } from "@/lib/quotationDelete";
+import { useBulkDeletePermission } from "@/app/dashboard/PermissionProvider";
 import QuotationRow from "./QuotationRow";
 
 export default function QuotationsTable({ quotations }: { quotations: any[] }) {
   const router = useRouter();
   const supabase = createClient();
+  const { partition, markFulfilled } = useBulkDeletePermission("quotations");
 
   const {
     selectedIds, selectedCount, isSelected, toggle, toggleAll, isAllSelected, isSomeSelected, clear,
   } = useBulkSelect(quotations, (q: any) => q.id);
 
   async function handleBulkDelete() {
+    const { allowed, blocked } = partition(selectedIds);
     const errors: string[] = [];
-    for (const id of selectedIds) {
+    for (const id of allowed) {
       const quotation = quotations.find((q: any) => q.id === id);
       const result = await deleteQuotationCascade(supabase, id);
       if (!result.ok) errors.push(`${quotation?.quotation_no ?? id}: ${result.error}`);
     }
+    if (blocked.length > 0) errors.push(`${blocked.length}টা Quotation-এ Delete অনুমতি নেই — নিজের Delete বাটন থেকে Request পাঠান।`);
+    await markFulfilled(allowed);
     clear();
     router.refresh();
     if (errors.length > 0) {

@@ -4,23 +4,28 @@ import { createClient } from "@/lib/supabase/client";
 import { useBulkSelect } from "@/hooks/useBulkSelect";
 import { BulkActionBar } from "@/components/BulkActionBar";
 import { deleteSupplierPaymentCascade } from "@/lib/paymentGivenDelete";
+import { useBulkDeletePermission } from "@/app/dashboard/PermissionProvider";
 import PaymentGivenRow from "./PaymentGivenRow";
 
 export default function PaymentGivenTable({ payments }: { payments: any[] }) {
   const router = useRouter();
   const supabase = createClient();
+  const { partition, markFulfilled } = useBulkDeletePermission("supplier_payments");
 
   const {
     selectedIds, selectedCount, isSelected, toggle, toggleAll, isAllSelected, isSomeSelected, clear,
   } = useBulkSelect(payments, (p: any) => p.id);
 
   async function handleBulkDelete() {
+    const { allowed, blocked } = partition(selectedIds);
     const errors: string[] = [];
-    for (const id of selectedIds) {
+    for (const id of allowed) {
       const payment = payments.find((p: any) => p.id === id);
       const result = await deleteSupplierPaymentCascade(supabase, id, payment?.voucher_id);
       if (!result.ok) errors.push(`${payment?.suppliers?.name ?? id}: ${result.error}`);
     }
+    if (blocked.length > 0) errors.push(`${blocked.length}টা Payment-এ Delete অনুমতি নেই — নিজের Delete বাটন থেকে Request পাঠান।`);
+    await markFulfilled(allowed);
     clear();
     router.refresh();
     if (errors.length > 0) {

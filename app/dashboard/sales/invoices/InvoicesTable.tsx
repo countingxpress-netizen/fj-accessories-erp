@@ -4,23 +4,28 @@ import { createClient } from "@/lib/supabase/client";
 import { useBulkSelect } from "@/hooks/useBulkSelect";
 import { BulkActionBar } from "@/components/BulkActionBar";
 import { deleteInvoiceCascade } from "@/lib/invoiceDelete";
+import { useBulkDeletePermission } from "@/app/dashboard/PermissionProvider";
 import InvoiceRow from "./InvoiceRow";
 
 export default function InvoicesTable({ invoices }: { invoices: any[] }) {
   const router = useRouter();
   const supabase = createClient();
+  const { partition, markFulfilled } = useBulkDeletePermission("sales_invoices");
 
   const {
     selectedIds, selectedCount, isSelected, toggle, toggleAll, isAllSelected, isSomeSelected, clear,
   } = useBulkSelect(invoices, (inv: any) => inv.id);
 
   async function handleBulkDelete() {
+    const { allowed, blocked } = partition(selectedIds);
     const errors: string[] = [];
-    for (const id of selectedIds) {
+    for (const id of allowed) {
       const invoice = invoices.find((inv: any) => inv.id === id);
       const result = await deleteInvoiceCascade(supabase, id, invoice?.voucher_id);
       if (!result.ok) errors.push(`${invoice?.invoice_no ?? id}: ${result.error}`);
     }
+    if (blocked.length > 0) errors.push(`${blocked.length}টা Invoice-এ Delete অনুমতি নেই — নিজের Delete বাটন থেকে Request পাঠান।`);
+    await markFulfilled(allowed);
     clear();
     router.refresh();
     if (errors.length > 0) {

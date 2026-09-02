@@ -4,23 +4,28 @@ import { createClient } from "@/lib/supabase/client";
 import { useBulkSelect } from "@/hooks/useBulkSelect";
 import { BulkActionBar } from "@/components/BulkActionBar";
 import { deletePurchaseEntryCascade } from "@/lib/purchaseEntryDelete";
+import { useBulkDeletePermission } from "@/app/dashboard/PermissionProvider";
 import PurchaseEntryRow from "./PurchaseEntryRow";
 
 export default function PurchaseEntriesTable({ entries }: { entries: any[] }) {
   const router = useRouter();
   const supabase = createClient();
+  const { partition, markFulfilled } = useBulkDeletePermission("purchase_entries");
 
   const {
     selectedIds, selectedCount, isSelected, toggle, toggleAll, isAllSelected, isSomeSelected, clear,
   } = useBulkSelect(entries, (e: any) => e.id);
 
   async function handleBulkDelete() {
+    const { allowed, blocked } = partition(selectedIds);
     const errors: string[] = [];
-    for (const id of selectedIds) {
+    for (const id of allowed) {
       const entry = entries.find((e: any) => e.id === id);
       const result = await deletePurchaseEntryCascade(supabase, id, entry?.voucher_id);
       if (!result.ok) errors.push(`${entry?.entry_no ?? id}: ${result.error}`);
     }
+    if (blocked.length > 0) errors.push(`${blocked.length}টা Entry-তে Delete অনুমতি নেই — নিজের Delete বাটন থেকে Request পাঠান।`);
+    await markFulfilled(allowed);
     clear();
     router.refresh();
     if (errors.length > 0) {

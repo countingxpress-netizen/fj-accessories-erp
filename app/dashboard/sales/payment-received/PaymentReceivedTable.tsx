@@ -4,23 +4,28 @@ import { createClient } from "@/lib/supabase/client";
 import { useBulkSelect } from "@/hooks/useBulkSelect";
 import { BulkActionBar } from "@/components/BulkActionBar";
 import { deleteCustomerPaymentCascade } from "@/lib/paymentReceivedDelete";
+import { useBulkDeletePermission } from "@/app/dashboard/PermissionProvider";
 import PaymentReceivedRow from "./PaymentReceivedRow";
 
 export default function PaymentReceivedTable({ payments }: { payments: any[] }) {
   const router = useRouter();
   const supabase = createClient();
+  const { partition, markFulfilled } = useBulkDeletePermission("customer_payments");
 
   const {
     selectedIds, selectedCount, isSelected, toggle, toggleAll, isAllSelected, isSomeSelected, clear,
   } = useBulkSelect(payments, (p: any) => p.id);
 
   async function handleBulkDelete() {
+    const { allowed, blocked } = partition(selectedIds);
     const errors: string[] = [];
-    for (const id of selectedIds) {
+    for (const id of allowed) {
       const payment = payments.find((p: any) => p.id === id);
       const result = await deleteCustomerPaymentCascade(supabase, id, payment?.voucher_id);
       if (!result.ok) errors.push(`${payment?.customers?.name ?? id}: ${result.error}`);
     }
+    if (blocked.length > 0) errors.push(`${blocked.length}টা Payment-এ Delete অনুমতি নেই — নিজের Delete বাটন থেকে Request পাঠান।`);
+    await markFulfilled(allowed);
     clear();
     router.refresh();
     if (errors.length > 0) {

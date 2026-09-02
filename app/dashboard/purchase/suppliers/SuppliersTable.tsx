@@ -4,23 +4,28 @@ import { createClient } from "@/lib/supabase/client";
 import { useBulkSelect } from "@/hooks/useBulkSelect";
 import { BulkActionBar } from "@/components/BulkActionBar";
 import { deleteSimpleRow } from "@/lib/simpleDelete";
+import { useBulkDeletePermission } from "@/app/dashboard/PermissionProvider";
 import SupplierRow from "./SupplierRow";
 
 export default function SuppliersTable({ suppliers }: { suppliers: any[] }) {
   const router = useRouter();
   const supabase = createClient();
+  const { partition, markFulfilled } = useBulkDeletePermission("suppliers");
 
   const {
     selectedIds, selectedCount, isSelected, toggle, toggleAll, isAllSelected, isSomeSelected, clear,
   } = useBulkSelect(suppliers, (s: any) => s.id);
 
   async function handleBulkDelete() {
+    const { allowed, blocked } = partition(selectedIds);
     const errors: string[] = [];
-    for (const id of selectedIds) {
+    for (const id of allowed) {
       const supplier = suppliers.find((s: any) => s.id === id);
       const result = await deleteSimpleRow(supabase, "suppliers", id);
       if (!result.ok) errors.push(`${supplier?.name ?? id}: ${result.error}`);
     }
+    if (blocked.length > 0) errors.push(`${blocked.length}টা Supplier-এ Delete অনুমতি নেই — নিজের Delete বাটন থেকে Request পাঠান।`);
+    await markFulfilled(allowed);
     clear();
     router.refresh();
     if (errors.length > 0) {

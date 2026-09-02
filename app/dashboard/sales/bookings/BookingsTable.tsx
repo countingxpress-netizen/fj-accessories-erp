@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { useBulkSelect } from "@/hooks/useBulkSelect";
 import { BulkActionBar } from "@/components/BulkActionBar";
 import { deleteBookingCascade } from "@/lib/bookingDelete";
+import { useBulkDeletePermission } from "@/app/dashboard/PermissionProvider";
 import BookingRow from "./BookingRow";
 
 export default function BookingsTable({
@@ -18,19 +19,23 @@ export default function BookingsTable({
   const supabase = createClient();
 
   const allBookings = useMemo(() => groups.flatMap((g) => g.items), [groups]);
+  const { partition, markFulfilled } = useBulkDeletePermission("bookings");
   const {
     selectedIds, selectedCount, isSelected, toggle, toggleAll, isAllSelected, isSomeSelected, clear,
   } = useBulkSelect(allBookings, (b: any) => b.id);
 
   async function handleBulkDelete() {
+    const { allowed, blocked } = partition(selectedIds);
     const errors: string[] = [];
-    for (const id of selectedIds) {
+    for (const id of allowed) {
       const result = await deleteBookingCascade(supabase, id);
       if (!result.ok) {
         const booking = allBookings.find((b: any) => b.id === id);
         errors.push(`${booking?.booking_no ?? id}: ${result.error}`);
       }
     }
+    if (blocked.length > 0) errors.push(`${blocked.length}টা বুকিং-এ Delete অনুমতি নেই — নিজের Delete বাটন থেকে Request পাঠান।`);
+    await markFulfilled(allowed);
     clear();
     router.refresh();
     if (errors.length > 0) {

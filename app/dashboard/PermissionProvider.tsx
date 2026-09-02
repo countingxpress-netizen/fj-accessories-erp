@@ -32,6 +32,36 @@ export function usePermission(table: string, recordId: string, action: "edit" | 
   };
 }
 
+// Bulk-action bars (select many rows → Delete Selected) call this instead of
+// deleting every selected id blindly — same admin-approved-request rule as
+// the single-row GuardedAction, so Staff can't bypass it via bulk select.
+export function useBulkDeletePermission(table: string) {
+  const ctx = useContext(PermissionContext);
+  const supabase = createClient();
+
+  function partition(ids: string[]) {
+    if (ctx.isAdmin) return { allowed: ids, blocked: [] as string[] };
+    const allowed: string[] = [];
+    const blocked: string[] = [];
+    ids.forEach((id) => {
+      const req = ctx.requests[`${table}:${id}:delete`];
+      (req?.status === "approved" ? allowed : blocked).push(id);
+    });
+    return { allowed, blocked };
+  }
+
+  async function markFulfilled(ids: string[]) {
+    if (ctx.isAdmin) return;
+    for (const id of ids) {
+      const req = ctx.requests[`${table}:${id}:delete`];
+      if (req) await supabase.from("permission_requests").update({ status: "fulfilled" }).eq("id", req.id);
+    }
+    ctx.refresh();
+  }
+
+  return { isAdmin: ctx.isAdmin, partition, markFulfilled };
+}
+
 export default function PermissionProvider({
   isAdmin, userId, children,
 }: { isAdmin: boolean; userId: string; children: React.ReactNode }) {

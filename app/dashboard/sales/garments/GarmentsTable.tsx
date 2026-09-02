@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { useBulkSelect } from "@/hooks/useBulkSelect";
 import { BulkActionBar } from "@/components/BulkActionBar";
 import { deleteSimpleRow } from "@/lib/simpleDelete";
+import { useBulkDeletePermission } from "@/app/dashboard/PermissionProvider";
 import GarmentRow from "./GarmentRow";
 
 export default function GarmentsTable({
@@ -12,6 +13,7 @@ export default function GarmentsTable({
 }: { groups: { customerName: string; items: any[] }[] }) {
   const router = useRouter();
   const supabase = createClient();
+  const { partition, markFulfilled } = useBulkDeletePermission("garments");
 
   const allGarments = useMemo(() => groups.flatMap((g) => g.items), [groups]);
   const {
@@ -19,12 +21,15 @@ export default function GarmentsTable({
   } = useBulkSelect(allGarments, (g: any) => g.id);
 
   async function handleBulkDelete() {
+    const { allowed, blocked } = partition(selectedIds);
     const errors: string[] = [];
-    for (const id of selectedIds) {
+    for (const id of allowed) {
       const garment = allGarments.find((g: any) => g.id === id);
       const result = await deleteSimpleRow(supabase, "garments", id);
       if (!result.ok) errors.push(`${garment?.name ?? id}: ${result.error}`);
     }
+    if (blocked.length > 0) errors.push(`${blocked.length}টা Garment-এ Delete অনুমতি নেই — নিজের Delete বাটন থেকে Request পাঠান।`);
+    await markFulfilled(allowed);
     clear();
     router.refresh();
     if (errors.length > 0) {
