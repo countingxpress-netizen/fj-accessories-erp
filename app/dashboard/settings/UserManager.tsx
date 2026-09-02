@@ -13,7 +13,7 @@ type AppUser = {
 
 const ROLES = [
   { value: "admin", label: "Admin" },
-  { value: "full_no_edit", label: "Staff (View only, no edit)" },
+  { value: "full_no_edit", label: "Staff (Edit/Delete-এ Admin অনুমতি লাগবে)" },
 ];
 
 const blank = { email: "", password: "", full_name: "", designation: "", role: "full_no_edit" };
