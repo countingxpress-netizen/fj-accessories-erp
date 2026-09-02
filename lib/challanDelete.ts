@@ -15,10 +15,13 @@ export async function deleteChallanCascade(
   challanId: string,
   bookingId?: string | null
 ): Promise<DeleteResult> {
-  // shipment-এর COGS JV উল্টে দিন
+  // shipment-এর COGS JV উল্টে দিন (voucher delete-এর আগে challan-এর
+  // inventory_voucher_id null করে, নাহলে plain FK-এ আটকে orphan থেকে যায়)
   const { data: challanRow } = await supabase
     .from("delivery_challans").select("inventory_voucher_id").eq("id", challanId).maybeSingle();
-  await reverseInventoryJv(supabase, challanRow?.inventory_voucher_id);
+  await reverseInventoryJv(supabase, challanRow?.inventory_voucher_id, {
+    unlink: { table: "delivery_challans", column: "inventory_voucher_id", id: challanId },
+  });
 
   const { data: ledgerEntries } = await supabase
     .from("stock_ledger").select("*").eq("reference_type", "delivery").eq("reference_id", challanId);

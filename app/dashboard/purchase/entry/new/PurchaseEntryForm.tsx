@@ -251,6 +251,9 @@ export default function PurchaseEntryForm({
 
     const { error: jvLinesError } = await supabase.from("journal_entry_lines").insert(jvLines);
 
+    // entry ↔ voucher লিংক রাখা হয় যাতে entry ডিলিটে সঠিক JV-টাও মুছে যায়
+    await supabase.from("purchase_entries").update({ voucher_id: voucher.id }).eq("id", entry.id);
+
     setLoading(false);
 
     if (jvLinesError) {

@@ -30,12 +30,14 @@ export async function deletePurchaseEntryCascade(
   await supabase.from("stock_ledger").delete().eq("reference_type", "purchase").eq("reference_id", entryId);
   await supabase.from("purchase_entry_items").delete().eq("entry_id", entryId);
 
+  // entry row আগে মুছুন — voucher_id plain FK, তাই voucher আগে মুছতে গেলে
+  // আটকে যায় আর একটা লাইনহীন orphan voucher থেকে যায়
+  const { error } = await supabase.from("purchase_entries").delete().eq("id", entryId);
+  if (error) return { ok: false, error: friendlyDeleteError(error) };
+
   if (voucherId) {
     await supabase.from("journal_entry_lines").delete().eq("voucher_id", voucherId);
     await supabase.from("journal_vouchers").delete().eq("id", voucherId);
   }
-
-  const { error } = await supabase.from("purchase_entries").delete().eq("id", entryId);
-  if (error) return { ok: false, error: friendlyDeleteError(error) };
   return { ok: true };
 }

@@ -285,13 +285,30 @@ export async function postWastageJv(
   return voucherId;
 }
 
-/** JV + তার lines মুছে দেয় (delete cascade-এ ব্যবহার)। null হলে কিছু করে না। */
+/**
+ * JV + তার lines মুছে দেয় (delete cascade-এ ব্যবহার)। null হলে কিছু করে না।
+ *
+ * `opts.unlink` — যে row-টা এই voucher-কে reference করছে (bookings /
+ * delivery_challans / finished_goods_receive / wastage-এর `inventory_voucher_id`)
+ * সেটা আগে `null` করে দেয়। এই FK গুলো plain — না করলে `journal_vouchers` delete
+ * FK-এ আটকে যায় আর একটা লাইনহীন orphan voucher থেকে যায়।
+ */
 export async function reverseInventoryJv(
   supabase: Client,
   voucherId: string | null | undefined,
-  opts?: { restoreWipToProductionOrderId?: string }
+  opts?: {
+    restoreWipToProductionOrderId?: string;
+    unlink?: { table: string; column: string; id: string };
+  }
 ) {
   if (!voucherId) return;
+
+  if (opts?.unlink) {
+    await supabase
+      .from(opts.unlink.table)
+      .update({ [opts.unlink.column]: null })
+      .eq("id", opts.unlink.id);
+  }
 
   if (opts?.restoreWipToProductionOrderId) {
     // WIP credit line-এর অঙ্ক production order-এর wip_cost-এ ফেরত দিন

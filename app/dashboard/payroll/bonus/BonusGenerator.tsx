@@ -104,8 +104,11 @@ export default function BonusGenerator({
           .eq("id", p.exRow!.id);
         if (updErr) throw new Error(`${p.emp.name}: ${updErr.message}`);
 
-        // অঙ্ক বদলেছে — accrual JV নতুন অঙ্কে আবার বসাই
-        await reversePayrollJv(supabase, p.exRow!.accrual_voucher_id);
+        // অঙ্ক বদলেছে — accrual JV নতুন অঙ্কে আবার বসাই (bonus_sheet row টিকে
+        // থাকছে, তাই voucher delete-এর আগে accrual_voucher_id null করতে হবে)
+        await reversePayrollJv(supabase, p.exRow!.accrual_voucher_id, {
+          table: "bonus_sheet", column: "accrual_voucher_id", id: p.exRow!.id,
+        });
         const accrualId = await postPayrollAccrual(supabase, {
           date: bonusDate,
           narration: `Bonus accrual — ${p.emp.employee_code} ${p.emp.name} — ${bonusLabel}`,

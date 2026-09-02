@@ -64,8 +64,10 @@ export default function EditInvoiceForm({
     // invoice তারিখ আপডেট
     await supabase.from("sales_invoices").update({ invoice_date: invoiceDate }).eq("id", invoiceId);
 
-    // পুরনো Journal Voucher মুছে নতুন বানান
+    // পুরনো Journal Voucher মুছে নতুন বানান — invoice row টিকে থাকছে, তাই আগে
+    // voucher_id null করতে হবে নাহলে plain FK-এ voucher delete আটকে orphan থেকে যায়
     if (voucherId) {
+      await supabase.from("sales_invoices").update({ voucher_id: null }).eq("id", invoiceId);
       await supabase.from("journal_entry_lines").delete().eq("voucher_id", voucherId);
       await supabase.from("journal_vouchers").delete().eq("id", voucherId);
     }

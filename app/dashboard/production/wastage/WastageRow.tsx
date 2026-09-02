@@ -55,7 +55,10 @@ export default function WastageRow({ wastage, warehouses }: { wastage: any; ware
     // আগে recycled ছিল এবং এখনও আছে বা বাদ দেওয়া হচ্ছে — পুরনোটা রিভার্স করুন
     await reverseOldRecycledStock();
     // পুরনো inventory JV উল্টে দিন (WIP cost ফেরত), পরে নতুন অঙ্কে আবার বসবে
-    await reverseInventoryJv(supabase, wastage.inventory_voucher_id, { restoreWipToProductionOrderId: wastage.production_id });
+    await reverseInventoryJv(supabase, wastage.inventory_voucher_id, {
+      restoreWipToProductionOrderId: wastage.production_id,
+      unlink: { table: "wastage", column: "inventory_voucher_id", id: wastage.id },
+    });
 
     await supabase.from("wastage").update({ stage, quantity_lbs: qty, recycled }).eq("id", wastage.id);
 
@@ -99,7 +102,10 @@ export default function WastageRow({ wastage, warehouses }: { wastage: any; ware
     if (!window.confirm("এই Wastage এন্ট্রি মুছে ফেলতে চান? Recycled স্টক ও inventory JV তাও উল্টে যাবে।")) return;
     setLoading(true);
     await reverseOldRecycledStock();
-    await reverseInventoryJv(supabase, wastage.inventory_voucher_id, { restoreWipToProductionOrderId: wastage.production_id });
+    await reverseInventoryJv(supabase, wastage.inventory_voucher_id, {
+      restoreWipToProductionOrderId: wastage.production_id,
+      unlink: { table: "wastage", column: "inventory_voucher_id", id: wastage.id },
+    });
     const { error } = await supabase.from("wastage").delete().eq("id", wastage.id);
     setLoading(false);
     if (error) { alert("মুছে ফেলা যায়নি: " + error.message); return; }

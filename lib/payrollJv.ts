@@ -135,12 +135,23 @@ export async function postPayrollPayment(
   ]);
 }
 
-/** Delete a JV + its lines (accrual or payment). No-op for null. */
+/**
+ * Delete a JV + its lines (accrual or payment). No-op for null.
+ *
+ * `unlink` — যে row-টা এই voucher-কে reference করছে (salary_sheet /
+ * bonus_sheet-এর voucher_id বা accrual_voucher_id) সেটা আগে `null` করে দেয়।
+ * row-টা টিকে থাকলে (যেমন regenerate-এ) এটা না দিলে plain FK-এ voucher delete
+ * আটকে যায় আর লাইনহীন orphan থেকে যায়। row নিজেই delete হয়ে গেলে দরকার নেই।
+ */
 export async function reversePayrollJv(
   supabase: Client,
-  voucherId: string | null | undefined
+  voucherId: string | null | undefined,
+  unlink?: { table: string; column: string; id: string }
 ) {
   if (!voucherId) return;
+  if (unlink) {
+    await supabase.from(unlink.table).update({ [unlink.column]: null }).eq("id", unlink.id);
+  }
   await supabase.from("journal_entry_lines").delete().eq("voucher_id", voucherId);
   await supabase.from("journal_vouchers").delete().eq("id", voucherId);
 }

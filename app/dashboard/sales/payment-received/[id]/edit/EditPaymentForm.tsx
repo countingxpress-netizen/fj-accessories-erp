@@ -62,6 +62,9 @@ export default function EditPaymentForm({
     );
 
     if (payment.voucher_id) {
+      // payment row টিকে থাকছে — voucher delete-এর আগে voucher_id null করতে হবে
+      // নাহলে plain FK-এ আটকে লাইনহীন orphan voucher থেকে যায়
+      await supabase.from("customer_payments").update({ voucher_id: null }).eq("id", payment.id);
       await supabase.from("journal_entry_lines").delete().eq("voucher_id", payment.voucher_id);
       await supabase.from("journal_vouchers").delete().eq("id", payment.voucher_id);
     }
