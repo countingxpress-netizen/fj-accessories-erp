@@ -2,6 +2,7 @@
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { deletePurchaseEntryCascade } from "@/lib/purchaseEntryDelete";
+import GuardedAction from "@/app/dashboard/GuardedAction";
 
 export default function PurchaseEntryRow({
   entry, selected, onToggleSelect,
@@ -40,7 +41,9 @@ export default function PurchaseEntryRow({
       <td className="px-4 py-2">{entry.invoice_no || "-"}</td>
       <td className="px-4 py-2 text-right">{total.toFixed(2)}</td>
       <td className="px-4 py-2 text-right whitespace-nowrap">
-        <button onClick={handleDelete} className="rounded bg-red-50 px-2 py-1 text-xs text-red-700 hover:bg-red-100">Delete</button>
+        <GuardedAction table="purchase_entries" recordId={entry.id} recordLabel={entry.entry_no ?? entry.id} action="delete"
+          onAllowed={handleDelete}
+          className="rounded bg-red-50 px-2 py-1 text-xs text-red-700 hover:bg-red-100">Delete</GuardedAction>
       </td>
     </tr>
   );

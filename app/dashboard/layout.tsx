@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { getCurrentAppUser } from "@/lib/supabase/getCurrentAppUser";
 import LogoutButton from "./LogoutButton";
 import SidebarMenu from "./SidebarMenu";
+import PermissionProvider from "./PermissionProvider";
 import Link from "next/link";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -28,8 +29,8 @@ export default async function DashboardLayout({ children }: { children: React.Re
             <Link href="/dashboard/settings" className="block rounded px-3 py-2 hover:bg-gray-800">
               ⚙ Settings
             </Link>
-            <Link href="/dashboard/settings/print-requests" className="block rounded px-3 py-2 hover:bg-gray-800">
-              🖨 Print Requests
+            <Link href="/dashboard/settings/permission-requests" className="block rounded px-3 py-2 hover:bg-gray-800">
+              🔓 Permission Requests
             </Link>
           </div>
         )}
@@ -38,7 +39,11 @@ export default async function DashboardLayout({ children }: { children: React.Re
         </Link>
         <LogoutButton />
       </aside>
-      <main className="flex-1 bg-gray-50 p-6 print:p-0 print:bg-white">{children}</main>
+      <main className="flex-1 bg-gray-50 p-6 print:p-0 print:bg-white">
+        <PermissionProvider isAdmin={isAdmin} userId={appUser?.id ?? ""}>
+          {children}
+        </PermissionProvider>
+      </main>
     </div>
   );
 }

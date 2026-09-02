@@ -1,8 +1,8 @@
 "use client";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { deleteSimpleRow } from "@/lib/simpleDelete";
+import GuardedAction from "@/app/dashboard/GuardedAction";
 
 export default function VoucherRow({
   voucher, selected, onToggleSelect,
@@ -44,18 +44,20 @@ export default function VoucherRow({
       <td className="px-4 py-2">{voucher.narration || "-"}</td>
       <td className="px-4 py-2 text-right">{total.toFixed(2)}</td>
       <td className="px-4 py-2 text-right whitespace-nowrap">
-        <Link
-          href={`/dashboard/accounting/journal/${voucher.id}/edit`}
+        <GuardedAction
+          table="journal_vouchers" recordId={voucher.id} recordLabel={voucher.voucher_no} action="edit"
+          onAllowed={() => router.push(`/dashboard/accounting/journal/${voucher.id}/edit`)}
           className="rounded bg-blue-50 px-3 py-1 text-xs text-blue-700 mr-2 hover:bg-blue-100"
         >
           Edit
-        </Link>
-        <button
-          onClick={handleDelete}
+        </GuardedAction>
+        <GuardedAction
+          table="journal_vouchers" recordId={voucher.id} recordLabel={voucher.voucher_no} action="delete"
+          onAllowed={handleDelete}
           className="rounded bg-red-50 px-3 py-1 text-xs text-red-700 hover:bg-red-100"
         >
           Delete
-        </button>
+        </GuardedAction>
       </td>
     </tr>
   );

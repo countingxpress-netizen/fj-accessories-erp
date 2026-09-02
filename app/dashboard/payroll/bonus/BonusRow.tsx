@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { formatDate } from "@/lib/formatDate";
 import { todayLocal } from "@/lib/payroll";
 import { postPayrollPayment, reversePayrollJv } from "@/lib/payrollJv";
+import GuardedAction from "@/app/dashboard/GuardedAction";
 
 const festivalLabel: Record<string, string> = {
   eid_ul_fitr: "Eid-ul-Fitr",
@@ -76,7 +77,9 @@ export default function BonusRow({ row, cashBankAccounts }: { row: any; cashBank
             <button onClick={handleMarkPaid} disabled={loading || !payAccountId} className="rounded bg-green-50 px-2 py-1 text-xs text-green-700 hover:bg-green-100 disabled:opacity-40">Mark Paid</button>
           </span>
         )}
-        <button onClick={handleDelete} disabled={loading} className="rounded bg-red-50 px-2 py-1 text-xs text-red-700 hover:bg-red-100">Delete</button>
+        <GuardedAction table="bonus_sheet" recordId={row.id} recordLabel={`${row.employees?.name ?? ""} ${festivalLabel[row.festival] ?? row.festival} ${row.year}`} action="delete"
+          onAllowed={handleDelete} disabled={loading}
+          className="rounded bg-red-50 px-2 py-1 text-xs text-red-700 hover:bg-red-100">Delete</GuardedAction>
       </td>
     </tr>
   );

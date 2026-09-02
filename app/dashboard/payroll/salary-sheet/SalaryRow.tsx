@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { todayLocal } from "@/lib/payroll";
 import { postPayrollPayment, reversePayrollJv } from "@/lib/payrollJv";
+import GuardedAction from "@/app/dashboard/GuardedAction";
 
 const monthNames = ["","January","February","March","April","May","June","July","August","September","October","November","December"];
 
@@ -78,7 +79,9 @@ export default function SalaryRow({ row, cashBankAccounts }: { row: any; cashBan
             <button onClick={handleMarkPaid} disabled={loading || !payAccountId} className="rounded bg-green-50 px-2 py-1 text-xs text-green-700 hover:bg-green-100 disabled:opacity-40">Mark Paid</button>
           </span>
         )}
-        <button onClick={handleDelete} disabled={loading} className="rounded bg-red-50 px-2 py-1 text-xs text-red-700 hover:bg-red-100">Delete</button>
+        <GuardedAction table="salary_sheet" recordId={row.id} recordLabel={`${row.employees?.name ?? ""} ${monthNames[row.month]} ${row.year}`} action="delete"
+          onAllowed={handleDelete} disabled={loading}
+          className="rounded bg-red-50 px-2 py-1 text-xs text-red-700 hover:bg-red-100">Delete</GuardedAction>
       </td>
     </tr>
   );

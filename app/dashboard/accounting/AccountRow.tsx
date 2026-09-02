@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import GuardedAction from "@/app/dashboard/GuardedAction";
 
 type Account = {
   id: string;
@@ -109,19 +110,19 @@ export default function AccountRow({ account }: { account: Account }) {
       <td className="px-4 py-2 text-gray-500">{account.account_code}</td>
       <td className="px-4 py-2">{account.account_name}</td>
       <td className="px-4 py-2 text-right whitespace-nowrap">
-        <button
-          onClick={() => setEditing(true)}
+        <GuardedAction table="chart_of_accounts" recordId={account.id} recordLabel={account.account_name} action="edit"
+          onAllowed={() => setEditing(true)}
           className="rounded bg-blue-50 px-3 py-1 text-xs text-blue-700 mr-2 hover:bg-blue-100"
         >
           Edit
-        </button>
-        <button
-          onClick={handleDelete}
+        </GuardedAction>
+        <GuardedAction table="chart_of_accounts" recordId={account.id} recordLabel={account.account_name} action="delete"
+          onAllowed={handleDelete}
           disabled={loading}
           className="rounded bg-red-50 px-3 py-1 text-xs text-red-700 hover:bg-red-100 disabled:opacity-50"
         >
           Delete
-        </button>
+        </GuardedAction>
       </td>
     </tr>
   );

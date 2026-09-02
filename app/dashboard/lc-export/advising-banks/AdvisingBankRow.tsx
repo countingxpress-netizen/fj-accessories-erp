@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { deleteSimpleRow } from "@/lib/simpleDelete";
+import GuardedAction from "@/app/dashboard/GuardedAction";
 
 export default function AdvisingBankRow({ bank }: { bank: any }) {
   const [editing, setEditing] = useState(false);
@@ -55,8 +56,12 @@ export default function AdvisingBankRow({ bank }: { bank: any }) {
       <td className="px-4 py-2 text-gray-600">{bank.address || "-"}</td>
       <td className="px-4 py-2 text-gray-600">{bank.swift || "-"}</td>
       <td className="px-4 py-2 text-right whitespace-nowrap">
-        <button onClick={() => setEditing(true)} className="rounded bg-blue-50 px-3 py-1 text-xs text-blue-700 mr-2 hover:bg-blue-100">Edit</button>
-        <button onClick={handleDelete} className="rounded bg-red-50 px-3 py-1 text-xs text-red-700 hover:bg-red-100">Delete</button>
+        <GuardedAction table="advising_banks" recordId={bank.id} recordLabel={bank.name} action="edit"
+          onAllowed={() => setEditing(true)}
+          className="rounded bg-blue-50 px-3 py-1 text-xs text-blue-700 mr-2 hover:bg-blue-100">Edit</GuardedAction>
+        <GuardedAction table="advising_banks" recordId={bank.id} recordLabel={bank.name} action="delete"
+          onAllowed={handleDelete}
+          className="rounded bg-red-50 px-3 py-1 text-xs text-red-700 hover:bg-red-100">Delete</GuardedAction>
       </td>
     </tr>
   );

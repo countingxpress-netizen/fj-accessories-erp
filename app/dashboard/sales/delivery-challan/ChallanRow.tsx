@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { formatDate } from "@/lib/formatDate";
 import DeliveryStatusBadge from "./DeliveryStatusBadge";
 import { deleteChallanCascade } from "@/lib/challanDelete";
+import GuardedAction from "@/app/dashboard/GuardedAction";
 
 export default function ChallanRow({
   challan, selected, onToggleSelect,
@@ -53,7 +54,9 @@ export default function ChallanRow({
 
       <td className="px-4 py-2 text-right whitespace-nowrap">
         <Link href={`/dashboard/sales/delivery-challan/${challan.id}/print`} target="_blank" className="text-blue-700 hover:underline text-xs mr-2">Print</Link>
-        <button onClick={handleDelete} className="rounded bg-red-50 px-2 py-1 text-xs text-red-700 hover:bg-red-100">Delete</button>
+        <GuardedAction table="delivery_challans" recordId={challan.id} recordLabel={challan.challan_no} action="delete"
+          onAllowed={handleDelete}
+          className="rounded bg-red-50 px-2 py-1 text-xs text-red-700 hover:bg-red-100">Delete</GuardedAction>
       </td>
     </tr>
   );

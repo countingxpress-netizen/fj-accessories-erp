@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { formatDate } from "@/lib/formatDate";
 import { currencySymbol } from "@/lib/numberToWords";
+import GuardedAction from "@/app/dashboard/GuardedAction";
 
 const statusLabels: Record<string, string> = {
   draft: "Draft", sent: "Sent", in_garments: "In Garments", lc_opened: "LC Opened", paid: "Paid",
@@ -65,7 +66,9 @@ export default function ProformaRow({ pi, salesInvoiceValue, garments }: { pi: a
         )}
         <Link href={`/dashboard/lc-export/proforma/${pi.id}`} className="text-blue-700 hover:underline text-xs mr-2">View</Link>
         <Link href={`/dashboard/lc-export/proforma/${pi.id}/print`} target="_blank" className="text-blue-700 hover:underline text-xs mr-2">Print</Link>
-        <button onClick={handleDelete} className="rounded bg-red-50 px-2 py-1 text-xs text-red-700 hover:bg-red-100">Delete</button>
+        <GuardedAction table="proforma_invoices" recordId={pi.id} recordLabel={pi.pi_no} action="delete"
+          onAllowed={handleDelete}
+          className="rounded bg-red-50 px-2 py-1 text-xs text-red-700 hover:bg-red-100">Delete</GuardedAction>
       </td>
     </tr>
   );

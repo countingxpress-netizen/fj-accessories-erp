@@ -3,6 +3,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { formatDate } from "@/lib/formatDate";
 import { deleteSupplierPaymentCascade } from "@/lib/paymentGivenDelete";
+import GuardedAction from "@/app/dashboard/GuardedAction";
 
 export default function PaymentGivenRow({
   payment, selected, onToggleSelect,
@@ -36,7 +37,9 @@ export default function PaymentGivenRow({
       <td className="px-4 py-2 text-gray-500">{payment.note || "-"}</td>
       <td className="px-4 py-2 text-right">{payment.amount.toFixed(2)}</td>
       <td className="px-4 py-2 text-right whitespace-nowrap">
-        <button onClick={handleDelete} className="rounded bg-red-50 px-2 py-1 text-xs text-red-700 hover:bg-red-100">Delete</button>
+        <GuardedAction table="supplier_payments" recordId={payment.id} recordLabel={`${payment.suppliers?.name ?? ""} ${formatDate(payment.payment_date)}`} action="delete"
+          onAllowed={handleDelete}
+          className="rounded bg-red-50 px-2 py-1 text-xs text-red-700 hover:bg-red-100">Delete</GuardedAction>
       </td>
     </tr>
   );

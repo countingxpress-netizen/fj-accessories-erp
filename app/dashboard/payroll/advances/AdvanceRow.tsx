@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { formatDate } from "@/lib/formatDate";
 import { reversePayrollJv } from "@/lib/payrollJv";
+import GuardedAction from "@/app/dashboard/GuardedAction";
 
 export default function AdvanceRow({ row }: { row: any }) {
   const [loading, setLoading] = useState(false);
@@ -26,7 +27,9 @@ export default function AdvanceRow({ row }: { row: any }) {
       <td className="px-4 py-2 text-right font-medium">{Number(row.amount).toFixed(2)}</td>
       <td className="px-4 py-2 text-gray-600">{row.note || "-"}</td>
       <td className="px-4 py-2 text-right">
-        <button onClick={handleDelete} disabled={loading} className="rounded bg-red-50 px-2 py-1 text-xs text-red-700 hover:bg-red-100">Delete</button>
+        <GuardedAction table="employee_advances" recordId={row.id} recordLabel={`${row.employees?.name ?? ""} ${formatDate(row.advance_date)}`} action="delete"
+          onAllowed={handleDelete} disabled={loading}
+          className="rounded bg-red-50 px-2 py-1 text-xs text-red-700 hover:bg-red-100">Delete</GuardedAction>
       </td>
     </tr>
   );

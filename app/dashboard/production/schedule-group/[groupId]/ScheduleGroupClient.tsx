@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 
 function formatMeasurement(b: any, forStage: "blowing" | "other") {
@@ -43,44 +43,7 @@ export default function ScheduleGroupClient({
     return initial;
   });
 
-  const [currentUserRole, setCurrentUserRole] = useState<string | null>(null);
-  const [currentUserName, setCurrentUserName] = useState<string>("");
-  const [approvedRequest, setApprovedRequest] = useState<any>(null);
-  const [requestSent, setRequestSent] = useState(false);
-
   const supabase = createClient();
-
-  useEffect(() => {
-    async function fetchRoleAndRequest() {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-
-      const { data: appUser } = await supabase.from("app_users").select("role, full_name").eq("id", user.id).single();
-      setCurrentUserRole(appUser?.role ?? null);
-      setCurrentUserName(appUser?.full_name ?? "");
-
-      const { data: req } = await supabase
-        .from("print_reprint_requests")
-        .select("*")
-        .eq("booking_group_id", groupId)
-        .eq("schedule_type", scheduleType)
-        .eq("status", "approved")
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      setApprovedRequest(req);
-
-      const { data: pendingReq } = await supabase
-        .from("print_reprint_requests")
-        .select("id")
-        .eq("booking_group_id", groupId)
-        .eq("schedule_type", scheduleType)
-        .eq("status", "pending")
-        .maybeSingle();
-      setRequestSent(!!pendingReq);
-    }
-    fetchRoleAndRequest();
-  }, [scheduleType]);
 
   function updateRemark(bookingId: string, value: string) {
     setRemarks((prev) => ({
@@ -99,30 +62,14 @@ export default function ScheduleGroupClient({
 
   const printedColumn = scheduleType === "blowing" ? "blowing_printed" : scheduleType === "printing" ? "printing_printed" : "cutting_printed";
   const alreadyPrinted = bookings.some((b) => b[printedColumn]);
-  const isAdmin = currentUserRole === "admin";
-  const canPrint = !alreadyPrinted || isAdmin || !!approvedRequest;
-
-  async function handleRequestPermission() {
-    await supabase.from("print_reprint_requests").insert({
-      booking_group_id: groupId,
-      schedule_type: scheduleType,
-      requested_by_name: currentUserName,
-      status: "pending",
-    });
-    setRequestSent(true);
-  }
 
   async function handleSaveAndPrint() {
-    if (!canPrint) return;
     const remarkColumn = scheduleType === "blowing" ? "blowing_remark" : scheduleType === "printing" ? "printing_remark" : "cutting_remark";
     for (const b of bookings) {
       await supabase.from("bookings").update({
         [remarkColumn]: remarks[scheduleType][b.id],
         [printedColumn]: true,
       }).eq("id", b.id);
-    }
-    if (approvedRequest && !isAdmin) {
-      await supabase.from("print_reprint_requests").update({ status: "fulfilled" }).eq("id", approvedRequest.id);
     }
     setTimeout(() => window.print(), 200);
   }
@@ -175,30 +122,9 @@ export default function ScheduleGroupClient({
           ))}
         </div>
 
-        {alreadyPrinted && !isAdmin && !approvedRequest && (
-          <div className="rounded-lg border border-orange-200 bg-orange-50 p-3 space-y-2">
-            <p className="text-xs text-orange-700">
-              ⚠ এই {titles[scheduleType]} আগে একবার প্রিন্ট হয়েছে। আবার প্রিন্ট করতে Admin-এর অনুমতি লাগবে।
-            </p>
-            {requestSent ? (
-              <p className="text-xs text-blue-700">✓ Admin-কে Request পাঠানো হয়েছে, অনুমোদনের অপেক্ষায় আছে।</p>
-            ) : (
-              <button onClick={handleRequestPermission} className="rounded bg-blue-600 px-3 py-1.5 text-xs text-white hover:bg-blue-700">
-                Admin-এর কাছে Permission Request পাঠান
-              </button>
-            )}
-          </div>
-        )}
-
-        {alreadyPrinted && approvedRequest && !isAdmin && (
-          <p className="text-xs text-green-700 bg-green-50 border border-green-200 rounded p-2">
-            ✅ Admin আপনাকে একবার প্রিন্ট করার অনুমতি দিয়েছেন।
-          </p>
-        )}
-
         <button
           onClick={handleSaveAndPrint}
-          disabled={!operatorName.trim() || !canPrint}
+          disabled={!operatorName.trim()}
           className="rounded-lg bg-gray-900 px-4 py-2 text-sm text-white disabled:opacity-40"
         >
           {alreadyPrinted ? "আবার Print করুন" : "Save করে Print করুন"}

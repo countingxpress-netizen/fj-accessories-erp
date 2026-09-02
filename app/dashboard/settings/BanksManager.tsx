@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import GuardedAction from "@/app/dashboard/GuardedAction";
 
 type Bank = {
   id: string;
@@ -61,7 +62,9 @@ export default function BanksManager({ banks }: { banks: Bank[] }) {
               <td className="px-4 py-2 text-gray-600">{b.account_name || "-"}</td>
               <td className="px-4 py-2 text-gray-600">{b.account_number || "-"}</td>
               <td className="px-4 py-2 text-right">
-                <button onClick={() => handleDelete(b.id)} className="text-red-600 text-xs hover:underline">মুছুন</button>
+                <GuardedAction table="banks" recordId={b.id} recordLabel={b.bank_name} action="delete"
+                  onAllowed={() => handleDelete(b.id)}
+                  className="text-red-600 text-xs hover:underline">মুছুন</GuardedAction>
               </td>
             </tr>
           ))}

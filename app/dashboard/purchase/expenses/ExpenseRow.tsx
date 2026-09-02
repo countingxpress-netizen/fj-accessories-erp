@@ -3,6 +3,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { formatDate } from "@/lib/formatDate";
 import { deleteExpenseCascade } from "@/lib/expenseDelete";
+import GuardedAction from "@/app/dashboard/GuardedAction";
 
 export default function ExpenseRow({
   expense, selected, onToggleSelect,
@@ -37,7 +38,9 @@ export default function ExpenseRow({
       <td className="px-4 py-2 text-gray-600">{expense.description || "-"}</td>
       <td className="px-4 py-2 text-right">{expense.amount?.toFixed(2)}</td>
       <td className="px-4 py-2 text-right">
-        <button onClick={handleDelete} className="rounded bg-red-50 px-2 py-1 text-xs text-red-700 hover:bg-red-100">Delete</button>
+        <GuardedAction table="expenses" recordId={expense.id} recordLabel={expense.description ?? formatDate(expense.expense_date)} action="delete"
+          onAllowed={handleDelete}
+          className="rounded bg-red-50 px-2 py-1 text-xs text-red-700 hover:bg-red-100">Delete</GuardedAction>
       </td>
     </tr>
   );

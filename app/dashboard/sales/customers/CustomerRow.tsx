@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { deleteSimpleRow } from "@/lib/simpleDelete";
+import GuardedAction from "@/app/dashboard/GuardedAction";
 
 type Customer = {
   id: string; name: string; code: string | null; address: string | null;
@@ -100,8 +101,12 @@ export default function CustomerRow({
       <td className="px-4 py-2 text-gray-500">{customer.default_adhesive_rate ?? "0.02"}</td>
         <td className="px-4 py-2 text-right text-gray-500">{customer.opening_balance?.toFixed(2) ?? "0.00"}</td>
       <td className="px-4 py-2 text-right whitespace-nowrap">
-        <button onClick={() => setEditing(true)} className="rounded bg-blue-50 px-3 py-1 text-xs text-blue-700 mr-2 hover:bg-blue-100">Edit</button>
-        <button onClick={handleDelete} disabled={loading} className="rounded bg-red-50 px-3 py-1 text-xs text-red-700 hover:bg-red-100">Delete</button>
+        <GuardedAction table="customers" recordId={customer.id} recordLabel={customer.name} action="edit"
+          onAllowed={() => setEditing(true)}
+          className="rounded bg-blue-50 px-3 py-1 text-xs text-blue-700 mr-2 hover:bg-blue-100">Edit</GuardedAction>
+        <GuardedAction table="customers" recordId={customer.id} recordLabel={customer.name} action="delete"
+          onAllowed={handleDelete} disabled={loading}
+          className="rounded bg-red-50 px-3 py-1 text-xs text-red-700 hover:bg-red-100">Delete</GuardedAction>
       </td>
     </tr>
   );

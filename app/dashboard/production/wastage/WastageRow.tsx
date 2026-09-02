@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { formatDate } from "@/lib/formatDate";
 import { postWastageJv, reverseInventoryJv } from "@/lib/inventoryCost";
+import GuardedAction from "@/app/dashboard/GuardedAction";
 
 const stageLabels: Record<string, string> = { blowing: "Blowing", printing: "Printing", cutting: "Cutting" };
 
@@ -152,8 +153,12 @@ export default function WastageRow({ wastage, warehouses }: { wastage: any; ware
         {wastage.recycled ? <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs text-green-700">Yes</span> : <span className="text-gray-400 text-xs">No</span>}
       </td>
       <td className="px-4 py-2 text-right whitespace-nowrap">
-        <button onClick={() => setEditing(true)} className="rounded bg-blue-50 px-2 py-1 text-xs text-blue-700 mr-2 hover:bg-blue-100">Edit</button>
-        <button onClick={handleDelete} disabled={loading} className="rounded bg-red-50 px-2 py-1 text-xs text-red-700 hover:bg-red-100">Delete</button>
+        <GuardedAction table="wastage" recordId={wastage.id} recordLabel={`${wastage.production_orders?.production_no ?? ""} ${formatDate(wastage.wastage_date)}`} action="edit"
+          onAllowed={() => setEditing(true)}
+          className="rounded bg-blue-50 px-2 py-1 text-xs text-blue-700 mr-2 hover:bg-blue-100">Edit</GuardedAction>
+        <GuardedAction table="wastage" recordId={wastage.id} recordLabel={`${wastage.production_orders?.production_no ?? ""} ${formatDate(wastage.wastage_date)}`} action="delete"
+          onAllowed={handleDelete} disabled={loading}
+          className="rounded bg-red-50 px-2 py-1 text-xs text-red-700 hover:bg-red-100">Delete</GuardedAction>
       </td>
     </tr>
   );

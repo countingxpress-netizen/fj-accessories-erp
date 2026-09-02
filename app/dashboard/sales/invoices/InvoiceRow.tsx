@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { formatDate } from "@/lib/formatDate";
 import { deleteInvoiceCascade } from "@/lib/invoiceDelete";
+import GuardedAction from "@/app/dashboard/GuardedAction";
 
 export default function InvoiceRow({
   invoice, selected, onToggleSelect,
@@ -48,8 +49,20 @@ export default function InvoiceRow({
         {invoice.customers?.name === "AT Accessories" && (
           <Link href={`/dashboard/sales/invoices/${invoice.id}/print-customer`} target="_blank" className="text-purple-700 hover:underline text-xs mr-2">Submit to Customer</Link>
         )}
-        <Link href={`/dashboard/sales/invoices/${invoice.id}/edit`} className="rounded bg-blue-50 px-2 py-1 text-xs text-blue-700 hover:bg-blue-100 mr-2">Edit</Link>
-        <button onClick={handleDelete} className="rounded bg-red-50 px-2 py-1 text-xs text-red-700 hover:bg-red-100">Delete</button>
+        <GuardedAction
+          table="sales_invoices" recordId={invoice.id} recordLabel={invoice.invoice_no} action="edit"
+          onAllowed={() => router.push(`/dashboard/sales/invoices/${invoice.id}/edit`)}
+          className="rounded bg-blue-50 px-2 py-1 text-xs text-blue-700 hover:bg-blue-100 mr-2"
+        >
+          Edit
+        </GuardedAction>
+        <GuardedAction
+          table="sales_invoices" recordId={invoice.id} recordLabel={invoice.invoice_no} action="delete"
+          onAllowed={handleDelete}
+          className="rounded bg-red-50 px-2 py-1 text-xs text-red-700 hover:bg-red-100"
+        >
+          Delete
+        </GuardedAction>
       </td>
     </tr>
   );

@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { formatDate } from "@/lib/formatDate";
+import GuardedAction from "@/app/dashboard/GuardedAction";
 
 export default function LCRow({ lc }: { lc: any }) {
   const [loading, setLoading] = useState(false);
@@ -44,7 +45,9 @@ export default function LCRow({ lc }: { lc: any }) {
         </select>
       </td>
       <td className="px-4 py-2 text-right">
-        <button onClick={handleDelete} className="rounded bg-red-50 px-2 py-1 text-xs text-red-700 hover:bg-red-100">Delete</button>
+        <GuardedAction table="lc_register" recordId={lc.id} recordLabel={lc.lc_no} action="delete"
+          onAllowed={handleDelete}
+          className="rounded bg-red-50 px-2 py-1 text-xs text-red-700 hover:bg-red-100">Delete</GuardedAction>
       </td>
     </tr>
   );

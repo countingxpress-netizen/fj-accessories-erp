@@ -6,6 +6,7 @@ import { formatDate } from "@/lib/formatDate";
 import { getBookingStatusLabel } from "@/lib/bookingStatus";
 import { formatStyle } from "@/lib/formatStyle";
 import { deleteBookingCascade } from "@/lib/bookingDelete";
+import GuardedAction from "@/app/dashboard/GuardedAction";
 
 function formatMeasurement(b: any) {
   const unit = b.measurement_unit;
@@ -83,8 +84,20 @@ export default function BookingRow({
           </summary>
           <div className="absolute right-0 z-20 mt-1 w-40 rounded-lg border bg-white shadow-lg py-1 text-left">
             <Link href={`/dashboard/sales/bookings/${booking.id}`} className="block px-3 py-1.5 text-xs hover:bg-gray-50">View</Link>
-            <Link href={`/dashboard/sales/bookings/${booking.id}/edit`} className="block px-3 py-1.5 text-xs hover:bg-gray-50">Edit</Link>
-            <button onClick={handleDelete} className="block w-full text-left px-3 py-1.5 text-xs text-red-700 hover:bg-red-50">Delete</button>
+            <GuardedAction
+              table="bookings" recordId={booking.id} recordLabel={booking.booking_no} action="edit"
+              onAllowed={() => router.push(`/dashboard/sales/bookings/${booking.id}/edit`)}
+              className="block w-full text-left px-3 py-1.5 text-xs hover:bg-gray-50"
+            >
+              Edit
+            </GuardedAction>
+            <GuardedAction
+              table="bookings" recordId={booking.id} recordLabel={booking.booking_no} action="delete"
+              onAllowed={handleDelete}
+              className="block w-full text-left px-3 py-1.5 text-xs text-red-700 hover:bg-red-50"
+            >
+              Delete
+            </GuardedAction>
           </div>
         </details>
       </td>

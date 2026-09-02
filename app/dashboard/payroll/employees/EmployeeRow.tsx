@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { salaryTypeOf, type SalaryType } from "@/lib/payroll";
+import GuardedAction from "@/app/dashboard/GuardedAction";
 
 function TypeBadge({ type }: { type: SalaryType }) {
   return type === "production" ? (
@@ -86,8 +87,12 @@ export default function EmployeeRow({ employee, salaryType, effectiveBasic }: { 
         {employee.is_active ? <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs text-green-700">Active</span> : <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600">Inactive</span>}
       </td>
       <td className="px-4 py-2 text-right whitespace-nowrap">
-        <button onClick={() => setEditing(true)} className="rounded bg-blue-50 px-2 py-1 text-xs text-blue-700 mr-2 hover:bg-blue-100">Edit</button>
-        <button onClick={handleDelete} disabled={loading} className="rounded bg-red-50 px-2 py-1 text-xs text-red-700 hover:bg-red-100">Delete</button>
+        <GuardedAction table="employees" recordId={employee.id} recordLabel={employee.name} action="edit"
+          onAllowed={() => setEditing(true)}
+          className="rounded bg-blue-50 px-2 py-1 text-xs text-blue-700 mr-2 hover:bg-blue-100">Edit</GuardedAction>
+        <GuardedAction table="employees" recordId={employee.id} recordLabel={employee.name} action="delete"
+          onAllowed={handleDelete} disabled={loading}
+          className="rounded bg-red-50 px-2 py-1 text-xs text-red-700 hover:bg-red-100">Delete</GuardedAction>
       </td>
     </tr>
   );

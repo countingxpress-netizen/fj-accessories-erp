@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { effectiveBasic, todayLocal, type SalaryRevision } from "@/lib/payroll";
 import { formatDate } from "@/lib/formatDate";
+import GuardedAction from "@/app/dashboard/GuardedAction";
 
 type Employee = { id: string; name: string; employee_code: string; basic_salary: number };
 type Revision = SalaryRevision & { id: string; employee_id: string; note: string | null };
@@ -113,7 +114,9 @@ export default function RevisionManager({
                             <span className="tabular-nums">{formatDate(r.effective_date)}</span>
                             <span className="font-medium">{r.basic_salary.toFixed(2)}</span>
                             {r.note && <span className="text-gray-500">— {r.note}</span>}
-                            <button onClick={() => handleDelete(r.id)} className="text-xs text-red-600 hover:underline">মুছুন</button>
+                            <GuardedAction table="salary_revisions" recordId={r.id} recordLabel={`${emp.name} ${formatDate(r.effective_date)}`} action="delete"
+                              onAllowed={() => handleDelete(r.id)}
+                              className="text-xs text-red-600 hover:underline">মুছুন</GuardedAction>
                           </li>
                         ))}
                       </ul>

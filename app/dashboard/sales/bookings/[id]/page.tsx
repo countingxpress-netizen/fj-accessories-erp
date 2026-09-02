@@ -5,6 +5,7 @@ import { getBookingStatusLabel } from "@/lib/bookingStatus";
 import { calcTubeCutting, calcRequiredLbs } from "@/lib/calcTubeCutting";
 import { notFound } from "next/navigation";
 import PrintButton from "@/app/dashboard/PrintButton";
+import GuardedAction from "@/app/dashboard/GuardedAction";
 
 export default async function BookingViewPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -289,7 +290,9 @@ export default async function BookingViewPage({ params }: { params: Promise<{ id
       </div>
 
       <div className="flex justify-end gap-2 mt-4 print:hidden">
-        <Link href={`/dashboard/sales/bookings/${first.id}/edit`} className="rounded-lg bg-gray-900 px-4 py-2 text-sm text-white">Edit</Link>
+        <GuardedAction table="bookings" recordId={first.id} recordLabel={first.booking_no} action="edit"
+          onAllowed={() => { window.location.href = `/dashboard/sales/bookings/${first.id}/edit`; }}
+          className="rounded-lg bg-gray-900 px-4 py-2 text-sm text-white">Edit</GuardedAction>
       </div>
     </div>
   );

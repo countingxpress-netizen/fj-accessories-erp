@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { deleteSimpleRow } from "@/lib/simpleDelete";
+import GuardedAction from "@/app/dashboard/GuardedAction";
 
 export default function BuyerRow({
   buyer, selected, onToggleSelect,
@@ -141,8 +142,12 @@ export default function BuyerRow({
       <td className="px-4 py-2 text-gray-700">{buyer.usd_surcharge_per_pc ? buyer.usd_surcharge_per_pc : "-"}</td>
       <td className="px-4 py-2 text-gray-700">{buyer.price_basis_default === "dzn" ? "Per Dzn" : "Per Pc"}</td>
       <td className="px-4 py-2 text-right whitespace-nowrap">
-        <button onClick={() => setEditing(true)} className="rounded bg-blue-50 px-3 py-1 text-xs text-blue-700 mr-2 hover:bg-blue-100">Edit</button>
-        <button onClick={handleDelete} className="rounded bg-red-50 px-3 py-1 text-xs text-red-700 hover:bg-red-100">Delete</button>
+        <GuardedAction table="buyers" recordId={buyer.id} recordLabel={buyer.name} action="edit"
+          onAllowed={() => setEditing(true)}
+          className="rounded bg-blue-50 px-3 py-1 text-xs text-blue-700 mr-2 hover:bg-blue-100">Edit</GuardedAction>
+        <GuardedAction table="buyers" recordId={buyer.id} recordLabel={buyer.name} action="delete"
+          onAllowed={handleDelete}
+          className="rounded bg-red-50 px-3 py-1 text-xs text-red-700 hover:bg-red-100">Delete</GuardedAction>
       </td>
     </tr>
   );

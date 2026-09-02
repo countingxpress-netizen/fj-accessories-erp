@@ -1,8 +1,8 @@
 "use client";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { deleteWarehouseTransferCascade } from "@/lib/warehouseTransferDelete";
+import GuardedAction from "@/app/dashboard/GuardedAction";
 
 export default function TransferRow({ transfer }: { transfer: any }) {
   const router = useRouter();
@@ -41,8 +41,12 @@ export default function TransferRow({ transfer }: { transfer: any }) {
         )}
       </td>
       <td className="px-4 py-2 text-right whitespace-nowrap">
-        <Link href={`/dashboard/inventory/warehouse-transfer/${transfer.id}/edit`} className="rounded bg-blue-50 px-2 py-1 text-xs text-blue-700 hover:bg-blue-100 mr-2">Edit</Link>
-        <button onClick={handleDelete} className="rounded bg-red-50 px-2 py-1 text-xs text-red-700 hover:bg-red-100">Delete</button>
+        <GuardedAction table="warehouse_transfers" recordId={transfer.id} recordLabel={transfer.transfer_no} action="edit"
+          onAllowed={() => router.push(`/dashboard/inventory/warehouse-transfer/${transfer.id}/edit`)}
+          className="rounded bg-blue-50 px-2 py-1 text-xs text-blue-700 hover:bg-blue-100 mr-2">Edit</GuardedAction>
+        <GuardedAction table="warehouse_transfers" recordId={transfer.id} recordLabel={transfer.transfer_no} action="delete"
+          onAllowed={handleDelete}
+          className="rounded bg-red-50 px-2 py-1 text-xs text-red-700 hover:bg-red-100">Delete</GuardedAction>
       </td>
     </tr>
   );
