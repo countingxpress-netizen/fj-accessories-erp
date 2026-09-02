@@ -205,13 +205,8 @@ export default function PurchaseEntryForm({
     }
 
     const supplierName = suppliers.find((s) => s.id === supplierId)?.name ?? "";
-    const year = new Date(entryDate).getFullYear();
-    const { count } = await supabase
-      .from("journal_vouchers")
-      .select("*", { count: "exact", head: true })
-      .gte("voucher_date", `${year}-01-01`)
-      .lte("voucher_date", `${year}-12-31`);
-    const voucherNo = `JV-${year}-${String((count ?? 0) + 1).padStart(4, "0")}`;
+    // MAX-based (count-based নয় — ডিলিটের পর নম্বর collision হয়), বাকি সব JV-এর মতো
+    const voucherNo = await generateNextDocNo(supabase, "journal_vouchers", "voucher_no", "JV", "voucher_date", entryDate);
 
     const { data: voucher, error: voucherError } = await supabase
       .from("journal_vouchers")
