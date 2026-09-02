@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { getCurrentUserId } from "@/lib/currentUser";
 
 type Customer = { id: string; name: string };
 
@@ -34,12 +35,15 @@ export default function AddBuyerForm({ customers }: { customers: Customer[] }) {
     const normalizedColorQuantity = colorQuantity === "" ? null : Number.isFinite(Number(colorQuantity)) ? Math.round(Number(colorQuantity)) : null;
     const normalizedPrintColorsDefault = printColorsDefault === "" ? null : Number.isFinite(Number(printColorsDefault)) ? Number(printColorsDefault) : null;
 
+    const rate = parseFloat(rateValue) || 0;
+    const usesRate = pricingRule === "rate_per_lbs" || pricingRule === "rate_per_lbs_markup";
+
     setLoading(true);
-    const { error } = await supabase.from("buyers").insert({
+    const { data: created, error } = await supabase.from("buyers").insert({
       customer_id: customerId, name,
       pricing_rule: pricingRule,
       percentage_value: parseFloat(percentageValue) || 0,
-      rate_per_lbs_value: parseFloat(rateValue) || 0,
+      rate_per_lbs_value: rate,
       pi_thickness_mm: parseFloat(piThicknessMm) || null,
       booking_thickness_mm: parseFloat(bookingThicknessMm) || null,
       production_thickness_mm: parseFloat(productionThicknessMm) || null,
@@ -50,15 +54,28 @@ export default function AddBuyerForm({ customers }: { customers: Customer[] }) {
       usd_bdt_rate: parseFloat(usdBdtRate) || null,
       usd_surcharge_per_pc: parseFloat(usdSurchargePerPc) || 0,
       price_basis_default: priceBasisDefault,
-    });
-    setLoading(false);
-    if (error) {
-      const hint = error.message.includes("does not exist")
+    }).select("id").single();
+    if (error || !created) {
+      setLoading(false);
+      const hint = error?.message.includes("does not exist")
         ? " buyers টেবিলে migration SQL চালাতে হবে।"
         : "";
-      setError(`${error.message}${hint}`);
+      setError(`${error?.message ?? "Buyer তৈরি ব্যর্থ হয়েছে।"}${hint}`);
       return;
     }
+    // শুরুর Rate/Lbs টা rate_history-তে প্রথম এন্ট্রি — পরের পরিবর্তন Buyer রো-এর
+    // "History" প্যানেল থেকে তারিখ-ভিত্তিক ভাবে।
+    if (usesRate && rate) {
+      const createdBy = await getCurrentUserId(supabase);
+      await supabase.from("rate_history").insert({
+        buyer_id: created.id,
+        rate,
+        effective_from: new Date().toISOString().slice(0, 10),
+        note: "শুরুর দাম",
+        created_by: createdBy,
+      });
+    }
+    setLoading(false);
     setName(""); setPercentageValue("0"); setRateValue("0"); setPiThicknessMm(""); setBookingThicknessMm(""); setProductionThicknessMm(""); setAdhesiveRatePerInch("0.02"); setPrintColorsDefault(""); setColorQuantity(""); setMarkupPercentage("2"); setUsdBdtRate(""); setUsdSurchargePerPc(""); setPriceBasisDefault("pcs");
     router.refresh();
   }

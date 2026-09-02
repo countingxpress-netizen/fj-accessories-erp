@@ -4,11 +4,12 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { generatePiNo } from "@/lib/docNumber";
 import { calcPiUnitPrice, calcPiUnitPriceWithMarkup, calcPiWeightLbs } from "@/lib/calcTubeCutting";
+import { resolveRate } from "@/lib/rateHistory";
 import { amountInWords } from "@/lib/numberToWords";
 import { getCurrentUserId } from "@/lib/currentUser";
 
 type Booking = {
-  id: string; booking_no: string; quantity_pcs: number; product_id: string; customer_id: string;
+  id: string; booking_no: string; booking_date: string | null; quantity_pcs: number; product_id: string; customer_id: string;
   style: string | null; customer_booking_ref: string | null; garments_name: string | null; buyer_id: string | null;
   buyers: { name: string } | null; merchants: { name: string } | null;
   measurement_type: string; measurement_unit: string; length_val: number; width_val: number;
@@ -20,6 +21,7 @@ type Customer = { id: string; name: string; code: string | null; price_per_lbs: 
 type BuyerMaster = { id: string; customer_id: string; name: string; pricing_rule: string; percentage_value: number; rate_per_lbs_value: number; pi_thickness_mm: number | null; adhesive_rate_per_inch: number | null; print_colors_default: number | null; usd_bdt_rate: number | null; price_basis_default: string | null; usd_surcharge_per_pc: number | null };
 type Garment = { id: string; customer_id: string; name: string; address: string | null };
 type AdvisingBank = { id: string; name: string; branch: string | null; address: string | null; swift: string | null };
+type BuyerRateHistoryRow = { buyer_id: string; effective_from: string; rate: number };
 type ManualLine = { description: string; measurement: string; qtyPcs: string; priceUnit: string; priceBasis: "pcs" | "dzn" };
 
 const DEFAULT_TERMS = `01) 100% IRREVOCABLE LETTER OF CREDIT AT SIGHT.
@@ -58,11 +60,12 @@ function buildBookingDescription(b: Booking): string {
 }
 
 export default function ProformaForm({
-  customers, bookings, buyersMaster, garments, advisingBanks, lastUnitPriceByBooking,
+  customers, bookings, buyersMaster, garments, advisingBanks, lastUnitPriceByBooking, buyerRateHistory = [],
 }: {
   customers: Customer[]; bookings: Booking[]; buyersMaster: BuyerMaster[];
   garments: Garment[]; advisingBanks: AdvisingBank[];
   lastUnitPriceByBooking: Record<string, number>;
+  buyerRateHistory?: BuyerRateHistoryRow[];
 }) {
   const [mode, setMode] = useState<"booking" | "manual">("booking");
   const [customerId, setCustomerId] = useState("");
@@ -149,6 +152,13 @@ export default function ProformaForm({
     const rate = parseFloat(exchangeRate) || 107;
     const thickness = thicknessOverride ?? lineThickness(b);
     const printRate = selectedCustomer?.default_print_rate ?? 0.2;
+    // Booking-এর Booking Date ধরে সেই দিনে কার্যকর Buyer Rate/Lbs (history না থাকলে
+    // buyer-এর বর্তমান rate_per_lbs_value fallback)।
+    const ratePerLbs = resolveRate(
+      buyerRateHistory.filter((h) => h.buyer_id === rule.id),
+      b.booking_date,
+      rule.rate_per_lbs_value
+    );
     if (rule.pricing_rule === "percentage") {
       const lastPrice = lastUnitPriceByBooking[b.id] ?? 0;
       if (!lastPrice) return 0;
@@ -156,12 +166,12 @@ export default function ProformaForm({
       return currency === "USD" ? roundPrice(bdtPrice / rate) : roundPrice(bdtPrice);
     }
     if (rule.pricing_rule === "rate_per_lbs") {
-      const bdt = calcPiUnitPrice(b, rule.rate_per_lbs_value || 0, thickness);
+      const bdt = calcPiUnitPrice(b, ratePerLbs || 0, thickness);
       return currency === "USD" ? roundPrice(bdt / rate) : roundPrice(bdt);
     }
     if (rule.pricing_rule === "rate_per_lbs_markup") {
       const bdtPrice = calcPiUnitPriceWithMarkup(
-        b, rule.rate_per_lbs_value || 0, rule.percentage_value || 0,
+        b, ratePerLbs || 0, rule.percentage_value || 0,
         rule.adhesive_rate_per_inch, thickness, printRate
       );
       if (!bdtPrice) return 0;

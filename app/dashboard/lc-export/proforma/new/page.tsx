@@ -7,7 +7,7 @@ export default async function NewProformaPage() {
 
   const { data: allBookings } = await supabase
     .from("bookings")
-    .select("id, booking_no, quantity_pcs, product_id, customer_id, style, customer_booking_ref, garments_name, buyer_id, buyers(name), merchants(name), measurement_type, measurement_unit, length_val, width_val, flap_val, gusset_val, pi_thickness_mm, material_type, has_print, print_colors, rate_per_color, finished_goods(product_name, length_cm, width_cm, thickness)")
+    .select("id, booking_no, booking_date, quantity_pcs, product_id, customer_id, style, customer_booking_ref, garments_name, buyer_id, buyers(name), merchants(name), measurement_type, measurement_unit, length_val, width_val, flap_val, gusset_val, pi_thickness_mm, material_type, has_print, print_colors, rate_per_color, finished_goods(product_name, length_cm, width_cm, thickness)")
     .order("booking_date", { ascending: false });
 
   const { data: usedItems } = await supabase.from("pi_items").select("booking_id").not("booking_id", "is", null);
@@ -22,6 +22,10 @@ export default async function NewProformaPage() {
   (pastInvoiceItems ?? []).forEach((it: any) => { lastUnitPriceByBooking[it.booking_id] = it.unit_price; });
 
   const { data: buyersMaster } = await supabase.from("buyers").select("*");
+  const { data: buyerRateHistory } = await supabase
+    .from("rate_history")
+    .select("buyer_id, effective_from, rate")
+    .not("buyer_id", "is", null);
   const { data: garments } = await supabase.from("garments").select("id, customer_id, name, address").order("name");
   const { data: advisingBanks } = await supabase.from("advising_banks").select("id, name, branch, address, swift").order("name");
 
@@ -35,6 +39,7 @@ export default async function NewProformaPage() {
         garments={garments ?? []}
         advisingBanks={advisingBanks ?? []}
         lastUnitPriceByBooking={lastUnitPriceByBooking}
+        buyerRateHistory={(buyerRateHistory ?? []) as any}
       />
     </div>
   );

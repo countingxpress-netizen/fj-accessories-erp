@@ -6,8 +6,12 @@ export default async function NewSalesInvoicePage() {
   const { data: customers } = await supabase.from("customers").select("id, name, price_per_lbs").order("name");
   const { data: bookings } = await supabase
     .from("bookings")
-    .select("id, booking_no, quantity_pcs, product_id, customer_id, style, garments_name, buyers(name), merchants(name), delivery_point, customer_booking_ref, has_print, print_colors, rate_per_color, rate_per_inch, measurement_type, measurement_unit, length_val, width_val, flap_val, gusset_val, thickness_mm, material_type, finished_goods(product_name, length_cm, width_cm, thickness)")
+    .select("id, booking_no, booking_date, quantity_pcs, product_id, customer_id, style, garments_name, buyers(name), merchants(name), delivery_point, customer_booking_ref, has_print, print_colors, rate_per_color, rate_per_inch, measurement_type, measurement_unit, length_val, width_val, flap_val, gusset_val, thickness_mm, material_type, finished_goods(product_name, length_cm, width_cm, thickness)")
     .order("booking_date", { ascending: false });
+  const { data: priceHistory } = await supabase
+    .from("rate_history")
+    .select("customer_id, effective_from, rate")
+    .not("customer_id", "is", null);
   const { data: allItems } = await supabase.from("sales_invoice_items").select("booking_id, quantity_pcs");
 
   const invoicedMap: Record<string, number> = {};
@@ -19,7 +23,7 @@ export default async function NewSalesInvoicePage() {
   return (
     <div className="mx-auto w-full max-w-screen-lg px-4 sm:px-5 lg:px-6">
       <h1 className="text-2xl font-semibold mb-4">নতুন Sales Invoice</h1>
-      <SalesInvoiceForm customers={customers ?? []} bookings={(bookings ?? []) as any} invoicedMap={invoicedMap} />
+      <SalesInvoiceForm customers={customers ?? []} bookings={(bookings ?? []) as any} invoicedMap={invoicedMap} priceHistory={(priceHistory ?? []) as any} />
     </div>
   );
 }

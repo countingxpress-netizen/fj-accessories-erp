@@ -5,9 +5,10 @@ import { createClient } from "@/lib/supabase/client";
 import { generateNextDocNo } from "@/lib/docNumber";
 import { calcTubeCutting, toInches } from "@/lib/calcTubeCutting";
 import { getCurrentUserId } from "@/lib/currentUser";
+import { resolveRate } from "@/lib/rateHistory";
 
 type Booking = {
-  id: string; booking_no: string; quantity_pcs: number; product_id: string; customer_id: string;
+  id: string; booking_no: string; booking_date: string | null; quantity_pcs: number; product_id: string; customer_id: string;
   style: string | null; garments_name: string | null; buyers: { name: string } | null; merchants: { name: string } | null;
   delivery_point: string | null; customer_booking_ref: string | null;
   has_print: boolean; print_colors: number; rate_per_color: number; rate_per_inch: number;
@@ -17,6 +18,7 @@ type Booking = {
   finished_goods: { product_name: string; length_cm: number; width_cm: number; thickness: number } | null;
 };
 type Customer = { id: string; name: string; price_per_lbs: number | null };
+type PriceHistoryRow = { customer_id: string; effective_from: string; rate: number };
 
 function formatMeasurement(b: Booking) {
   const unit = b.measurement_unit;
@@ -32,8 +34,8 @@ function getLineAmount(qty: number, unitPriceRounded: number) {
 }
 
 export default function SalesInvoiceForm({
-  customers, bookings, invoicedMap,
-}: { customers: Customer[]; bookings: Booking[]; invoicedMap: Record<string, number> }) {
+  customers, bookings, invoicedMap, priceHistory = [],
+}: { customers: Customer[]; bookings: Booking[]; invoicedMap: Record<string, number>; priceHistory?: PriceHistoryRow[] }) {
   const [customerId, setCustomerId] = useState("");
   const [buyerFilter, setBuyerFilter] = useState("");
   const [merchantFilter, setMerchantFilter] = useState("");
@@ -49,6 +51,17 @@ export default function SalesInvoiceForm({
   const supabase = createClient();
 
   const selectedCustomer = customers.find((c) => c.id === customerId);
+
+  const historyForCustomer = useMemo(
+    () => priceHistory.filter((h) => h.customer_id === customerId),
+    [priceHistory, customerId]
+  );
+
+  // Booking-এর Booking Date ধরে সেই দিনে কার্যকর Price/Lbs (history না থাকলে
+  // customer-এর বর্তমান price_per_lbs fallback)।
+  function bookingPricePerLbs(b: Booking) {
+    return resolveRate(historyForCustomer, b.booking_date, selectedCustomer?.price_per_lbs ?? 0);
+  }
 
   const customerBookings = useMemo(() => {
     return bookings
@@ -92,7 +105,7 @@ export default function SalesInvoiceForm({
 
   function getUnitPrice(b: Booking) {
     const overridden = priceOverride[b.id];
-    const pricePerLbs = overridden ? parseFloat(overridden) : (selectedCustomer?.price_per_lbs ?? 0);
+    const pricePerLbs = overridden ? parseFloat(overridden) : bookingPricePerLbs(b);
     if (!pricePerLbs || !b.thickness_mm) return 0;
 
     const { tube, cutting } = calcTubeCutting(b);
@@ -285,7 +298,10 @@ export default function SalesInvoiceForm({
                     <td className="px-3 py-2 text-right text-gray-500">{b.thickness_mm} mm</td>
                     <td className="px-3 py-2 text-right">{checked ? b.remaining : "-"}</td>
                     <td className="px-3 py-2">
-                      <input type="number" step="0.01" placeholder={String(selectedCustomer?.price_per_lbs ?? "")} value={priceOverride[b.id] || ""} onChange={(e) => setPriceOverride((prev) => ({ ...prev, [b.id]: e.target.value }))} className="w-full rounded border px-2 py-1 text-sm" />
+                      <input type="number" step="0.01" placeholder={String(bookingPricePerLbs(b) || "")} value={priceOverride[b.id] || ""} onChange={(e) => setPriceOverride((prev) => ({ ...prev, [b.id]: e.target.value }))} className="w-full rounded border px-2 py-1 text-sm" />
+                      <span className="block text-[11px] text-gray-400">
+                        Booking {b.booking_date ?? "?"} → {bookingPricePerLbs(b) || "—"}
+                      </span>
                     </td>
                     <td className="px-3 py-2 text-right">{(Math.round(unitPrice * 100) / 100).toFixed(2)}</td>
                     <td className="px-3 py-2 text-right">{checked ? getLineAmount(b.remaining, unitPrice).toLocaleString() + ".00" : "-"}</td>

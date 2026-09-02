@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { deriveCustomerCode } from "@/lib/docNumber";
+import { getCurrentUserId } from "@/lib/currentUser";
 
 export default function AddCustomerForm() {
   const [name, setName] = useState("");
@@ -12,6 +13,7 @@ export default function AddCustomerForm() {
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [pricePerLbs, setPricePerLbs] = useState("");
+  const [priceEffectiveFrom, setPriceEffectiveFrom] = useState(new Date().toISOString().slice(0, 10));
   const [defaultPrintRate, setDefaultPrintRate] = useState("0.20");
   const [defaultAdhesiveRate, setDefaultAdhesiveRate] = useState("0.02");
   const [openingBalance, setOpeningBalance] = useState("0");
@@ -25,7 +27,7 @@ export default function AddCustomerForm() {
     e.preventDefault();
     setError("");
     setLoading(true);
-    const { error } = await supabase.from("customers").insert({
+    const { data: created, error } = await supabase.from("customers").insert({
       name,
       code: (code || deriveCustomerCode(name)).toUpperCase().trim() || null,
       address,
@@ -36,15 +38,28 @@ export default function AddCustomerForm() {
       default_adhesive_rate: parseFloat(defaultAdhesiveRate) || 0.02,
       opening_balance: parseFloat(openingBalance) || 0,
       opening_balance_date: openingBalanceDate,
-    });
-    setLoading(false);
-    if (error) {
-      setError(error.message);
+    }).select("id").single();
+    if (error || !created) {
+      setLoading(false);
+      setError(error?.message ?? "Customer তৈরি ব্যর্থ হয়েছে।");
       return;
     }
+    // শুরুর Price/Lbs টা rate_history-তে প্রথম এন্ট্রি হিসেবে বসে — পরের পরিবর্তনগুলো
+    // Customer রো-এর "History" প্যানেল থেকে তারিখ-ভিত্তিক ভাবে যোগ হবে।
+    if (pricePerLbs) {
+      const createdBy = await getCurrentUserId(supabase);
+      await supabase.from("rate_history").insert({
+        customer_id: created.id,
+        rate: parseFloat(pricePerLbs),
+        effective_from: priceEffectiveFrom || new Date().toISOString().slice(0, 10),
+        note: "শুরুর দাম",
+        created_by: createdBy,
+      });
+    }
+    setLoading(false);
     setName(""); setCode(""); setCodeTouched(false); setAddress(""); setPhone(""); setEmail(""); setPricePerLbs("");
+    setPriceEffectiveFrom(new Date().toISOString().slice(0, 10));
     setDefaultPrintRate("0.20"); setDefaultAdhesiveRate("0.02");
-    setOpeningBalance("0"); setOpeningBalanceDate(new Date().toISOString().slice(0, 10));
     setOpeningBalance("0"); setOpeningBalanceDate(new Date().toISOString().slice(0, 10));
     router.refresh();
   }
@@ -64,6 +79,12 @@ export default function AddCustomerForm() {
           <label className="block text-xs text-gray-500 mb-1">Price/Lbs (ঐচ্ছিক)</label>
           <input type="number" step="0.01" value={pricePerLbs} onChange={(e) => setPricePerLbs(e.target.value)} className="w-40 rounded-lg border px-3 py-2 text-sm" />
         </div>
+        {pricePerLbs && (
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">দাম কার্যকর তারিখ থেকে</label>
+            <input type="date" value={priceEffectiveFrom} onChange={(e) => setPriceEffectiveFrom(e.target.value)} className="rounded-lg border px-3 py-2 text-sm" />
+          </div>
+        )}
         <div>
           <label className="block text-xs text-gray-500 mb-1">Default Print Rate/Color/Pc</label>
           <input type="number" step="0.01" value={defaultPrintRate} onChange={(e) => setDefaultPrintRate(e.target.value)} className="w-40 rounded-lg border px-3 py-2 text-sm" />
