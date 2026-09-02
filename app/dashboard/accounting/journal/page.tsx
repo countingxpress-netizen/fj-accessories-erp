@@ -6,7 +6,7 @@ export default async function JournalListPage() {
   const supabase = await createClient();
   const { data: vouchers } = await supabase
     .from("journal_vouchers")
-    .select("*, journal_entry_lines(debit, credit)")
+    .select("*, journal_entry_lines(debit, credit), creator:app_users!journal_vouchers_created_by_fkey(full_name)")
     .order("voucher_date", { ascending: false });
 
   return (

@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { getCurrentUserId } from "@/lib/currentUser";
 
 type ExportInvoice = { id: string; invoice_no: string };
 
@@ -20,9 +21,11 @@ export default function PackingListForm({ invoices }: { invoices: ExportInvoice[
     setError("");
     if (!invoiceId || !cartons) { setError("Export Invoice ও Cartons দিন।"); return; }
     setLoading(true);
+    const createdBy = await getCurrentUserId(supabase);
     const { error } = await supabase.from("packing_lists").insert({
       export_invoice_id: invoiceId, total_cartons: parseInt(cartons),
       total_net_weight: parseFloat(netWeight) || 0, total_gross_weight: parseFloat(grossWeight) || 0,
+      created_by: createdBy,
     });
     setLoading(false);
     if (error) { setError(error.message); return; }

@@ -35,7 +35,10 @@ export default function QuotationRow({
         />
       </td>
       <td className="px-4 py-2 font-medium">{quotation.quotation_no}</td>
-      <td className="px-4 py-2 text-gray-500">{formatDate(quotation.quotation_date)}</td>
+      <td className="px-4 py-2 text-gray-500">
+        {formatDate(quotation.quotation_date)}
+        {quotation.creator?.full_name && <div className="text-[11px] text-gray-400">by {quotation.creator.full_name}</div>}
+      </td>
       <td className="px-4 py-2">{quotation.customers?.name ?? "-"}</td>
       <td className="px-4 py-2 text-right">{total.toFixed(2)}</td>
       <td className="px-4 py-2 capitalize">{quotation.status}</td>

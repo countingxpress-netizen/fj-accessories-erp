@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { generateNextDocNo } from "@/lib/docNumber";
+import { getCurrentUserId } from "@/lib/currentUser";
 
 type LC = { id: string; lc_no: string };
 type Customer = { id: string; name: string };
@@ -24,10 +25,11 @@ export default function ExportInvoiceForm({ lcs, customers }: { lcs: LC[]; custo
     setLoading(true);
 
     const invoiceNo = await generateNextDocNo(supabase, "export_invoices", "invoice_no", "EXPINV", "invoice_date", invoiceDate);
+    const createdBy = await getCurrentUserId(supabase);
 
     const { error } = await supabase.from("export_invoices").insert({
       invoice_no: invoiceNo, lc_id: lcId || null, customer_id: customerId,
-      invoice_date: invoiceDate, amount: parseFloat(amount),
+      invoice_date: invoiceDate, amount: parseFloat(amount), created_by: createdBy,
     });
 
     setLoading(false);

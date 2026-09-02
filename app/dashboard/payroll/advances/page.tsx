@@ -8,7 +8,7 @@ export default async function AdvancesPage() {
 
   const [{ data: employees }, { data: advances }, { data: sheets }, { data: cashBank }] = await Promise.all([
     supabase.from("employees").select("id, name, employee_code").eq("is_active", true).order("employee_code"),
-    supabase.from("employee_advances").select("*, employees(name, employee_code)").order("advance_date", { ascending: false }),
+    supabase.from("employee_advances").select("*, employees(name, employee_code), creator:app_users!employee_advances_created_by_fkey(full_name)").order("advance_date", { ascending: false }),
     supabase.from("salary_sheet").select("employee_id, advance"),
     supabase.from("chart_of_accounts").select("id, account_code, account_name")
       .eq("account_type", "asset").gte("account_code", "1000").lt("account_code", "1100").order("account_code"),

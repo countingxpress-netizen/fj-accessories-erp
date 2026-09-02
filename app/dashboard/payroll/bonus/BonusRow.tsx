@@ -53,7 +53,10 @@ export default function BonusRow({ row, cashBankAccounts }: { row: any; cashBank
     <tr className="border-t">
       <td className="px-4 py-2">{row.employees?.employee_code} — {row.employees?.name}</td>
       <td className="px-4 py-2">{festivalLabel[row.festival] ?? row.festival} {row.year}</td>
-      <td className="px-4 py-2 text-gray-500">{formatDate(row.bonus_date)}</td>
+      <td className="px-4 py-2 text-gray-500">
+        {formatDate(row.bonus_date)}
+        {row.creator?.full_name && <div className="text-[11px] text-gray-400">by {row.creator.full_name}</div>}
+      </td>
       <td className="px-4 py-2 text-right">{row.basic?.toFixed(2)}</td>
       <td className="px-4 py-2 text-right">{row.tenure_months?.toFixed(1)}</td>
       <td className="px-4 py-2 text-right font-medium">{row.bonus_amount?.toFixed(2)}</td>

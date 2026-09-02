@@ -12,7 +12,7 @@ export default async function WarehouseTransferPage({
 
   let query = supabase
     .from("warehouse_transfers")
-    .select("*, raw_materials(material_name), from_warehouse:warehouses!from_warehouse_id(name), to_warehouse:warehouses!to_warehouse_id(name)")
+    .select("*, raw_materials(material_name), from_warehouse:warehouses!from_warehouse_id(name), to_warehouse:warehouses!to_warehouse_id(name), creator:app_users!warehouse_transfers_created_by_fkey(full_name)")
     .order("transfer_date", { ascending: false });
 
   if (type) query = query.eq("transfer_type", type);

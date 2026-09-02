@@ -33,7 +33,10 @@ export default function PaymentReceivedRow({
           aria-label={`Select payment from ${payment.customers?.name ?? payment.id}`}
         />
       </td>
-      <td className="px-4 py-2 text-gray-500">{formatDate(payment.payment_date)}</td>
+      <td className="px-4 py-2 text-gray-500">
+        {formatDate(payment.payment_date)}
+        {payment.creator?.full_name && <div className="text-[11px] text-gray-400">by {payment.creator.full_name}</div>}
+      </td>
       <td className="px-4 py-2">{payment.customers?.name ?? "-"}</td>
       <td className="px-4 py-2 text-gray-500 capitalize">{(payment.payment_mode ?? "cash").replace(/_/g, " ")}</td>
       <td className="px-4 py-2 text-gray-500">{payment.note || "-"}</td>

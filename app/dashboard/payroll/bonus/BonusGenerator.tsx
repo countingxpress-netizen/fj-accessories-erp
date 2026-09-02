@@ -6,6 +6,7 @@ import {
   effectiveBasic, monthsBetween, eidBonusDefault, FESTIVALS, todayLocal, type SalaryRevision,
 } from "@/lib/payroll";
 import { postPayrollAccrual, reversePayrollJv } from "@/lib/payrollJv";
+import { getCurrentUserId } from "@/lib/currentUser";
 
 type Employee = {
   id: string; name: string; employee_code: string;
@@ -76,11 +77,12 @@ export default function BonusGenerator({
     const festLabel = FESTIVALS.find((f) => f.value === festival)?.label ?? festival;
     const bonusLabel = `${festLabel} ${year}`;
     try {
+      const createdBy = await getCurrentUserId(supabase);
       for (const p of toSave) {
         const { data: inserted, error: insErr } = await supabase.from("bonus_sheet").insert({
           employee_id: p.emp.id, festival, year, bonus_date: bonusDate,
           basic: p.basic, tenure_months: Math.round(p.tenure * 100) / 100,
-          bonus_amount: p.amount, paid: false,
+          bonus_amount: p.amount, paid: false, created_by: createdBy,
         }).select("id").single();
         if (insErr) throw new Error(`${p.emp.name}: ${insErr.message}`);
 

@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { generateNextDocNo } from "@/lib/docNumber";
+import { getCurrentUserId } from "@/lib/currentUser";
 
 type Supplier = { id: string; name: string };
 type Account = { id: string; account_code: string; account_name: string };
@@ -37,12 +38,14 @@ export default function PaymentGivenForm({ suppliers, cashBankAccounts }: { supp
 
     const supplierName = suppliers.find((s) => s.id === supplierId)?.name ?? "";
     const voucherNo = await generateNextDocNo(supabase, "journal_vouchers", "voucher_no", "JV", "voucher_date", paymentDate);
+    const createdBy = await getCurrentUserId(supabase);
 
     const { data: voucher, error: voucherError } = await supabase
       .from("journal_vouchers")
       .insert({
         voucher_no: voucherNo, voucher_date: paymentDate,
         narration: `Payment given to ${supplierName}${note ? " — " + note : ""}`,
+        created_by: createdBy,
       })
       .select().single();
 
@@ -59,6 +62,7 @@ export default function PaymentGivenForm({ suppliers, cashBankAccounts }: { supp
 
     await supabase.from("supplier_payments").insert({
       supplier_id: supplierId, voucher_id: voucher.id, amount: amt, payment_date: paymentDate, note,
+      created_by: createdBy,
     });
 
     setLoading(false);

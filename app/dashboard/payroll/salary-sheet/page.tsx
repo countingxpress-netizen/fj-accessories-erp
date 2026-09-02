@@ -11,7 +11,7 @@ export default async function SalarySheetPage() {
     .eq("is_active", true).order("employee_code");
   const { data: sheets } = await supabase
     .from("salary_sheet")
-    .select("*, employees(name, employee_code)")
+    .select("*, employees(name, employee_code), creator:app_users!salary_sheet_created_by_fkey(full_name)")
     .order("year", { ascending: false })
     .order("month", { ascending: false });
   const { data: cashBankAccounts } = await supabase

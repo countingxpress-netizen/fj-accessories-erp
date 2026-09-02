@@ -6,7 +6,7 @@ export default async function PurchaseEntryListPage() {
   const supabase = await createClient();
   const { data: entries } = await supabase
     .from("purchase_entries")
-    .select("*, suppliers(name), purchase_entry_items(quantity_lbs, rate_per_lbs)")
+    .select("*, suppliers(name), purchase_entry_items(quantity_lbs, rate_per_lbs), creator:app_users!purchase_entries_created_by_fkey(full_name)")
     .order("entry_date", { ascending: false });
 
   return (

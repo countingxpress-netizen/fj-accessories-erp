@@ -22,7 +22,10 @@ export default function AdvanceRow({ row }: { row: any }) {
 
   return (
     <tr className="border-t">
-      <td className="px-4 py-2 text-gray-500">{formatDate(row.advance_date)}</td>
+      <td className="px-4 py-2 text-gray-500">
+        {formatDate(row.advance_date)}
+        {row.creator?.full_name && <div className="text-[11px] text-gray-400">by {row.creator.full_name}</div>}
+      </td>
       <td className="px-4 py-2">{row.employees?.employee_code} — {row.employees?.name}</td>
       <td className="px-4 py-2 text-right font-medium">{Number(row.amount).toFixed(2)}</td>
       <td className="px-4 py-2 text-gray-600">{row.note || "-"}</td>

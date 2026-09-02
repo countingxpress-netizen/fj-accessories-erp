@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { generateNextDocNo } from "@/lib/docNumber";
+import { getCurrentUserId } from "@/lib/currentUser";
 
 type Customer = { id: string; name: string };
 type Product = { id: string; product_name: string };
@@ -34,9 +35,10 @@ export default function QuotationForm({ customers, products }: { customers: Cust
     setLoading(true);
 
     const quotationNo = await generateNextDocNo(supabase, "quotations", "quotation_no", "QT", "quotation_date", quotationDate);
+    const createdBy = await getCurrentUserId(supabase);
     const { data: quotation, error: qError } = await supabase
       .from("quotations")
-      .insert({ quotation_no: quotationNo, customer_id: customerId, quotation_date: quotationDate, status: "draft" })
+      .insert({ quotation_no: quotationNo, customer_id: customerId, quotation_date: quotationDate, status: "draft", created_by: createdBy })
       .select().single();
 
     if (qError || !quotation) {

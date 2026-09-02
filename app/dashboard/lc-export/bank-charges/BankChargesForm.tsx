@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { generateNextDocNo } from "@/lib/docNumber";
+import { getCurrentUserId } from "@/lib/currentUser";
 
 type LC = { id: string; lc_no: string };
 
@@ -22,8 +23,10 @@ export default function BankChargesForm({ lcs }: { lcs: LC[] }) {
     if (!amount) { setError("Amount দিন।"); return; }
     setLoading(true);
 
+    const createdBy = await getCurrentUserId(supabase);
     const { error: chargeError } = await supabase.from("bank_charges").insert({
       lc_id: lcId || null, charge_date: chargeDate, description, amount: parseFloat(amount),
+      created_by: createdBy,
     });
 
     if (chargeError) {
@@ -40,7 +43,7 @@ export default function BankChargesForm({ lcs }: { lcs: LC[] }) {
       const voucherNo = await generateNextDocNo(supabase, "journal_vouchers", "voucher_no", "JV", "voucher_date", chargeDate);
       const { data: voucher } = await supabase
         .from("journal_vouchers")
-        .insert({ voucher_no: voucherNo, voucher_date: chargeDate, narration: `Bank Charge — ${description || "N/A"}` })
+        .insert({ voucher_no: voucherNo, voucher_date: chargeDate, narration: `Bank Charge — ${description || "N/A"}`, created_by: createdBy })
         .select().single();
 
       if (voucher) {

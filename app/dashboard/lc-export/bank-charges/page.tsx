@@ -7,7 +7,7 @@ export default async function BankChargesPage() {
   const { data: lcs } = await supabase.from("lc_register").select("id, lc_no").order("lc_date", { ascending: false });
   const { data: charges } = await supabase
     .from("bank_charges")
-    .select("*, lc_register(lc_no)")
+    .select("*, lc_register(lc_no), creator:app_users!bank_charges_created_by_fkey(full_name)")
     .order("charge_date", { ascending: false });
 
   const total = (charges ?? []).reduce((s, c) => s + (c.amount || 0), 0);
@@ -29,7 +29,10 @@ export default async function BankChargesPage() {
           <tbody>
             {(charges ?? []).map((c: any) => (
               <tr key={c.id} className="border-t">
-                <td className="px-4 py-2 text-gray-500">{formatDate(c.charge_date)}</td>
+                <td className="px-4 py-2 text-gray-500">
+                  {formatDate(c.charge_date)}
+                  {c.creator?.full_name && <div className="text-[11px] text-gray-400">by {c.creator.full_name}</div>}
+                </td>
                 <td className="px-4 py-2">{c.lc_register?.lc_no ?? "-"}</td>
                 <td className="px-4 py-2">{c.description || "-"}</td>
                 <td className="px-4 py-2 text-right">{c.amount?.toFixed(2)}</td>

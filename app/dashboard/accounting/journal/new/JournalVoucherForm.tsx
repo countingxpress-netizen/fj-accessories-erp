@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { generateNextDocNo } from "@/lib/docNumber";
 import { createClient } from "@/lib/supabase/client";
+import { getCurrentUserId } from "@/lib/currentUser";
 
 type Account = { id: string; account_code: string; account_name: string; account_type: string };
 type Line = { account_id: string; accountLabel: string; debit: string; credit: string; memo: string };
@@ -153,9 +154,10 @@ export default function JournalVoucherForm({
     // CREATE MODE
     const voucherNo = await generateNextDocNo(supabase, "journal_vouchers", "voucher_no", "JV", "voucher_date", date);
 
+    const createdBy = await getCurrentUserId(supabase);
     const { data: voucher, error: voucherError } = await supabase
       .from("journal_vouchers")
-      .insert({ voucher_no: voucherNo, voucher_date: date, narration })
+      .insert({ voucher_no: voucherNo, voucher_date: date, narration, created_by: createdBy })
       .select()
       .single();
 

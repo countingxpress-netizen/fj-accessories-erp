@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { postWastageJv } from "@/lib/inventoryCost";
+import { getCurrentUserId } from "@/lib/currentUser";
 
 type ProductionOrder = {
   id: string; production_no: string; stage: string;
@@ -41,8 +42,10 @@ export default function WastageForm({
 
     setLoading(true);
 
+    const createdBy = await getCurrentUserId(supabase);
     const { data: wastageRow, error: wastageError } = await supabase.from("wastage").insert({
       production_id: productionId, stage, quantity_lbs: qty, recycled, wastage_date: wastageDate,
+      created_by: createdBy,
     }).select("id").single();
 
     if (wastageError) {

@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { getCurrentUserId } from "@/lib/currentUser";
 
 export default function NewRevisionButton({ piId }: { piId: string }) {
   const [loading, setLoading] = useState(false);
@@ -15,10 +16,12 @@ export default function NewRevisionButton({ piId }: { piId: string }) {
     const { data: original } = await supabase.from("proforma_invoices").select("*").eq("id", piId).single();
     if (!original) { setLoading(false); return; }
 
+    const createdBy = await getCurrentUserId(supabase);
     const { data: newPi } = await supabase
       .from("proforma_invoices")
       .insert({
         pi_no: original.pi_no, customer_id: original.customer_id, pi_date: new Date().toISOString().slice(0, 10),
+        created_by: createdBy,
         style: original.style, buyer_name: original.buyer_name, merchant_name: original.merchant_name,
         garments_id: original.garments_id, garments_name: original.garments_name, garments_address: original.garments_address,
         item_description: original.item_description, valid_till: original.valid_till,

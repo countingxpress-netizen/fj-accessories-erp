@@ -43,6 +43,7 @@ export default function VoucherRow({
       <td className="px-4 py-2 text-gray-500">{voucher.voucher_date}</td>
       <td className="px-4 py-2">{voucher.narration || "-"}</td>
       <td className="px-4 py-2 text-right">{total.toFixed(2)}</td>
+      <td className="px-4 py-2 text-gray-500 text-xs">{voucher.creator?.full_name ?? "-"}</td>
       <td className="px-4 py-2 text-right whitespace-nowrap">
         <GuardedAction
           table="journal_vouchers" recordId={voucher.id} recordLabel={voucher.voucher_no} action="edit"

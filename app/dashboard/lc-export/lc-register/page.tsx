@@ -10,7 +10,7 @@ export default async function LCRegisterPage() {
   const { data: pis } = await supabase.from("proforma_invoices").select("id, pi_no").order("pi_date", { ascending: false });
   const { data: lcs } = await supabase
     .from("lc_register")
-    .select("*, banks(bank_name), customers(name), suppliers(name)")
+    .select("*, banks(bank_name), customers(name), suppliers(name), creator:app_users!lc_register_created_by_fkey(full_name)")
     .order("lc_date", { ascending: false });
 
   return (

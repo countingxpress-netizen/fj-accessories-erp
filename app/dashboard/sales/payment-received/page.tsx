@@ -38,7 +38,7 @@ export default async function PaymentReceivedPage() {
 
   const { data: payments } = await supabase
     .from("customer_payments")
-    .select("*, customers(name)")
+    .select("*, customers(name), creator:app_users!customer_payments_created_by_fkey(full_name)")
     .order("payment_date", { ascending: false });
 
   return (

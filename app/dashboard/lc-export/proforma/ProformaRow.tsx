@@ -46,7 +46,10 @@ export default function ProformaRow({ pi, salesInvoiceValue, garments }: { pi: a
       <td className="px-4 py-2 font-medium">
         {pi.pi_no} {pi.revision > 0 && <span className="text-xs text-blue-600">(Rev-{pi.revision})</span>}
       </td>
-      <td className="px-4 py-2 text-gray-500">{formatDate(pi.pi_date)}</td>
+      <td className="px-4 py-2 text-gray-500">
+        {formatDate(pi.pi_date)}
+        {pi.creator?.full_name && <div className="text-[11px] text-gray-400">by {pi.creator.full_name}</div>}
+      </td>
       <td className="px-4 py-2">{pi.customers?.name ?? (pi.is_manual ? "Manual" : "-")}</td>
       <td className="px-4 py-2 text-gray-500">{garments}</td>
       <td className="px-4 py-2 text-right font-medium">{currencySymbol(pi.currency)}{pi.total_amount?.toFixed(2)}</td>

@@ -8,6 +8,7 @@ import {
   monthRange, type SalaryRevision,
 } from "@/lib/payroll";
 import { postPayrollAccrual } from "@/lib/payrollJv";
+import { getCurrentUserId } from "@/lib/currentUser";
 
 type Employee = {
   id: string; name: string; employee_code: string;
@@ -148,6 +149,7 @@ export default function SalarySheetGenerator({ employees }: { employees: Employe
     setError("");
     try {
       const monthLabel = `${monthNames[month - 1]} ${year}`;
+      const createdBy = await getCurrentUserId(supabase);
       for (const { row, res, prorated } of toSave) {
         const countedDays = prorated
           ? Math.max(0, Math.min(row.monthDays, row.employedDays - row.absentDays))
@@ -170,6 +172,7 @@ export default function SalarySheetGenerator({ employees }: { employees: Employe
           prorated,
           counted_days: countedDays,
           days_in_month: prorated ? row.monthDays : null,
+          created_by: createdBy,
         }).select("id").single();
         if (insErr) throw new Error(`${row.emp.name}: ${insErr.message}`);
 

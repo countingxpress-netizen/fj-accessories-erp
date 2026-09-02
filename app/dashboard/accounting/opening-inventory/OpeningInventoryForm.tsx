@@ -3,6 +3,7 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { generateNextDocNo } from "@/lib/docNumber";
+import { getCurrentUserId } from "@/lib/currentUser";
 
 type RmRow = { id: string; name: string; qtyLbs: number; avgCost: number; accountCode: string };
 type FgRow = { id: string; name: string; qtyPcs: number; avgCost: number };
@@ -111,9 +112,10 @@ export default function OpeningInventoryForm({
     setLoading(true);
 
     const voucherNo = await generateNextDocNo(supabase, "journal_vouchers", "voucher_no", "JV", "voucher_date", date);
+    const createdBy = await getCurrentUserId(supabase);
     const { data: voucher, error: vErr } = await supabase
       .from("journal_vouchers")
-      .insert({ voucher_no: voucherNo, voucher_date: date, narration: "Opening inventory reconciliation" })
+      .insert({ voucher_no: voucherNo, voucher_date: date, narration: "Opening inventory reconciliation", created_by: createdBy })
       .select("id").single();
     if (vErr || !voucher) { setLoading(false); setError(vErr?.message ?? "Voucher তৈরি ব্যর্থ।"); return; }
 

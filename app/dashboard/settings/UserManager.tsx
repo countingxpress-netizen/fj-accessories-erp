@@ -24,6 +24,7 @@ export default function UserManager({ users, currentUserId }: { users: AppUser[]
   const [error, setError] = useState("");
   const [addError, setAddError] = useState("");
   const [savingId, setSavingId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   const router = useRouter();
   const supabase = createClient();
@@ -41,6 +42,22 @@ export default function UserManager({ users, currentUserId }: { users: AppUser[]
       .eq("id", u.id);
     setSavingId(null);
     if (err) { setError(err.message); return; }
+    router.refresh();
+  }
+
+  async function handleDelete(u: AppUser) {
+    if (!window.confirm(`"${u.full_name}"-এর লগইন স্থায়ীভাবে মুছে ফেলতে চান? এটা ফেরত আসবে না।`)) return;
+    setError("");
+    setDeletingId(u.id);
+    const res = await fetch("/api/admin/users", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: u.id }),
+    });
+    const body = await res.json();
+    setDeletingId(null);
+    if (!res.ok) { setError(body.error ?? "ডিলিট করা যায়নি।"); return; }
+    setRows((rs) => rs.filter((r) => r.id !== u.id));
     router.refresh();
   }
 
@@ -104,9 +121,16 @@ export default function UserManager({ users, currentUserId }: { users: AppUser[]
                     onChange={(e) => updateRow(u.id, { is_active: e.target.checked })}
                   />
                 </td>
-                <td className="px-4 py-2 text-right">
-                  <button onClick={() => handleSave(u)} disabled={savingId === u.id} className="text-blue-700 text-xs hover:underline disabled:opacity-40">
+                <td className="px-4 py-2 text-right whitespace-nowrap">
+                  <button onClick={() => handleSave(u)} disabled={savingId === u.id} className="text-blue-700 text-xs hover:underline disabled:opacity-40 mr-3">
                     {savingId === u.id ? "সেভ হচ্ছে..." : "সেভ"}
+                  </button>
+                  <button
+                    onClick={() => handleDelete(u)}
+                    disabled={deletingId === u.id || u.id === currentUserId}
+                    className="text-red-600 text-xs hover:underline disabled:opacity-30"
+                  >
+                    {deletingId === u.id ? "ডিলিট হচ্ছে..." : "ডিলিট"}
                   </button>
                 </td>
               </tr>

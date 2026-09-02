@@ -8,7 +8,7 @@ export default async function ExportInvoicePage() {
   const { data: customers } = await supabase.from("customers").select("id, name").order("name");
   const { data: invoices } = await supabase
     .from("export_invoices")
-    .select("*, customers(name), lc_register(lc_no)")
+    .select("*, customers(name), lc_register(lc_no), creator:app_users!export_invoices_created_by_fkey(full_name)")
     .order("invoice_date", { ascending: false });
 
   return (
@@ -30,7 +30,10 @@ export default async function ExportInvoicePage() {
             {(invoices ?? []).map((inv: any) => (
               <tr key={inv.id} className="border-t">
                 <td className="px-4 py-2 font-medium">{inv.invoice_no}</td>
-                <td className="px-4 py-2 text-gray-500">{formatDate(inv.invoice_date)}</td>
+                <td className="px-4 py-2 text-gray-500">
+                  {formatDate(inv.invoice_date)}
+                  {inv.creator?.full_name && <div className="text-[11px] text-gray-400">by {inv.creator.full_name}</div>}
+                </td>
                 <td className="px-4 py-2">{inv.customers?.name ?? "-"}</td>
                 <td className="px-4 py-2 text-gray-500">{inv.lc_register?.lc_no ?? "-"}</td>
                 <td className="px-4 py-2 text-right">{inv.amount?.toFixed(2)}</td>

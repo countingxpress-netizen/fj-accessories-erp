@@ -1,4 +1,5 @@
 import { generateNextDocNo } from "@/lib/docNumber";
+import { getCurrentUserId } from "@/lib/currentUser";
 
 // Payroll accounting — খরচ (accrual) আর পরিশোধ (payment) দুই ধাপে ভাগ করা হয়,
 // যাতে বেতন খরচ সঠিক মাসে বসে (payment-এর দিনে নয়) আর Cash/Bank বেছে নেওয়া যায়।
@@ -44,9 +45,10 @@ async function makeVoucher(
     "voucher_date",
     date
   );
+  const createdBy = await getCurrentUserId(supabase);
   const { data: voucher } = await supabase
     .from("journal_vouchers")
-    .insert({ voucher_no: voucherNo, voucher_date: date, narration })
+    .insert({ voucher_no: voucherNo, voucher_date: date, narration, created_by: createdBy })
     .select("id")
     .single();
   if (!voucher) return null;

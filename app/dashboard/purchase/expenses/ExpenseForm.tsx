@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { generateNextDocNo } from "@/lib/docNumber";
+import { getCurrentUserId } from "@/lib/currentUser";
 
 type Account = { id: string; account_code: string; account_name: string };
 
@@ -33,11 +34,13 @@ export default function ExpenseForm({
     const expenseAccountName = expenseAccounts.find((a) => a.id === accountId)?.account_name ?? "";
 
     const voucherNo = await generateNextDocNo(supabase, "journal_vouchers", "voucher_no", "JV", "voucher_date", expenseDate);
+    const createdBy = await getCurrentUserId(supabase);
     const { data: voucher, error: voucherError } = await supabase
       .from("journal_vouchers")
       .insert({
         voucher_no: voucherNo, voucher_date: expenseDate,
         narration: `Expense — ${expenseAccountName}${payee ? " (" + payee + ")" : ""}${description ? " — " + description : ""}`,
+        created_by: createdBy,
       })
       .select().single();
 
@@ -60,7 +63,7 @@ export default function ExpenseForm({
 
     await supabase.from("expenses").insert({
       expense_date: expenseDate, account_id: accountId, paid_via_account_id: paidViaAccountId,
-      amount: amt, payee, description, voucher_id: voucher.id,
+      amount: amt, payee, description, voucher_id: voucher.id, created_by: createdBy,
     });
 
     setLoading(false);

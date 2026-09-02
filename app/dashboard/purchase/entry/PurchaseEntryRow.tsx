@@ -36,7 +36,10 @@ export default function PurchaseEntryRow({
         />
       </td>
       <td className="px-4 py-2 font-medium">{entry.entry_no ?? "-"}</td>
-      <td className="px-4 py-2 text-gray-500">{entry.entry_date}</td>
+      <td className="px-4 py-2 text-gray-500">
+        {entry.entry_date}
+        {entry.creator?.full_name && <div className="text-[11px] text-gray-400">by {entry.creator.full_name}</div>}
+      </td>
       <td className="px-4 py-2">{entry.suppliers?.name ?? "-"}</td>
       <td className="px-4 py-2">{entry.invoice_no || "-"}</td>
       <td className="px-4 py-2 text-right">{total.toFixed(2)}</td>

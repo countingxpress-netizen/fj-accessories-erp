@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { generateNextDocNo } from "@/lib/docNumber";
 import { calcTubeCutting, toInches } from "@/lib/calcTubeCutting";
+import { getCurrentUserId } from "@/lib/currentUser";
 
 type Booking = {
   id: string; booking_no: string; quantity_pcs: number; product_id: string; customer_id: string;
@@ -133,6 +134,7 @@ export default function SalesInvoiceForm({
     const bookingRefs = Array.from(new Set(lineItems.map((li) => li.booking.customer_booking_ref).filter(Boolean))).join(", ");
 
     const invoiceNo = await generateNextDocNo(supabase, "sales_invoices", "invoice_no", "INV", "invoice_date", invoiceDate);
+    const createdBy = await getCurrentUserId(supabase);
 
     const { data: invoice, error: invoiceError } = await supabase
       .from("sales_invoices")
@@ -144,6 +146,7 @@ export default function SalesInvoiceForm({
         delivery_point: firstBooking.delivery_point ?? null,
         customer_booking_ref: bookingRefs || null,
         payment_received: paymentReceived,
+        created_by: createdBy,
       })
       .select().single();
 
@@ -177,6 +180,7 @@ export default function SalesInvoiceForm({
         .insert({
           voucher_no: voucherNo, voucher_date: invoiceDate,
           narration: `Sales Invoice ${invoiceNo} — ${selectedCustomer?.name} (${paymentReceived ? "Cash" : "Credit"})`,
+          created_by: createdBy,
         })
         .select().single();
 

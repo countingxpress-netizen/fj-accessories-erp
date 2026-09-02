@@ -38,7 +38,10 @@ export default function InvoiceRow({
         />
       </td>
       <td className="px-4 py-2 font-medium">{invoice.invoice_no}</td>
-      <td className="px-4 py-2 text-gray-500">{formatDate(invoice.invoice_date)}</td>
+      <td className="px-4 py-2 text-gray-500">
+        {formatDate(invoice.invoice_date)}
+        {invoice.creator?.full_name && <div className="text-[11px] text-gray-400">by {invoice.creator.full_name}</div>}
+      </td>
       <td className="px-4 py-2">{invoice.customers?.name ?? "-"}</td>
       <td className="px-4 py-2 text-xs text-gray-500">{bookingNos}</td>
       <td className="px-4 py-2 text-right">{qty.toLocaleString()}</td>

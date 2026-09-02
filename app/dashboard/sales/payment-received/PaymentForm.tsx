@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { generateNextDocNo } from "@/lib/docNumber";
 import { formatDate } from "@/lib/formatDate";
+import { getCurrentUserId } from "@/lib/currentUser";
 
 type Customer = { id: string; name: string };
 type Account = { id: string; account_code: string; account_name: string };
@@ -110,12 +111,14 @@ export default function PaymentForm({
 
     const customerName = customers.find((c) => c.id === customerId)?.name ?? "";
     const voucherNo = await generateNextDocNo(supabase, "journal_vouchers", "voucher_no", "JV", "voucher_date", paymentDate);
+    const createdBy = await getCurrentUserId(supabase);
 
     const { data: voucher, error: voucherError } = await supabase
       .from("journal_vouchers")
       .insert({
         voucher_no: voucherNo, voucher_date: paymentDate,
         narration: `Payment received from ${customerName}${note ? " — " + note : ""}`,
+        created_by: createdBy,
       })
       .select().single();
 
@@ -145,6 +148,7 @@ export default function PaymentForm({
       .insert({
         customer_id: customerId, voucher_id: voucher.id, amount: totalAmount, payment_date: paymentDate,
         note, payment_mode: paymentMode, deposit_account_id: depositAccountId, bank_charges: charges,
+        created_by: createdBy,
       })
       .select().single();
 

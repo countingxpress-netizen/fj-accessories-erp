@@ -6,7 +6,7 @@ export default async function BookingsListPage() {
   const supabase = await createClient();
   const { data: bookings } = await supabase
     .from("bookings")
-    .select("*, customers(name), buyers(name), finished_goods(product_name), production_orders(id, stage, blowing_completed_at, printing_completed_at, cutting_completed_at)")
+    .select("*, customers(name), buyers(name), finished_goods(product_name), production_orders(id, stage, blowing_completed_at, printing_completed_at, cutting_completed_at), creator:app_users!bookings_created_by_fkey(full_name)")
     .order("created_at", { ascending: false });
 
   const { data: allChallanItems } = await supabase

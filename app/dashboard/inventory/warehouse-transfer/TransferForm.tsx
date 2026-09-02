@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { generateNextDocNo } from "@/lib/docNumber";
+import { getCurrentUserId } from "@/lib/currentUser";
 
 const LBS_PER_BAG = 55;
 
@@ -50,6 +51,7 @@ export default function TransferForm({
 
     const referenceType = transferType === "wastage" ? "wastage_transfer" : "stock_transfer";
     const transferNo = await generateNextDocNo(supabase, "warehouse_transfers", "transfer_no", "WT", "transfer_date", transferDate);
+    const createdBy = await getCurrentUserId(supabase);
 
     const { data: transfer, error: transferError } = await supabase
       .from("warehouse_transfers")
@@ -64,6 +66,7 @@ export default function TransferForm({
         quantity_lbs: quantityLbs,
         transfer_date: transferDate,
         notes: notes || null,
+        created_by: createdBy,
       })
       .select()
       .single();

@@ -6,6 +6,7 @@ import { generateNextDocNo } from "@/lib/docNumber";
 import { recalcBookingStatus } from "@/lib/recalcBookingStatus";
 import { formatStyle } from "@/lib/formatStyle";
 import { postChallanCogsJv } from "@/lib/inventoryCost";
+import { getCurrentUserId } from "@/lib/currentUser";
 
 type Booking = {
   id: string; booking_no: string; quantity_pcs: number; product_id: string; customer_id: string;
@@ -125,6 +126,7 @@ export default function DeliveryChallanForm({
     const firstBooking = lineItems[0].booking;
     const bookingRefs = Array.from(new Set(lineItems.map((li) => li.booking.customer_booking_ref).filter(Boolean))).join(", ");
 
+    const createdBy = await getCurrentUserId(supabase);
     const { data: challan, error: challanError } = await supabase
       .from("delivery_challans")
       .insert({
@@ -133,6 +135,7 @@ export default function DeliveryChallanForm({
         buyer_name: firstBooking.buyers?.name ?? null, style: firstBooking.style ?? null,
         customer_booking_ref: bookingRefs || null,
         delivery_point: firstBooking.delivery_point ?? null,
+        created_by: createdBy,
       })
       .select().single();
 

@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { generateNextDocNo } from "@/lib/docNumber";
 import { recomputeRawAvgCost } from "@/lib/inventoryCost";
+import { getCurrentUserId } from "@/lib/currentUser";
 
 const LBS_PER_BAG = 55;
 
@@ -86,6 +87,7 @@ export default function PurchaseEntryForm({
 
     // ১. purchase_entries তৈরি (অটো entry number সহ)
     const entryNo = await generateNextDocNo(supabase, "purchase_entries", "entry_no", "PE", "entry_date", entryDate);
+    const createdBy = await getCurrentUserId(supabase);
     const { data: entry, error: entryError } = await supabase
       .from("purchase_entries")
       .insert({
@@ -98,6 +100,7 @@ export default function PurchaseEntryForm({
         lc_no: purchaseSource === "import" ? lcNo || null : null,
         lc_date: purchaseSource === "import" ? lcDate || null : null,
         bill_of_entry_no: purchaseSource === "import" ? billOfEntryNo || null : null,
+        created_by: createdBy,
       })
       .select()
       .single();
@@ -216,6 +219,7 @@ export default function PurchaseEntryForm({
         voucher_no: voucherNo,
         voucher_date: entryDate,
         narration: `Purchase from ${supplierName}${invoiceNo ? ", Invoice " + invoiceNo : ""} (${isCash ? "Cash" : "Credit"})`,
+        created_by: createdBy,
       })
       .select()
       .single();

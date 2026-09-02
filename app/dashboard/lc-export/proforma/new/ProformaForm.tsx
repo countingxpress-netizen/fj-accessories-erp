@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { generatePiNo } from "@/lib/docNumber";
 import { calcPiUnitPrice, calcPiUnitPriceWithMarkup, calcPiWeightLbs } from "@/lib/calcTubeCutting";
 import { amountInWords } from "@/lib/numberToWords";
+import { getCurrentUserId } from "@/lib/currentUser";
 
 type Booking = {
   id: string; booking_no: string; quantity_pcs: number; product_id: string; customer_id: string;
@@ -347,11 +348,13 @@ export default function ProformaForm({
     const firstBooking = mode === "booking" ? bookingLineItems[0]?.booking : null;
 
     const piNo = await generatePiNo(supabase, selectedCustomer ?? null, piDate);
+    const createdBy = await getCurrentUserId(supabase);
 
     const { data: pi, error: piError } = await supabase
       .from("proforma_invoices")
       .insert({
         pi_no: piNo,
+        created_by: createdBy,
         customer_id: mode === "booking" ? customerId : (customerId || null),
         pi_date: piDate,
         valid_till: validTill || null,

@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { generateNextDocNo } from "@/lib/docNumber";
 import { formatDate } from "@/lib/formatDate";
+import { getCurrentUserId } from "@/lib/currentUser";
 
 type Account = { id: string; account_code: string; account_name: string };
 type Invoice = { id: string; invoice_no: string; invoice_date: string; total: number; due: number };
@@ -74,9 +75,10 @@ export default function EditPaymentForm({
 
     if (arAccount) {
       const voucherNo = await generateNextDocNo(supabase, "journal_vouchers", "voucher_no", "JV", "voucher_date", paymentDate);
+      const createdBy = await getCurrentUserId(supabase);
       const { data: voucher } = await supabase
         .from("journal_vouchers")
-        .insert({ voucher_no: voucherNo, voucher_date: paymentDate, narration: `Payment received (edited) — ${note || ""}` })
+        .insert({ voucher_no: voucherNo, voucher_date: paymentDate, narration: `Payment received (edited) — ${note || ""}`, created_by: createdBy })
         .select().single();
 
       if (voucher) {

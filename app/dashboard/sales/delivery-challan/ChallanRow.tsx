@@ -39,7 +39,10 @@ export default function ChallanRow({
         />
       </td>
       <td className="px-4 py-2 font-medium">{challan.challan_no}</td>
-      <td className="px-4 py-2 text-gray-500">{formatDate(challan.challan_date)}</td>
+      <td className="px-4 py-2 text-gray-500">
+        {formatDate(challan.challan_date)}
+        {challan.creator?.full_name && <div className="text-[11px] text-gray-400">by {challan.creator.full_name}</div>}
+      </td>
       <td className="px-4 py-2">{challan.customers?.name ?? "-"}</td>
       <td className="px-4 py-2">{challan.bookings?.booking_no ?? "-"}</td>
       <td className="px-4 py-2">{productNames}</td>

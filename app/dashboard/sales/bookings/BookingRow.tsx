@@ -60,7 +60,10 @@ export default function BookingRow({
           <span className="ml-1 text-xs text-blue-600">({groupSize}টি প্রোডাক্ট)</span>
         )}
       </td>
-      <td className="px-4 py-2 text-gray-500">{formatDate(booking.booking_date)}</td>
+      <td className="px-4 py-2 text-gray-500">
+        {formatDate(booking.booking_date)}
+        {booking.creator?.full_name && <div className="text-[11px] text-gray-400">by {booking.creator.full_name}</div>}
+      </td>
       <td className="px-4 py-2">{booking.customers?.name ?? "-"}</td>
       <td className="px-4 py-2 text-gray-500">{booking.buyers?.name ?? "-"}</td>
       <td className="px-4 py-2 text-gray-500">{booking.garments_name ?? "-"}</td>

@@ -7,7 +7,7 @@ export default async function SalesInvoiceListPage() {
   const supabase = await createClient();
   const { data: invoices } = await supabase
     .from("sales_invoices")
-    .select(`*, customers(name),
+    .select(`*, customers(name), creator:app_users!sales_invoices_created_by_fkey(full_name),
       sales_invoice_items(quantity_pcs, unit_price, amount,
         bookings(booking_no, required_lbs, buyer_id))`)
     .order("invoice_date", { ascending: false });

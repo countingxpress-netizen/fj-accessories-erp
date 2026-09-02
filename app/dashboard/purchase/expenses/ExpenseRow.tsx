@@ -32,7 +32,10 @@ export default function ExpenseRow({
           aria-label={`Select expense ${expense.description ?? expense.id}`}
         />
       </td>
-      <td className="px-4 py-2 text-gray-500">{formatDate(expense.expense_date)}</td>
+      <td className="px-4 py-2 text-gray-500">
+        {formatDate(expense.expense_date)}
+        {expense.creator?.full_name && <div className="text-[11px] text-gray-400">by {expense.creator.full_name}</div>}
+      </td>
       <td className="px-4 py-2">{expense.chart_of_accounts?.account_name ?? "-"}</td>
       <td className="px-4 py-2 text-gray-500">{expense.payee || "-"}</td>
       <td className="px-4 py-2 text-gray-600">{expense.description || "-"}</td>

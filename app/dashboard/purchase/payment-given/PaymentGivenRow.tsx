@@ -32,7 +32,10 @@ export default function PaymentGivenRow({
           aria-label={`Select payment to ${payment.suppliers?.name ?? payment.id}`}
         />
       </td>
-      <td className="px-4 py-2 text-gray-500">{formatDate(payment.payment_date)}</td>
+      <td className="px-4 py-2 text-gray-500">
+        {formatDate(payment.payment_date)}
+        {payment.creator?.full_name && <div className="text-[11px] text-gray-400">by {payment.creator.full_name}</div>}
+      </td>
       <td className="px-4 py-2">{payment.suppliers?.name ?? "-"}</td>
       <td className="px-4 py-2 text-gray-500">{payment.note || "-"}</td>
       <td className="px-4 py-2 text-right">{payment.amount.toFixed(2)}</td>

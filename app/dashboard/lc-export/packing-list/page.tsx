@@ -6,7 +6,7 @@ export default async function PackingListPage() {
   const { data: invoices } = await supabase.from("export_invoices").select("id, invoice_no").order("invoice_date", { ascending: false });
   const { data: lists } = await supabase
     .from("packing_lists")
-    .select("*, export_invoices(invoice_no)")
+    .select("*, export_invoices(invoice_no), creator:app_users!packing_lists_created_by_fkey(full_name)")
     .order("id", { ascending: false });
 
   return (
@@ -26,7 +26,10 @@ export default async function PackingListPage() {
           <tbody>
             {(lists ?? []).map((l: any) => (
               <tr key={l.id} className="border-t">
-                <td className="px-4 py-2 font-medium">{l.export_invoices?.invoice_no ?? "-"}</td>
+                <td className="px-4 py-2 font-medium">
+                  {l.export_invoices?.invoice_no ?? "-"}
+                  {l.creator?.full_name && <div className="text-[11px] text-gray-400 font-normal">by {l.creator.full_name}</div>}
+                </td>
                 <td className="px-4 py-2 text-right">{l.total_cartons}</td>
                 <td className="px-4 py-2 text-right">{l.total_net_weight}</td>
                 <td className="px-4 py-2 text-right">{l.total_gross_weight}</td>

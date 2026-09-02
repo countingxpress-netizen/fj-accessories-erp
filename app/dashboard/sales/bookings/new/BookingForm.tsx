@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { generateNextDocNo } from "@/lib/docNumber";
 import { toInches } from "@/lib/calcTubeCutting";
 import { postBookingConsumptionJv } from "@/lib/inventoryCost";
+import { getCurrentUserId } from "@/lib/currentUser";
 
 type Customer = { id: string; name: string; default_print_rate: number | null; default_adhesive_rate: number | null };
 type Warehouse = { id: string; name: string };
@@ -404,6 +405,7 @@ export default function BookingForm({
 
     const groupId = crypto.randomUUID();
     const sharedBookingNo = await generateNextDocNo(supabase, "bookings", "booking_no", "BK", "booking_date", bookingDate);
+    const createdBy = await getCurrentUserId(supabase);
 
     let merchantId: string | null = null;
     if (merchantName.trim()) {
@@ -465,6 +467,7 @@ export default function BookingForm({
           garments_id: resolvedGarmentsId || null, booking_group_id: groupId,
           customer_booking_ref: item.customerBookingRef || null,
           warehouse_id: item.warehouseId, status: "in_production",
+          created_by: createdBy,
         })
         .select().single();
 

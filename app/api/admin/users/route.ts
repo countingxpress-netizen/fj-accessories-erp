@@ -46,3 +46,44 @@ export async function POST(req: Request) {
 
   return NextResponse.json({ ok: true, id: created.user.id });
 }
+
+export async function DELETE(req: Request) {
+  const appUser = await getCurrentAppUser();
+  if (appUser?.role !== "admin") {
+    return NextResponse.json({ error: "Admin অনুমতি নেই।" }, { status: 403 });
+  }
+
+  const { id } = await req.json();
+  if (!id) {
+    return NextResponse.json({ error: "User id দরকার।" }, { status: 400 });
+  }
+  if (id === appUser.id) {
+    return NextResponse.json({ error: "নিজেকে ডিলিট করা যাবে না।" }, { status: 400 });
+  }
+
+  const admin = createAdminSupabaseClient();
+
+  const { count: adminCount } = await admin
+    .from("app_users")
+    .select("id", { count: "exact", head: true })
+    .eq("role", "admin");
+  const { data: target } = await admin.from("app_users").select("role").eq("id", id).maybeSingle();
+  if (target?.role === "admin" && (adminCount ?? 0) <= 1) {
+    return NextResponse.json({ error: "শেষ Admin ইউজার ডিলিট করা যাবে না।" }, { status: 400 });
+  }
+
+  const { error: delErr } = await admin.auth.admin.deleteUser(id);
+  if (delErr) {
+    // journal_vouchers/sales_invoices ইত্যাদি created_by হিসেবে এই ইউজারকে রেফার করলে
+    // FK constraint delete আটকে দেয় (accounting history রক্ষার জন্য ইচ্ছাকৃত) — এক্ষেত্রে
+    // Inactive করার পরামর্শ দিচ্ছি delete-এর বদলে।
+    const isFkViolation = /foreign key|violates|constraint/i.test(delErr.message);
+    return NextResponse.json({
+      error: isFkViolation
+        ? "এই ইউজার আগে কোনো Invoice/JV/ডকুমেন্ট তৈরি করেছেন বলে ডিলিট করা যাচ্ছে না (হিসাবের ইতিহাস রক্ষার জন্য)। এর বদলে Active টিক তুলে Inactive করে দিন।"
+        : delErr.message,
+    }, { status: 400 });
+  }
+
+  return NextResponse.json({ ok: true });
+}

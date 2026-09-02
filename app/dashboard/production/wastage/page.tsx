@@ -18,7 +18,7 @@ export default async function WastagePage() {
 
   const { data: wastageEntries } = await supabase
     .from("wastage")
-    .select("*, production_orders(production_no, bookings(booking_no, customers(name)))")
+    .select("*, production_orders(production_no, bookings(booking_no, customers(name))), creator:app_users!wastage_created_by_fkey(full_name)")
     .order("wastage_date", { ascending: false });
 
   const totalByStage: Record<string, number> = { blowing: 0, printing: 0, cutting: 0 };

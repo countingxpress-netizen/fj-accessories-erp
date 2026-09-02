@@ -34,7 +34,10 @@ export default function LCRow({ lc }: { lc: any }) {
       <td className="px-4 py-2 font-medium">{lc.lc_no}</td>
       <td className="px-4 py-2 text-gray-500">{lc.banks?.bank_name ?? "-"}</td>
       <td className="px-4 py-2">{lc.customers?.name ?? lc.suppliers?.name ?? "-"}</td>
-      <td className="px-4 py-2 text-gray-500">{formatDate(lc.lc_date)}</td>
+      <td className="px-4 py-2 text-gray-500">
+        {formatDate(lc.lc_date)}
+        {lc.creator?.full_name && <div className="text-[11px] text-gray-400">by {lc.creator.full_name}</div>}
+      </td>
       <td className="px-4 py-2 text-gray-500">{lc.expiry_date ? formatDate(lc.expiry_date) : "-"}</td>
       <td className="px-4 py-2 text-right">{lc.amount?.toFixed(2)} {lc.currency}</td>
       <td className="px-4 py-2">

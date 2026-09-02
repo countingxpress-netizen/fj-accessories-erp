@@ -51,7 +51,10 @@ export default function SalaryRow({ row, cashBankAccounts }: { row: any; cashBan
   return (
     <tr className="border-t">
       <td className="px-4 py-2">{row.employees?.employee_code} — {row.employees?.name}</td>
-      <td className="px-4 py-2">{monthNames[row.month]} {row.year}</td>
+      <td className="px-4 py-2">
+        {monthNames[row.month]} {row.year}
+        {row.creator?.full_name && <div className="text-[11px] text-gray-400">by {row.creator.full_name}</div>}
+      </td>
       <td className="px-4 py-2 text-right">{row.basic?.toFixed(2)}</td>
       <td className="px-4 py-2 text-right">{row.salary_type === "fixed" ? "—" : (row.ot_hours ?? 0)}</td>
       <td className="px-4 py-2 text-right">{row.salary_type === "fixed" ? "—" : `${row.absent_days ?? 0}d`}</td>

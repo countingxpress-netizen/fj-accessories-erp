@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { postPayrollAdvance } from "@/lib/payrollJv";
+import { getCurrentUserId } from "@/lib/currentUser";
 
 type Employee = { id: string; name: string; employee_code: string };
 type Account = { id: string; account_code: string; account_name: string };
@@ -39,8 +40,10 @@ export default function AdvanceForm({
       depositAccountId: accountId,
     });
 
+    const createdBy = await getCurrentUserId(supabase);
     const { error: insErr } = await supabase.from("employee_advances").insert({
       employee_id: employeeId, amount: amt, advance_date: date, note: note || null, voucher_id: voucherId,
+      created_by: createdBy,
     });
 
     setLoading(false);

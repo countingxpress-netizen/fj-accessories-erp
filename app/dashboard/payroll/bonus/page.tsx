@@ -14,7 +14,7 @@ export default async function BonusPage() {
     .select("employee_id, effective_date, basic_salary");
   const { data: sheets } = await supabase
     .from("bonus_sheet")
-    .select("*, employees(name, employee_code)")
+    .select("*, employees(name, employee_code), creator:app_users!bonus_sheet_created_by_fkey(full_name)")
     .order("year", { ascending: false })
     .order("festival");
   const { data: cashBankAccounts } = await supabase

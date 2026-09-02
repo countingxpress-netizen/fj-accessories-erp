@@ -142,7 +142,10 @@ export default function WastageRow({ wastage, warehouses }: { wastage: any; ware
 
   return (
     <tr className="border-t">
-      <td className="px-4 py-2 text-gray-500">{formatDate(wastage.wastage_date)}</td>
+      <td className="px-4 py-2 text-gray-500">
+        {formatDate(wastage.wastage_date)}
+        {wastage.creator?.full_name && <div className="text-[11px] text-gray-400">by {wastage.creator.full_name}</div>}
+      </td>
       <td className="px-4 py-2 font-medium">{wastage.production_orders?.production_no ?? "-"}</td>
       <td className="px-4 py-2 text-gray-600">
         {wastage.production_orders?.bookings?.customers?.name ?? "-"} / {wastage.production_orders?.bookings?.booking_no ?? "-"}

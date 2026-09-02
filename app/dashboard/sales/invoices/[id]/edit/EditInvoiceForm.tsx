@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { generateNextDocNo } from "@/lib/docNumber";
+import { getCurrentUserId } from "@/lib/currentUser";
 
 type LineItem = {
   id: string; booking_id: string; product_id: string;
@@ -75,9 +76,10 @@ export default function EditInvoiceForm({
     if (arAccount && salesAccount) {
       const { data: invoiceRow } = await supabase.from("sales_invoices").select("invoice_no").eq("id", invoiceId).single();
       const voucherNo = await generateNextDocNo(supabase, "journal_vouchers", "voucher_no", "JV", "voucher_date", invoiceDate);
+      const createdBy = await getCurrentUserId(supabase);
       const { data: voucher } = await supabase
         .from("journal_vouchers")
-        .insert({ voucher_no: voucherNo, voucher_date: invoiceDate, narration: `Sales Invoice ${invoiceRow?.invoice_no} — ${customerName} (edited)` })
+        .insert({ voucher_no: voucherNo, voucher_date: invoiceDate, narration: `Sales Invoice ${invoiceRow?.invoice_no} — ${customerName} (edited)`, created_by: createdBy })
         .select().single();
 
       if (voucher) {

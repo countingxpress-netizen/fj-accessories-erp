@@ -48,6 +48,7 @@ export default function VouchersTable({ vouchers }: { vouchers: any[] }) {
               <th className="px-4 py-2">Date</th>
               <th className="px-4 py-2">Narration</th>
               <th className="px-4 py-2 text-right">Amount</th>
+              <th className="px-4 py-2">Created By</th>
               <th className="px-4 py-2 text-right">Action</th>
             </tr>
           </thead>
@@ -57,7 +58,7 @@ export default function VouchersTable({ vouchers }: { vouchers: any[] }) {
             ))}
             {vouchers.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-4 py-3 text-gray-400 italic">
+                <td colSpan={7} className="px-4 py-3 text-gray-400 italic">
                   এখনো কোনো Journal Voucher তৈরি হয়নি
                 </td>
               </tr>

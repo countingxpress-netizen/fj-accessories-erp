@@ -1,4 +1,5 @@
 import { generateNextDocNo } from "@/lib/docNumber";
+import { getCurrentUserId } from "@/lib/currentUser";
 
 // Perpetual inventory & COGS — Booking (কাঁচামাল issue), FG Receive, Delivery
 // Challan, Wastage — সব জায়গায় এই শেয়ার্ড লজিক ব্যবহার হয়।
@@ -43,9 +44,10 @@ async function makeVoucher(
   const voucherNo = await generateNextDocNo(
     supabase, "journal_vouchers", "voucher_no", "JV", "voucher_date", date
   );
+  const createdBy = await getCurrentUserId(supabase);
   const { data: voucher } = await supabase
     .from("journal_vouchers")
-    .insert({ voucher_no: voucherNo, voucher_date: date, narration })
+    .insert({ voucher_no: voucherNo, voucher_date: date, narration, created_by: createdBy })
     .select("id").single();
   if (!voucher) return null;
 

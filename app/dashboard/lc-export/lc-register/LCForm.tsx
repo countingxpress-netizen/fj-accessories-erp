@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { getCurrentUserId } from "@/lib/currentUser";
 
 type Bank = { id: string; bank_name: string };
 type Customer = { id: string; name: string };
@@ -30,6 +31,7 @@ export default function LCForm({ banks, customers, suppliers, pis }: { banks: Ba
     if (!lcNo || !bankId || !amount) { setError("LC No, Bank ও Amount দিন।"); return; }
     setLoading(true);
 
+    const createdBy = await getCurrentUserId(supabase);
     const { error } = await supabase.from("lc_register").insert({
       lc_type: lcType, lc_no: lcNo, bank_id: bankId,
       customer_id: lcType === "export" ? customerId || null : null,
@@ -37,6 +39,7 @@ export default function LCForm({ banks, customers, suppliers, pis }: { banks: Ba
       lc_date: lcDate, expiry_date: expiryDate || null,
       amount: parseFloat(amount), currency,
       linked_pi_id: piId || null, status: "active",
+      created_by: createdBy,
     });
 
     if (!error && piId) {

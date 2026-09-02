@@ -23,7 +23,10 @@ export default function TransferRow({ transfer }: { transfer: any }) {
   return (
     <tr className="border-t">
       <td className="px-4 py-2 font-medium">{transfer.transfer_no}</td>
-      <td className="px-4 py-2 text-gray-500">{transfer.transfer_date}</td>
+      <td className="px-4 py-2 text-gray-500">
+        {transfer.transfer_date}
+        {transfer.creator?.full_name && <div className="text-[11px] text-gray-400">by {transfer.creator.full_name}</div>}
+      </td>
       <td className="px-4 py-2">
         <span className={`rounded-full px-2 py-0.5 text-xs ${
           transfer.transfer_type === "wastage" ? "bg-amber-50 text-amber-700" : "bg-blue-50 text-blue-700"
