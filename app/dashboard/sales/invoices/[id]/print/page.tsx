@@ -26,6 +26,7 @@ export default async function InvoicePrintPage({ params }: { params: Promise<{ i
   const { data: invoice } = await supabase
     .from("sales_invoices")
     .select(`*, customers(name, address, phone, opening_balance, opening_balance_date),
+      creator:app_users!sales_invoices_created_by_fkey(signature_url),
       sales_invoice_items(quantity_pcs, unit_price, amount,
         bookings(booking_no, style, measurement_type, measurement_unit, length_val, width_val, flap_val, gusset_val),
         finished_goods(product_name))`)
@@ -82,6 +83,9 @@ export default async function InvoicePrintPage({ params }: { params: Promise<{ i
     .map((p: any) => p.payment_date)
     .sort();
   const lastPaymentDate = paymentDatesBetween.length ? paymentDatesBetween[paymentDatesBetween.length - 1] : null;
+
+  // যিনি এই Invoice তৈরি করেছেন তার নিজস্ব Signature দেখাবে, না থাকলে Company-এর ডিফল্ট
+  const signatureUrl = invoice.creator?.signature_url || company?.signature_url;
 
   return (
     <div className="max-w-3xl mx-auto p-8 bg-white text-gray-900 print:p-0">
@@ -199,9 +203,9 @@ export default async function InvoicePrintPage({ params }: { params: Promise<{ i
       <div className="flex justify-between items-end text-sm pb-4">
         <div className="border-t border-gray-400 pt-2 w-40 text-center">Received By</div>
         <div className="w-40 text-center">
-          {company?.signature_url ? (
+          {signatureUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={company.signature_url} alt="Authorised Signature" className="h-16 mx-auto object-contain" />
+            <img src={signatureUrl} alt="Authorised Signature" className="h-16 mx-auto object-contain" />
           ) : (
             <div className="border-t border-gray-400 pt-2">Authorised Signature</div>
           )}

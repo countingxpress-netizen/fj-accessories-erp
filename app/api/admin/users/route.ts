@@ -47,6 +47,29 @@ export async function POST(req: Request) {
   return NextResponse.json({ ok: true, id: created.user.id });
 }
 
+export async function PATCH(req: Request) {
+  const appUser = await getCurrentAppUser();
+  if (appUser?.role !== "admin") {
+    return NextResponse.json({ error: "Admin অনুমতি নেই।" }, { status: 403 });
+  }
+
+  const { id, password } = await req.json();
+  if (!id || !password) {
+    return NextResponse.json({ error: "User id ও নতুন Password দরকার।" }, { status: 400 });
+  }
+  if (password.length < 6) {
+    return NextResponse.json({ error: "Password অন্তত ৬ ক্যারেক্টার হতে হবে।" }, { status: 400 });
+  }
+
+  const admin = createAdminSupabaseClient();
+  const { error } = await admin.auth.admin.updateUserById(id, { password });
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 400 });
+  }
+
+  return NextResponse.json({ ok: true });
+}
+
 export async function DELETE(req: Request) {
   const appUser = await getCurrentAppUser();
   if (appUser?.role !== "admin") {

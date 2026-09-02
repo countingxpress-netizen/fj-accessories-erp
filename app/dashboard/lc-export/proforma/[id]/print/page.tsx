@@ -10,7 +10,7 @@ export default async function PIPrintPage({ params }: { params: Promise<{ id: st
 
   const { data: pi } = await supabase
     .from("proforma_invoices")
-    .select("*, customers(name, address, phone)")
+    .select("*, customers(name, address, phone), creator:app_users!proforma_invoices_created_by_fkey(signature_url)")
     .eq("id", id).single();
 
   const { data: items } = await supabase.from("pi_items").select("*").eq("pi_id", id).order("sl_no");
@@ -36,6 +36,7 @@ export default async function PIPrintPage({ params }: { params: Promise<{ id: st
 
   const totalQtyPcs = (items ?? []).reduce((s, it: any) => s + it.qty_pcs, 0);
   const totalQtyDzn = totalQtyPcs / 12;
+  const signatureUrl = pi.creator?.signature_url || company?.signature_url;
 
   return (
     <div className="max-w-3xl mx-auto p-8 bg-white text-gray-900 print:p-0">
@@ -152,9 +153,9 @@ export default async function PIPrintPage({ params }: { params: Promise<{ id: st
 
       <div className="mt-16 flex justify-end text-sm">
         <div className="text-center w-40">
-          {company?.signature_url ? (
+          {signatureUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={company.signature_url} alt="Authorized Signature" className="h-16 mx-auto object-contain" />
+            <img src={signatureUrl} alt="Authorized Signature" className="h-16 mx-auto object-contain" />
           ) : (
             <>
               <p className="font-semibold">{company?.name}</p>

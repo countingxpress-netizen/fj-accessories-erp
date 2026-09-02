@@ -32,11 +32,12 @@ export default async function ChallanPrintPage({ params }: { params: Promise<{ i
   const { data: challan } = await supabase
     .from("delivery_challans")
     .select(`
-      *, 
-      customers(name, address, phone), 
+      *,
+      customers(name, address, phone),
+      creator:app_users!delivery_challans_created_by_fkey(signature_url),
       delivery_challan_items(
-        product_id, 
-        quantity_pcs, 
+        product_id,
+        quantity_pcs,
         finished_goods(product_name, length_cm, width_cm, thickness)
       )
     `)
@@ -62,6 +63,7 @@ export default async function ChallanPrintPage({ params }: { params: Promise<{ i
   }
 
   const { data: company } = await supabase.from("company_profile").select("*").single();
+  const signatureUrl = challan.creator?.signature_url || company?.signature_url;
 
   return (
     <div className="min-h-[297mm] flex flex-col max-w-3xl mx-auto p-8 bg-white text-gray-900 print:p-0">
@@ -123,9 +125,9 @@ export default async function ChallanPrintPage({ params }: { params: Promise<{ i
       <div className="flex justify-between items-end text-sm pb-4">
         <div className="border-t border-gray-400 pt-2 w-40 text-center">Received By</div>
         <div className="w-40 text-center">
-          {company?.signature_url ? (
+          {signatureUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={company.signature_url} alt="Authorised Signature" className="h-16 mx-auto object-contain" />
+            <img src={signatureUrl} alt="Authorised Signature" className="h-16 mx-auto object-contain" />
           ) : (
             <div className="border-t border-gray-400 pt-2">Authorised Signature</div>
           )}
