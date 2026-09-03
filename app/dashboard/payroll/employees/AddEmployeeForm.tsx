@@ -24,8 +24,15 @@ export default function AddEmployeeForm() {
     setError("");
     setLoading(true);
 
-    const { count } = await supabase.from("employees").select("*", { count: "exact", head: true });
-    const employeeCode = `EMP-${String((count ?? 0) + 1).padStart(4, "0")}`;
+    // MAX-based (not count-based) — count breaks after deletions: reused codes hit the
+    // employees_employee_code_key unique constraint and the insert fails.
+    const { data: existing } = await supabase.from("employees").select("employee_code").ilike("employee_code", "EMP-%");
+    let maxNum = 0;
+    (existing ?? []).forEach((r) => {
+      const m = (r.employee_code as string)?.match(/^EMP-(\d+)$/);
+      if (m) maxNum = Math.max(maxNum, parseInt(m[1], 10));
+    });
+    const employeeCode = `EMP-${String(maxNum + 1).padStart(4, "0")}`;
 
     const { error } = await supabase.from("employees").insert({
       employee_code: employeeCode, name, designation, department,
