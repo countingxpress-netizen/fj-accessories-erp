@@ -1,18 +1,38 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import StockAdjustmentForm from "./StockAdjustmentForm";
+import AddRawMaterialForm from "./AddRawMaterialForm";
+import RawMaterialRow from "./RawMaterialRow";
 
 const LBS_PER_BAG = 55;
-const KG_PER_BAG = 25;
 
 export default async function RawMaterialStockPage() {
   const supabase = await createClient();
 
-  const { data: materials } = await supabase.from("raw_materials").select("id, material_name").order("material_name");
+  const { data: materials } = await supabase
+    .from("raw_materials")
+    .select("id, material_name, unit, reorder_level_lbs, inventory_account_code, avg_cost_per_lbs")
+    .order("material_name");
   const { data: warehouses } = await supabase.from("warehouses").select("id, name").order("name");
   const { data: stock } = await supabase
     .from("raw_material_stock")
     .select("*, raw_materials(material_name), warehouses(name)");
+
+  // কাঁচামালের inventory account বাছাইয়ের জন্য — সাধারণত 1200–1203 + 1299
+  let { data: invAccounts } = await supabase
+    .from("chart_of_accounts")
+    .select("account_code, account_name")
+    .eq("account_type", "asset")
+    .ilike("account_name", "%raw material inventory%")
+    .order("account_code");
+  if (!invAccounts || invAccounts.length === 0) {
+    ({ data: invAccounts } = await supabase
+      .from("chart_of_accounts")
+      .select("account_code, account_name")
+      .eq("account_type", "asset")
+      .order("account_code"));
+  }
+  const accounts = invAccounts ?? [];
 
   // material অনুযায়ী গ্রুপ করুন, প্রতিটার নিচে warehouse-wise breakdown
   const grouped: Record<string, { name: string; rows: any[]; total: number }> = {};
@@ -32,6 +52,43 @@ export default async function RawMaterialStockPage() {
         <Link href="/dashboard/inventory" className="text-sm text-gray-500 hover:underline">
           ← Inventory-এ ফিরুন
         </Link>
+      </div>
+
+      <AddRawMaterialForm accounts={accounts} />
+
+      <div className="mb-6">
+        <h2 className="mb-2 text-sm font-semibold uppercase text-gray-500">Materials</h2>
+        <div className="overflow-x-auto rounded-xl border bg-white shadow-sm">
+          <table className="w-full text-sm min-w-[720px]">
+            <thead className="bg-gray-50 text-left text-gray-600">
+              <tr>
+                <th className="px-4 py-2">Name</th>
+                <th className="px-4 py-2">Unit</th>
+                <th className="px-4 py-2 text-right">Reorder (Lbs)</th>
+                <th className="px-4 py-2">Inventory Account</th>
+                <th className="px-4 py-2 text-right">Avg Cost / Lb</th>
+                <th className="px-4 py-2 text-right">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(materials ?? []).map((m) => (
+                <RawMaterialRow
+                  key={m.id}
+                  material={m}
+                  accounts={accounts}
+                  stockLbs={grouped[m.id]?.total ?? 0}
+                />
+              ))}
+              {(!materials || materials.length === 0) && (
+                <tr>
+                  <td colSpan={6} className="px-4 py-3 text-gray-400 italic">
+                    কোনো Raw Material নেই — উপরের ফর্ম থেকে যোগ করুন
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       <StockAdjustmentForm materials={materials ?? []} warehouses={warehouses ?? []} />

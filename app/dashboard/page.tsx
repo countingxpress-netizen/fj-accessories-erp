@@ -60,6 +60,79 @@ export default async function DashboardPage() {
     .filter((inv: any) => inv.invoice_date >= monthStart && inv.invoice_date <= monthEnd)
     .reduce((s: number, inv: any) => s + (inv.sales_invoice_items ?? []).reduce((t: number, i: any) => t + (i.amount || 0), 0), 0);
 
+  // ---- এ মাসের P&L কার্ড: Gross Profit (Sales 4000/4010 − COGS 5050) + Operating Expenses ----
+  const { data: allAccounts } = await supabase
+    .from("chart_of_accounts")
+    .select("id, account_code, account_name, account_type");
+  const accountsById = new Map<string, any>((allAccounts ?? []).map((a: any) => [a.id, a]));
+
+  const ieIds = (allAccounts ?? [])
+    .filter((a: any) => a.account_type === "income" || a.account_type === "expense")
+    .map((a: any) => a.id);
+  const { data: ieLines } = ieIds.length
+    ? await supabase
+        .from("journal_entry_lines")
+        .select("account_id, debit, credit, journal_vouchers(voucher_date)")
+        .in("account_id", ieIds)
+    : { data: [] };
+
+  let monthSalesRevenue = 0;
+  let monthCogs = 0;
+  let monthExpenses = 0; // COGS বাদে বাকি সব expense অ্যাকাউন্ট (operating expense)
+  (ieLines ?? []).forEach((l: any) => {
+    const d = l.journal_vouchers?.voucher_date ?? "";
+    if (d < monthStart || d > monthEnd) return;
+    const acc = accountsById.get(l.account_id);
+    if (!acc) return;
+    if (acc.account_code === "4000" || acc.account_code === "4010") {
+      monthSalesRevenue += (l.credit || 0) - (l.debit || 0);
+    } else if (acc.account_code === "5050") {
+      monthCogs += (l.debit || 0) - (l.credit || 0);
+    } else if (acc.account_type === "expense") {
+      monthExpenses += (l.debit || 0) - (l.credit || 0);
+    }
+  });
+  const monthGrossProfit = monthSalesRevenue - monthCogs;
+
+  // ---- Selected Account Balance (Settings-এ বাছাই করা) ----
+  const { data: company } = await supabase.from("company_profile").select("*").limit(1).maybeSingle();
+  const selId = (company as any)?.dashboard_account_id as string | null | undefined;
+  let selectedAccount: { id: string; code: string; name: string; balance: number } | null = null;
+  if (selId && accountsById.has(selId)) {
+    const acc = accountsById.get(selId);
+    const { data: selLines } = await supabase
+      .from("journal_entry_lines").select("debit, credit").eq("account_id", selId);
+    const net = (selLines ?? []).reduce((s: number, l: any) => s + (l.debit || 0) - (l.credit || 0), 0);
+    const normalDebit = acc.account_type === "asset" || acc.account_type === "expense";
+    selectedAccount = { id: selId, code: acc.account_code, name: acc.account_name, balance: normalDebit ? net : -net };
+  }
+
+  // ---- কাঁচামাল স্টক (LBS + গড় খরচে মূল্য) ----
+  const { data: rmMaterials } = await supabase.from("raw_materials").select("id, avg_cost_per_lbs");
+  const rmCostById = new Map<string, number>((rmMaterials ?? []).map((m: any) => [m.id, Number(m.avg_cost_per_lbs) || 0]));
+  const { data: rmStockRows } = await supabase.from("raw_material_stock").select("material_id, quantity_lbs");
+  let rawStockLbs = 0;
+  let rawStockValue = 0;
+  (rmStockRows ?? []).forEach((s: any) => {
+    const q = Number(s.quantity_lbs) || 0;
+    rawStockLbs += q;
+    rawStockValue += q * (rmCostById.get(s.material_id) ?? 0);
+  });
+
+  // ---- এ মাসে production-এ ঢালা কাঁচামাল (LBS + মূল্য) ----
+  const { data: consumptionRows } = await supabase
+    .from("material_consumption")
+    .select("material_id, quantity_lbs, consumption_date")
+    .gte("consumption_date", monthStart)
+    .lte("consumption_date", monthEnd);
+  let consumedLbs = 0;
+  let consumedValue = 0;
+  (consumptionRows ?? []).forEach((c: any) => {
+    const q = Number(c.quantity_lbs) || 0;
+    consumedLbs += q;
+    consumedValue += q * (rmCostById.get(c.material_id) ?? 0);
+  });
+
   const { data: bookingStatuses } = await supabase.from("bookings").select("status");
   const statusCounts: Record<string, number> = {};
   (bookingStatuses ?? []).forEach((b: any) => { statusCounts[b.status] = (statusCounts[b.status] ?? 0) + 1; });
@@ -81,11 +154,14 @@ export default async function DashboardPage() {
     { href: "/dashboard/reports", label: "Reports" },
   ];
 
+  const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const monthLabel = `${MONTHS[month - 1]} ${year}`;
+
   return (
     <div>
       <h1 className="text-2xl font-semibold mb-4">Dashboard</h1>
 
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">
         <div className="rounded-xl border bg-white p-4 shadow-sm">
           <p className="text-xs text-gray-500">Cash + Bank Balance</p>
           <p className={`text-lg font-semibold ${cashBankBalance >= 0 ? "text-green-700" : "text-red-700"}`}>{fmt(cashBankBalance)}</p>
@@ -102,6 +178,44 @@ export default async function DashboardPage() {
           <p className="text-xs text-gray-500">This Month&apos;s Sales</p>
           <p className="text-lg font-semibold text-purple-700">{fmt(monthSales)}</p>
         </div>
+      </div>
+
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mb-4">
+        <Link href="/dashboard/accounting/profit-loss" className="rounded-xl border bg-white p-4 shadow-sm hover:shadow-md transition-shadow">
+          <p className="text-xs text-gray-500">Gross Profit — {monthLabel}</p>
+          <p className={`text-lg font-semibold ${monthGrossProfit >= 0 ? "text-green-700" : "text-red-700"}`}>{fmt(monthGrossProfit)}</p>
+          <p className="text-xs text-gray-400">Sales {fmt(monthSalesRevenue)} − COGS {fmt(monthCogs)}</p>
+        </Link>
+        <Link href="/dashboard/accounting/profit-loss" className="rounded-xl border bg-white p-4 shadow-sm hover:shadow-md transition-shadow">
+          <p className="text-xs text-gray-500">Expenses — {monthLabel}</p>
+          <p className="text-lg font-semibold text-red-700">{fmt(monthExpenses)}</p>
+          <p className="text-xs text-gray-400">COGS ছাড়া operating expense</p>
+        </Link>
+        {selectedAccount ? (
+          <Link href={`/dashboard/accounting/ledger/${selectedAccount.id}`} className="rounded-xl border bg-white p-4 shadow-sm hover:shadow-md transition-shadow">
+            <p className="text-xs text-gray-500 truncate">{selectedAccount.code} - {selectedAccount.name}</p>
+            <p className={`text-lg font-semibold ${selectedAccount.balance >= 0 ? "text-gray-900" : "text-red-700"}`}>{fmt(selectedAccount.balance)}</p>
+            <p className="text-xs text-gray-400">নির্বাচিত অ্যাকাউন্টের ব্যালেন্স</p>
+          </Link>
+        ) : (
+          <Link href="/dashboard/settings" className="rounded-xl border border-dashed bg-white p-4 shadow-sm hover:shadow-md transition-shadow">
+            <p className="text-xs text-gray-500">Selected Account Balance</p>
+            <p className="text-sm font-medium text-blue-700 mt-1">Settings-এ একটি অ্যাকাউন্ট বাছাই করুন →</p>
+          </Link>
+        )}
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+        <Link href="/dashboard/reports/stock-report" className="rounded-xl border bg-white p-4 shadow-sm hover:shadow-md transition-shadow">
+          <p className="text-xs text-gray-500">Raw Material Stock</p>
+          <p className="text-lg font-semibold">{fmt(rawStockLbs)} Lbs</p>
+          <p className="text-xs text-gray-500">গড় খরচে মূল্য ৳{fmt(rawStockValue)}</p>
+        </Link>
+        <Link href="/dashboard/reports/production-report" className="rounded-xl border bg-white p-4 shadow-sm hover:shadow-md transition-shadow">
+          <p className="text-xs text-gray-500">Production-এ ব্যবহৃত কাঁচামাল — {monthLabel}</p>
+          <p className="text-lg font-semibold">{fmt(consumedLbs)} Lbs</p>
+          <p className="text-xs text-gray-500">গড় খরচে মূল্য ৳{fmt(consumedValue)}</p>
+        </Link>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">

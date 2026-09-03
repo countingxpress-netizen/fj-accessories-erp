@@ -6,7 +6,17 @@ import GuardedAction from "@/app/dashboard/GuardedAction";
 
 type Warehouse = { id: string; name: string; location: string | null };
 
-export default function WarehouseRow({ warehouse }: { warehouse: Warehouse }) {
+const fmt = (n: number) => n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+export default function WarehouseRow({
+  warehouse,
+  stockLbs = 0,
+  stockValue = 0,
+}: {
+  warehouse: Warehouse;
+  stockLbs?: number;
+  stockValue?: number;
+}) {
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(warehouse.name);
   const [location, setLocation] = useState(warehouse.location ?? "");
@@ -53,6 +63,8 @@ export default function WarehouseRow({ warehouse }: { warehouse: Warehouse }) {
         <td className="px-4 py-2">
           <input value={location} onChange={(e) => setLocation(e.target.value)} className="w-full rounded border px-2 py-1 text-sm" />
         </td>
+        <td className="px-4 py-2 text-right text-gray-500">{fmt(stockLbs)}</td>
+        <td className="px-4 py-2 text-right text-gray-500">৳{fmt(stockValue)}</td>
         <td className="px-4 py-2 text-right whitespace-nowrap">
           <button onClick={handleSave} disabled={loading} className="rounded bg-green-600 px-3 py-1 text-xs text-white mr-1 disabled:opacity-50">সেভ</button>
           <button onClick={() => setEditing(false)} className="rounded bg-gray-200 px-3 py-1 text-xs text-gray-700">বাতিল</button>
@@ -66,6 +78,8 @@ export default function WarehouseRow({ warehouse }: { warehouse: Warehouse }) {
     <tr className="border-t">
       <td className="px-4 py-2 font-medium">{warehouse.name}</td>
       <td className="px-4 py-2 text-gray-500">{warehouse.location || "-"}</td>
+      <td className="px-4 py-2 text-right">{fmt(stockLbs)}</td>
+      <td className="px-4 py-2 text-right">৳{fmt(stockValue)}</td>
       <td className="px-4 py-2 text-right whitespace-nowrap">
         <GuardedAction table="warehouses" recordId={warehouse.id} recordLabel={warehouse.name} action="edit"
           onAllowed={() => setEditing(true)}

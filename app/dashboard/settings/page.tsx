@@ -14,6 +14,11 @@ export default async function SettingsPage() {
   const { data: company } = await supabase.from("company_profile").select("*").limit(1).maybeSingle();
   const { data: banks } = await supabase.from("banks").select("*").order("bank_name");
   const { data: users } = await supabase.from("app_users").select("*").order("full_name");
+  const { data: accounts } = await supabase
+    .from("chart_of_accounts")
+    .select("id, account_code, account_name")
+    .eq("is_active", true)
+    .order("account_code");
 
   return (
     <div className="max-w-3xl">
@@ -26,7 +31,7 @@ export default async function SettingsPage() {
       <section className="mb-8">
         <h2 className="text-sm font-semibold uppercase text-gray-500 mb-2">Company Info</h2>
         <p className="text-xs text-gray-500 mb-3">Invoice, Challan, PI ইত্যাদির হেডারে এই তথ্য ছাপা হয়।</p>
-        <CompanyProfileForm company={company ?? null} />
+        <CompanyProfileForm company={company ?? null} accounts={accounts ?? []} />
       </section>
 
       <section className="mb-8">
