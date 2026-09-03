@@ -7,13 +7,13 @@ export default async function SalesInvoiceListPage() {
   const supabase = await createClient();
   const { data: invoices } = await supabase
     .from("sales_invoices")
-    .select(`*, customers(name), creator:app_users!sales_invoices_created_by_fkey(full_name),
+    .select(`*, customers(name, code), creator:app_users!sales_invoices_created_by_fkey(full_name),
       sales_invoice_items(quantity_pcs, unit_price, amount,
         bookings(booking_no, required_lbs, buyer_id))`)
     .order("invoice_date", { ascending: false });
 
-  // AT Accessories-এর invoice গুলোর জন্য Commission (Submit to Customer টোটাল − আসল টোটাল) হিসাব —
-  // Proforma Invoice-এর সাথে পরে মেলানোর জন্য এই পার্থক্যটা লিস্টেই দেখানো দরকার।
+  // AT Accessories (customer code "AT") — নাম বদলালেও যেন feature কাজ করে তাই code-এ ম্যাচ করা হয়।
+  // "Submit to Customer" টোটাল − আসল টোটাল = Commission; Proforma Invoice-এর সাথে মেলানোর জন্য লিস্টেই দেখাই।
   const buyerIds = Array.from(
     new Set(
       (invoices ?? [])
@@ -29,7 +29,7 @@ export default async function SalesInvoiceListPage() {
   (buyers ?? []).forEach((b: any) => (markupMap[b.id] = b.markup_percentage ?? AT_DEFAULT_MARKUP_PERCENTAGE));
 
   const invoicesWithCommission = (invoices ?? []).map((inv: any) => {
-    if (inv.customers?.name !== "AT Accessories") return { ...inv, commission: null };
+    if (inv.customers?.code !== "AT") return { ...inv, commission: null };
 
     let realTotal = 0;
     let customerTotal = 0;

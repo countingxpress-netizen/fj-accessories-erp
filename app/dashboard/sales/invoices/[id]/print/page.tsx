@@ -25,7 +25,7 @@ export default async function InvoicePrintPage({ params }: { params: Promise<{ i
 
   const { data: invoice } = await supabase
     .from("sales_invoices")
-    .select(`*, customers(name, address, phone, opening_balance, opening_balance_date),
+    .select(`*, customers(name, code, address, phone, opening_balance, opening_balance_date),
       creator:app_users!sales_invoices_created_by_fkey(signature_url),
       sales_invoice_items(quantity_pcs, unit_price, amount,
         bookings(booking_no, style, measurement_type, measurement_unit, length_val, width_val, flap_val, gusset_val),
@@ -90,7 +90,7 @@ export default async function InvoicePrintPage({ params }: { params: Promise<{ i
   return (
     <div className="max-w-3xl mx-auto p-8 bg-white text-gray-900 print:p-0">
       <PrintButton />
-      {invoice.customers?.name === "AT Accessories" && (
+      {invoice.customers?.code === "AT" && (
         <div className="print:hidden mb-4 flex justify-end">
           <Link href={`/dashboard/sales/invoices/${invoice.id}/print-customer`} target="_blank" className="text-sm text-purple-700 hover:underline">
             Submit to Customer ভিউ দেখুন →
