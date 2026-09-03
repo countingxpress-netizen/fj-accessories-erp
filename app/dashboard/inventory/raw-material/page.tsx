@@ -91,22 +91,6 @@ export default async function RawMaterialStockPage() {
         </div>
       </div>
 
-      <div className="mb-6 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900">
-        <p className="font-semibold mb-1">Opening Stock কীভাবে দেবেন</p>
-        <ol className="list-decimal list-inside space-y-0.5 text-blue-800">
-          <li>উপরে Material যোগ করুন।</li>
-          <li>নিচের <strong>Stock Adjustment (In)</strong>-এ প্রতিটা material-এর opening <strong>Lbs</strong> দিন (warehouse ধরে)। এখানে দর/মূল্য দিতে হয় না।</li>
-          <li>
-            তারপর{" "}
-            <Link href="/dashboard/accounting/opening-inventory" className="font-medium underline hover:text-blue-950">
-              Accounting → Opening Inventory
-            </Link>{" "}
-            পেজে প্রতিটার <strong>Cost / Lb</strong> বসান — এটি মূল্য হিসাব করে, avg cost সেট করে, আর
-            <span className="whitespace-nowrap"> Dr Inventory / Cr Opening Balance Equity</span> JV পোস্ট করে।
-          </li>
-        </ol>
-      </div>
-
       <StockAdjustmentForm materials={materials ?? []} warehouses={warehouses ?? []} />
 
       <div className="space-y-6">
