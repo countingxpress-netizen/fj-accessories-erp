@@ -81,7 +81,7 @@ export default async function ProfitDistributionPage({
               ) : (
                 <>
                   <tr className="border-t"><td className="px-4 py-2">3100 Retained Earnings</td><td className="px-4 py-2 text-right">{money(net)}</td><td /></tr>
-                  <tr className="border-t"><td className="px-4 py-2">2800 লিল্লাহ্ ফান্ড (Receivable) — 1%</td><td /><td className="px-4 py-2 text-right">{money(lillah)}</td></tr>
+                  <tr className="border-t"><td className="px-4 py-2">2800 লিল্লাহ্ ফান্ড — 1%</td><td /><td className="px-4 py-2 text-right">{money(lillah)}</td></tr>
                   <tr className="border-t"><td className="px-4 py-2">3300 ওমর ফারুক – Profit Account — 99%</td><td /><td className="px-4 py-2 text-right">{money(omar)}</td></tr>
                 </>
               )}

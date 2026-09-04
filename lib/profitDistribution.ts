@@ -9,8 +9,8 @@ import { monthRange } from "@/lib/payroll";
 // এক মাসে একবার (narration দিয়ে guard)।
 
 export const RETAINED_CODE = "3100"; // Retained Earnings
-export const LILLAH_CODE = "2800";   // লিল্লাহ্ ফান্ড (Receivable) — liability-এর ভেতরেই থাকে
-export const OMAR_CODE = "3300";     // ওমর ফারুক – Profit Account
+export const LILLAH_CODE = "2800";   // লিল্লাহ্ ফান্ড (Equity — ঋণাত্মক balance মানে ফান্ড কোম্পানিকে দেনা)
+export const OMAR_CODE = "3300";     // ওমর ফারুক – Profit Account (Equity)
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const round2 = (n: number) => Math.round(n * 100) / 100;
