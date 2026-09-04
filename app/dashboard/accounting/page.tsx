@@ -16,7 +16,7 @@ export default async function AccountingPage() {
   const supabase = await createClient();
   const { data: accounts } = await supabase
     .from("chart_of_accounts")
-    .select("*")
+    .select("id, account_code, account_name, account_type, opening_balance, opening_balance_date")
     .order("account_code");
 
   const grouped: Record<string, typeof accounts> = {};
@@ -72,6 +72,7 @@ export default async function AccountingPage() {
                 <tr>
                   <th className="px-4 py-2">Code</th>
                   <th className="px-4 py-2">Account Name</th>
+                  <th className="px-4 py-2 text-right">Opening Balance</th>
                   <th className="px-4 py-2 text-right">Action</th>
                 </tr>
               </thead>
@@ -81,7 +82,7 @@ export default async function AccountingPage() {
                 ))}
                 {(!grouped[type] || grouped[type]!.length === 0) && (
                   <tr>
-                    <td colSpan={3} className="px-4 py-3 text-gray-400 italic">
+                    <td colSpan={4} className="px-4 py-3 text-gray-400 italic">
                       কোনো অ্যাকাউন্ট নেই
                     </td>
                   </tr>
