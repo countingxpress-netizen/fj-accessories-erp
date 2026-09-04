@@ -31,6 +31,18 @@ function lineQuantityLbs(l: Line): number {
   return l.unit === "bags" ? qty * LBS_PER_BAG : qty;
 }
 
+// Unit = bags হলে ব্যবহারকারী Rate/Bag টাইপ করেন — স্টোরেজ/হিসাবের জন্য ÷55 করে per-lb।
+function lineRatePerLbs(l: Line): number {
+  const rate = parseFloat(l.rate) || 0;
+  return l.unit === "bags" ? rate / LBS_PER_BAG : rate;
+}
+
+function lineAmount(l: Line): number {
+  return lineQuantityLbs(l) * lineRatePerLbs(l);
+}
+
+const rateUnitLabel = (u: Unit) => (u === "bags" ? "Bag" : "Lbs");
+
 export default function PurchaseEntryForm({
   suppliers,
   warehouses,
@@ -65,10 +77,7 @@ export default function PurchaseEntryForm({
     setLines((prev) => prev.filter((_, idx) => idx !== i));
   }
 
-  const totalAmount = lines.reduce(
-    (sum, l) => sum + lineQuantityLbs(l) * (parseFloat(l.rate) || 0),
-    0
-  );
+  const totalAmount = lines.reduce((sum, l) => sum + lineAmount(l), 0);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -119,7 +128,7 @@ export default function PurchaseEntryForm({
       quantity_lbs: lineQuantityLbs(l),
       unit: l.unit,
       entered_quantity: parseFloat(l.quantity),
-      rate_per_lbs: parseFloat(l.rate),
+      rate_per_lbs: lineRatePerLbs(l),
     }));
     const { error: itemsError } = await supabase.from("purchase_entry_items").insert(itemsToInsert);
     if (itemsError) {
@@ -188,11 +197,10 @@ export default function PurchaseEntryForm({
       if (!code) continue;
       const { data: acc } = await supabase.from("chart_of_accounts").select("id").eq("account_code", code).single();
       if (acc) {
-        const qtyLbs = lineQuantityLbs(l);
         debitLines.push({
           account_id: acc.id,
-          amount: (qtyLbs * parseFloat(l.rate)).toFixed(2),
-          memo: `${material?.material_name} - ${l.quantity} ${l.unit === "bags" ? "Bags" : "Lbs"} @ ${l.rate}/Lbs`,
+          amount: lineAmount(l).toFixed(2),
+          memo: `${material?.material_name} - ${l.quantity} ${l.unit === "bags" ? "Bags" : "Lbs"} @ ${l.rate}/${rateUnitLabel(l.unit)}`,
         });
       }
     }
@@ -334,7 +342,7 @@ export default function PurchaseEntryForm({
               <th className="px-3 py-2">Material</th>
               <th className="px-3 py-2 w-28">Quantity</th>
               <th className="px-3 py-2 w-24">Unit</th>
-              <th className="px-3 py-2 w-32">Rate/Lbs</th>
+              <th className="px-3 py-2 w-36">Rate</th>
               <th className="px-3 py-2 w-32">Amount</th>
               <th className="px-3 py-2 w-16"></th>
             </tr>
@@ -358,10 +366,13 @@ export default function PurchaseEntryForm({
                   </select>
                 </td>
                 <td className="px-3 py-2">
-                  <input type="number" step="0.01" value={l.rate} onChange={(e) => updateLine(i, "rate", e.target.value)} className="w-full rounded border px-2 py-1 text-sm" />
+                  <div className="flex items-center gap-1">
+                    <input type="number" step="0.01" value={l.rate} onChange={(e) => updateLine(i, "rate", e.target.value)} className="w-full rounded border px-2 py-1 text-sm" />
+                    <span className="whitespace-nowrap text-xs text-gray-400">/{rateUnitLabel(l.unit)}</span>
+                  </div>
                 </td>
                 <td className="px-3 py-2 text-right">
-                  {money((lineQuantityLbs(l) * (parseFloat(l.rate) || 0)))}
+                  {money(lineAmount(l))}
                 </td>
                 <td className="px-3 py-2 text-right">
                   {lines.length > 1 && (
