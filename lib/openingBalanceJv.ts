@@ -18,9 +18,12 @@ import { getCurrentUserId } from "@/lib/currentUser";
 const OBE_CODE = "3900"; // Opening Balance Equity (balancing account)
 export const ACCOUNT_OPENING_NARRATION = "Opening — Account balances";
 
-// এই code-গুলোর opening আলাদা মেকানিজম থেকে পোস্ট হয় (customer opening JV,
-// Opening Inventory reconciliation) — এখানে ধরলে দুবার গণনা হতো, তাই বাদ।
+// এই code-গুলোর opening আলাদা মেকানিজম/ম্যানুয়াল ভাউচার থেকে পোস্ট হয় (customer
+// opening JV, Opening Inventory reconciliation, "Opening — Cash in Hand" নামের
+// ম্যানুয়াল JV) — এখানে ধরলে দুবার গণনা হতো (2026-09-04-এ ঠিক এই কারণে লিল্লাহ্/
+// ওমরের balance ভুলবশত দুই ভাউচারে পোস্ট হয়ে একে অপরকে কাটাকাটি করেছিল), তাই বাদ।
 export const AUTO_OPENING_CODES = new Set([
+  "1000", // Cash in Hand → ম্যানুয়াল "Opening — Cash in Hand" ভাউচার
   "1100", // Accounts Receivable → lib/customerOpeningJv.ts
   "1200", "1201", "1202", "1203", "1210", "1220", "1299", // inventory → Opening Inventory পেজ
   OBE_CODE, // নিজেই balancing line
