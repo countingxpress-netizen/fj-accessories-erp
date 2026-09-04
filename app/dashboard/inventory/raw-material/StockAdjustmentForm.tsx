@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { money } from "@/lib/format";
 
-type Material = { id: string; material_name: string };
+type Material = { id: string; material_name: string; unit?: string | null };
 type Warehouse = { id: string; name: string };
 
 export default function StockAdjustmentForm({
@@ -23,6 +23,9 @@ export default function StockAdjustmentForm({
   const [loading, setLoading] = useState(false);
   const router = useRouter();
   const supabase = createClient();
+
+  const selectedMaterial = materials.find((m) => m.id === materialId);
+  const unitLabel = selectedMaterial?.unit === "carton" ? "Carton" : "Lbs";
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -49,7 +52,7 @@ export default function StockAdjustmentForm({
 
     if (newQty < 0) {
       setLoading(false);
-      setError(`পর্যাপ্ত স্টক নেই। বর্তমান স্টক: ${money(currentQty)} Lbs`);
+      setError(`পর্যাপ্ত স্টক নেই। বর্তমান স্টক: ${money(currentQty)} ${unitLabel}`);
       return;
     }
 
@@ -138,7 +141,7 @@ export default function StockAdjustmentForm({
           </select>
         </div>
         <div>
-          <label className="block text-xs text-gray-500 mb-1">Quantity (Lbs)</label>
+          <label className="block text-xs text-gray-500 mb-1">Quantity ({unitLabel})</label>
           <input
             type="number"
             step="0.01"

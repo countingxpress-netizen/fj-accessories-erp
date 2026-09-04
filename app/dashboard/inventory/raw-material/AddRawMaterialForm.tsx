@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 
 type Account = { account_code: string; account_name: string };
 
-const UNITS = ["lbs", "kg", "bag"];
+const UNITS = ["lbs", "kg", "bag", "carton"];
 
 export default function AddRawMaterialForm({ accounts }: { accounts: Account[] }) {
   const [name, setName] = useState("");

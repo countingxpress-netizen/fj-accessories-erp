@@ -14,7 +14,7 @@ type Material = {
   avg_cost_per_lbs: number | null;
 };
 
-const UNITS = ["lbs", "kg", "bag"];
+const UNITS = ["lbs", "kg", "bag", "carton"];
 const num = (n: number) => n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 export default function RawMaterialRow({

@@ -21,6 +21,9 @@ export default async function MaterialStatementPage({
 
   if (!material) return notFound();
 
+  const isCarton = material.unit === "carton";
+  const unitLabel = isCarton ? "Carton" : "Lbs";
+
   const { data: entries } = await supabase
     .from("stock_ledger")
     .select("*, warehouses(name)")
@@ -57,9 +60,15 @@ export default async function MaterialStatementPage({
 
       <h1 className="text-2xl font-semibold mt-2 mb-1">{material.material_name} — Stock Statement</h1>
       <p className="text-sm text-gray-500 mb-4">
-        বর্তমান ব্যালেন্স: {money(runningBalance)} Lbs
-        {" "}≈ {money((runningBalance * 0.453592))} Kg
-        {" "}≈ {money((runningBalance / LBS_PER_BAG))} Bags
+        {isCarton ? (
+          <>বর্তমান ব্যালেন্স: {money(runningBalance)} Carton</>
+        ) : (
+          <>
+            বর্তমান ব্যালেন্স: {money(runningBalance)} Lbs
+            {" "}≈ {money((runningBalance * 0.453592))} Kg
+            {" "}≈ {money((runningBalance / LBS_PER_BAG))} Bags
+          </>
+        )}
       </p>
 
       <div className="overflow-hidden rounded-xl border bg-white shadow-sm">
@@ -69,9 +78,9 @@ export default async function MaterialStatementPage({
               <th className="px-4 py-2">Date</th>
               <th className="px-4 py-2">Warehouse</th>
               <th className="px-4 py-2">Reference</th>
-              <th className="px-4 py-2 text-right">In (Lbs)</th>
-              <th className="px-4 py-2 text-right">Out (Lbs)</th>
-              <th className="px-4 py-2 text-right">Balance (Lbs)</th>
+              <th className="px-4 py-2 text-right">In ({unitLabel})</th>
+              <th className="px-4 py-2 text-right">Out ({unitLabel})</th>
+              <th className="px-4 py-2 text-right">Balance ({unitLabel})</th>
             </tr>
           </thead>
           <tbody>

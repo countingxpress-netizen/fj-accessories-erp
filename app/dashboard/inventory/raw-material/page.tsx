@@ -19,12 +19,12 @@ export default async function RawMaterialStockPage() {
     .from("raw_material_stock")
     .select("*, raw_materials(material_name), warehouses(name)");
 
-  // কাঁচামালের inventory account বাছাইয়ের জন্য — সাধারণত 1200–1203 + 1299
+  // কাঁচামালের inventory account বাছাইয়ের জন্য — সাধারণত 1200–1203 + 1204 (Adhesive) + 1299
   let { data: invAccounts } = await supabase
     .from("chart_of_accounts")
     .select("account_code, account_name")
     .eq("account_type", "asset")
-    .ilike("account_name", "%raw material inventory%")
+    .or("account_name.ilike.%raw material inventory%,account_code.eq.1204")
     .order("account_code");
   if (!invAccounts || invAccounts.length === 0) {
     ({ data: invAccounts } = await supabase
@@ -36,9 +36,9 @@ export default async function RawMaterialStockPage() {
   const accounts = invAccounts ?? [];
 
   // material অনুযায়ী গ্রুপ করুন, প্রতিটার নিচে warehouse-wise breakdown
-  const grouped: Record<string, { name: string; rows: any[]; total: number }> = {};
+  const grouped: Record<string, { name: string; unit: string; rows: any[]; total: number }> = {};
   (materials ?? []).forEach((m) => {
-    grouped[m.id] = { name: m.material_name, rows: [], total: 0 };
+    grouped[m.id] = { name: m.material_name, unit: m.unit ?? "lbs", rows: [], total: 0 };
   });
   (stock ?? []).forEach((s: any) => {
     if (!grouped[s.material_id]) return;
@@ -96,6 +96,7 @@ export default async function RawMaterialStockPage() {
 
       <div className="space-y-6">
         {Object.entries(grouped).map(([id, data]) => {
+          const isCarton = data.unit === "carton";
           const totalKg = data.total * 0.453592;
           const totalBags = data.total / LBS_PER_BAG;
           return (
@@ -105,32 +106,50 @@ export default async function RawMaterialStockPage() {
                   {data.name}
                 </Link>
                 <div className="text-sm text-gray-600 space-x-4">
-                  <span className="font-medium">{money(data.total)} Lbs</span>
-                  <span>≈ {money(totalKg)} Kg</span>
-                  <span>≈ {money(totalBags)} Bags</span>
+                  {isCarton ? (
+                    <span className="font-medium">{money(data.total)} Carton</span>
+                  ) : (
+                    <>
+                      <span className="font-medium">{money(data.total)} Lbs</span>
+                      <span>≈ {money(totalKg)} Kg</span>
+                      <span>≈ {money(totalBags)} Bags</span>
+                    </>
+                  )}
                 </div>
               </div>
               <table className="w-full text-sm">
                 <thead className="text-left text-gray-500 border-t">
                   <tr>
                     <th className="px-4 py-2">Warehouse</th>
-                    <th className="px-4 py-2 text-right">Lbs</th>
-                    <th className="px-4 py-2 text-right">Kg</th>
-                    <th className="px-4 py-2 text-right">Bags</th>
+                    {isCarton ? (
+                      <th className="px-4 py-2 text-right">Carton</th>
+                    ) : (
+                      <>
+                        <th className="px-4 py-2 text-right">Lbs</th>
+                        <th className="px-4 py-2 text-right">Kg</th>
+                        <th className="px-4 py-2 text-right">Bags</th>
+                      </>
+                    )}
                   </tr>
                 </thead>
                 <tbody>
                   {data.rows.map((r) => (
                     <tr key={r.id} className="border-t">
                       <td className="px-4 py-2">{r.warehouses?.name ?? "-"}</td>
-                      <td className="px-4 py-2 text-right">{money(r.quantity_lbs)}</td>
-                      <td className="px-4 py-2 text-right">{money((r.quantity_lbs * 0.453592))}</td>
-                      <td className="px-4 py-2 text-right">{money((r.quantity_lbs / LBS_PER_BAG))}</td>
+                      {isCarton ? (
+                        <td className="px-4 py-2 text-right">{money(r.quantity_lbs)}</td>
+                      ) : (
+                        <>
+                          <td className="px-4 py-2 text-right">{money(r.quantity_lbs)}</td>
+                          <td className="px-4 py-2 text-right">{money((r.quantity_lbs * 0.453592))}</td>
+                          <td className="px-4 py-2 text-right">{money((r.quantity_lbs / LBS_PER_BAG))}</td>
+                        </>
+                      )}
                     </tr>
                   ))}
                   {data.rows.length === 0 && (
                     <tr>
-                      <td colSpan={4} className="px-4 py-3 text-gray-400 italic">কোনো স্টক নেই</td>
+                      <td colSpan={isCarton ? 2 : 4} className="px-4 py-3 text-gray-400 italic">কোনো স্টক নেই</td>
                     </tr>
                   )}
                 </tbody>
