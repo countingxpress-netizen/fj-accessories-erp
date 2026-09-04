@@ -45,13 +45,21 @@ export default async function BalanceSheetPage({
     })
     .filter((r) => r.amount !== 0);
 
+  // 3100 Retained Earnings আলাদা রো হিসেবে দেখাই না — নিচের "Retained Earnings
+  // (Net Profit/Loss)" লাইনে fold করা হয়, যাতে প্রফিট বণ্টনের পর দ্বিগুণ না দেখায়।
+  const RETAINED_CODE = "3100";
   const equityRows = (accounts ?? [])
-    .filter((a) => a.account_type === "equity")
+    .filter((a) => a.account_type === "equity" && a.account_code !== RETAINED_CODE)
     .map((a) => {
       const t = totals[a.id] ?? { debit: 0, credit: 0 };
       return { ...a, amount: t.credit - t.debit };
     })
     .filter((r) => r.amount !== 0);
+
+  const retainedAcc = (accounts ?? []).find((a) => a.account_code === RETAINED_CODE);
+  const retainedBookBalance = retainedAcc
+    ? (totals[retainedAcc.id]?.credit ?? 0) - (totals[retainedAcc.id]?.debit ?? 0)
+    : 0;
 
   // Net Profit (Income - Expense, সব সময়ের, asOf তারিখ পর্যন্ত) — Retained Earnings হিসেবে যোগ হবে
   const incomeTotal = (accounts ?? [])
@@ -66,7 +74,9 @@ export default async function BalanceSheetPage({
       const t = totals[a.id] ?? { debit: 0, credit: 0 };
       return sum + (t.debit - t.credit);
     }, 0);
-  const netProfit = incomeTotal - expenseTotal;
+  // undistributed retained earnings = live net profit − যা ইতিমধ্যে 3100 থেকে বণ্টন হয়েছে
+  const retainedEarnings = incomeTotal - expenseTotal + retainedBookBalance;
+  const netProfit = retainedEarnings; // নিচের JSX-এ এই নামেই দেখানো হয়
 
   const totalAssets = assetRows.reduce((sum, r) => sum + r.amount, 0);
   const totalLiabilities = liabilityRows.reduce((sum, r) => sum + r.amount, 0);
@@ -158,7 +168,7 @@ export default async function BalanceSheetPage({
                   </tr>
                 ))}
                 <tr className="border-t">
-                  <td className="px-4 py-2">Retained Earnings (Net Profit/Loss)</td>
+                  <td className="px-4 py-2">Retained Earnings (অবণ্টিত লাভ/লস)</td>
                   <td className="px-4 py-2 text-right">{money(netProfit)}</td>
                 </tr>
               </tbody>

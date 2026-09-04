@@ -16,6 +16,7 @@ const menu: MenuGroup[] = [
       { label: "Trial Balance", href: "/dashboard/accounting/trial-balance" },
       { label: "Cash Book", href: "/dashboard/accounting/cash-book" },
       { label: "Bank Book", href: "/dashboard/accounting/bank-book" },
+      { label: "Profit বণ্টন", href: "/dashboard/accounting/profit-distribution" },
     ],
   },
   {

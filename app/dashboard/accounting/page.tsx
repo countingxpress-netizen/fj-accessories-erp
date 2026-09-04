@@ -54,6 +54,9 @@ export default async function AccountingPage() {
         <a href="/dashboard/accounting/balance-sheet" className="inline-block rounded-lg border border-gray-900 px-4 py-2 text-sm text-gray-900">
           Balance Sheet দেখুন →
         </a>
+        <a href="/dashboard/accounting/profit-distribution" className="inline-block rounded-lg border border-gray-900 px-4 py-2 text-sm text-gray-900">
+          Profit বণ্টন (মাস-শেষ) →
+        </a>
       </div>
 
       <AddAccountForm />
