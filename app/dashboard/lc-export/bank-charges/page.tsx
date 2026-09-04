@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { formatDate } from "@/lib/formatDate";
 import BankChargesForm from "./BankChargesForm";
+import { money } from "@/lib/format";
 
 export default async function BankChargesPage() {
   const supabase = await createClient();
@@ -35,7 +36,7 @@ export default async function BankChargesPage() {
                 </td>
                 <td className="px-4 py-2">{c.lc_register?.lc_no ?? "-"}</td>
                 <td className="px-4 py-2">{c.description || "-"}</td>
-                <td className="px-4 py-2 text-right">{c.amount?.toFixed(2)}</td>
+                <td className="px-4 py-2 text-right">{money(c.amount)}</td>
               </tr>
             ))}
             {(!charges || charges.length === 0) && (
@@ -43,7 +44,7 @@ export default async function BankChargesPage() {
             )}
           </tbody>
           <tfoot className="border-t-2 font-semibold bg-gray-50">
-            <tr><td colSpan={3} className="px-4 py-3 text-right">Total</td><td className="px-4 py-3 text-right">{total.toFixed(2)}</td></tr>
+            <tr><td colSpan={3} className="px-4 py-3 text-right">Total</td><td className="px-4 py-3 text-right">{money(total)}</td></tr>
           </tfoot>
         </table>
       </div>

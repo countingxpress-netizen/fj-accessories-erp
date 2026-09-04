@@ -2,6 +2,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { formatDate } from "@/lib/formatDate";
 import { notFound } from "next/navigation";
+import { money } from "@/lib/format";
 
 export default async function SupplierLedgerDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -74,9 +75,9 @@ export default async function SupplierLedgerDetailPage({ params }: { params: Pro
                 </td>
                 <td className="px-4 py-2">{r.ref}</td>
                 <td className="px-4 py-2 text-gray-600">{r.desc}</td>
-                <td className="px-4 py-2 text-right">{r.debit ? r.debit.toFixed(2) : ""}</td>
-                <td className="px-4 py-2 text-right">{r.credit ? r.credit.toFixed(2) : ""}</td>
-                <td className="px-4 py-2 text-right font-medium">{r.balance.toFixed(2)}</td>
+                <td className="px-4 py-2 text-right">{r.debit ? money(r.debit) : ""}</td>
+                <td className="px-4 py-2 text-right">{r.credit ? money(r.credit) : ""}</td>
+                <td className="px-4 py-2 text-right font-medium">{money(r.balance)}</td>
               </tr>
             ))}
             {finalRows.length === 0 && (
@@ -86,9 +87,9 @@ export default async function SupplierLedgerDetailPage({ params }: { params: Pro
           <tfoot className="border-t-2 font-semibold bg-gray-50">
             <tr>
               <td colSpan={4} className="px-4 py-3 text-right">Total</td>
-              <td className="px-4 py-3 text-right">{totalPayments.toFixed(2)}</td>
-              <td className="px-4 py-3 text-right">{totalPurchase.toFixed(2)}</td>
-              <td className="px-4 py-3 text-right">{runningBalance.toFixed(2)} (পাওনা)</td>
+              <td className="px-4 py-3 text-right">{money(totalPayments)}</td>
+              <td className="px-4 py-3 text-right">{money(totalPurchase)}</td>
+              <td className="px-4 py-3 text-right">{money(runningBalance)} (পাওনা)</td>
             </tr>
           </tfoot>
         </table>

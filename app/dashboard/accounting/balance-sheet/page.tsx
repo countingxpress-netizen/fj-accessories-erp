@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { money } from "@/lib/format";
 
 export default async function BalanceSheetPage({
   searchParams,
@@ -105,7 +106,7 @@ export default async function BalanceSheetPage({
               {assetRows.map((r) => (
                 <tr key={r.id} className="border-t">
                   <td className="px-4 py-2">{r.account_code} - {r.account_name}</td>
-                  <td className="px-4 py-2 text-right">{r.amount.toFixed(2)}</td>
+                  <td className="px-4 py-2 text-right">{money(r.amount)}</td>
                 </tr>
               ))}
               {assetRows.length === 0 && (
@@ -115,7 +116,7 @@ export default async function BalanceSheetPage({
             <tfoot className="border-t-2 font-semibold bg-gray-50">
               <tr>
                 <td className="px-4 py-2">Total Assets</td>
-                <td className="px-4 py-2 text-right">{totalAssets.toFixed(2)}</td>
+                <td className="px-4 py-2 text-right">{money(totalAssets)}</td>
               </tr>
             </tfoot>
           </table>
@@ -130,7 +131,7 @@ export default async function BalanceSheetPage({
                 {liabilityRows.map((r) => (
                   <tr key={r.id} className="border-t">
                     <td className="px-4 py-2">{r.account_code} - {r.account_name}</td>
-                    <td className="px-4 py-2 text-right">{r.amount.toFixed(2)}</td>
+                    <td className="px-4 py-2 text-right">{money(r.amount)}</td>
                   </tr>
                 ))}
                 {liabilityRows.length === 0 && (
@@ -140,7 +141,7 @@ export default async function BalanceSheetPage({
               <tfoot className="border-t-2 font-semibold bg-gray-50">
                 <tr>
                   <td className="px-4 py-2">Total Liabilities</td>
-                  <td className="px-4 py-2 text-right">{totalLiabilities.toFixed(2)}</td>
+                  <td className="px-4 py-2 text-right">{money(totalLiabilities)}</td>
                 </tr>
               </tfoot>
             </table>
@@ -153,18 +154,18 @@ export default async function BalanceSheetPage({
                 {equityRows.map((r) => (
                   <tr key={r.id} className="border-t">
                     <td className="px-4 py-2">{r.account_code} - {r.account_name}</td>
-                    <td className="px-4 py-2 text-right">{r.amount.toFixed(2)}</td>
+                    <td className="px-4 py-2 text-right">{money(r.amount)}</td>
                   </tr>
                 ))}
                 <tr className="border-t">
                   <td className="px-4 py-2">Retained Earnings (Net Profit/Loss)</td>
-                  <td className="px-4 py-2 text-right">{netProfit.toFixed(2)}</td>
+                  <td className="px-4 py-2 text-right">{money(netProfit)}</td>
                 </tr>
               </tbody>
               <tfoot className="border-t-2 font-semibold bg-gray-50">
                 <tr>
                   <td className="px-4 py-2">Total Equity</td>
-                  <td className="px-4 py-2 text-right">{totalEquity.toFixed(2)}</td>
+                  <td className="px-4 py-2 text-right">{money(totalEquity)}</td>
                 </tr>
               </tfoot>
             </table>
@@ -174,10 +175,10 @@ export default async function BalanceSheetPage({
 
       <div className="mt-6 grid grid-cols-2 gap-6">
         <div className="rounded-xl border p-4 text-center font-semibold bg-gray-50">
-          Total Assets: {totalAssets.toFixed(2)}
+          Total Assets: {money(totalAssets)}
         </div>
         <div className="rounded-xl border p-4 text-center font-semibold bg-gray-50">
-          Total Liabilities + Equity: {totalLiabilitiesAndEquity.toFixed(2)}
+          Total Liabilities + Equity: {money(totalLiabilitiesAndEquity)}
         </div>
       </div>
 
@@ -186,7 +187,7 @@ export default async function BalanceSheetPage({
       }`}>
         {isBalanced
           ? "✅ Assets = Liabilities + Equity — ব্যালেন্স শীট সঠিক আছে।"
-          : `⚠ মিলছে না (পার্থক্য: ${Math.abs(totalAssets - totalLiabilitiesAndEquity).toFixed(2)})`}
+          : `⚠ মিলছে না (পার্থক্য: ${money(Math.abs(totalAssets - totalLiabilitiesAndEquity))})`}
       </div>
     </div>
   );

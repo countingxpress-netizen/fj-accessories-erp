@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { generateNextDocNo } from "@/lib/docNumber";
 import { createClient } from "@/lib/supabase/client";
 import { getCurrentUserId } from "@/lib/currentUser";
+import { money } from "@/lib/format";
 
 type Account = { id: string; account_code: string; account_name: string; account_type: string };
 type Line = { account_id: string; accountLabel: string; debit: string; credit: string; memo: string };
@@ -292,8 +293,8 @@ export default function JournalVoucherForm({
           <tfoot className="bg-gray-50 border-t font-medium">
             <tr>
               <td className="px-3 py-2 text-right">Total</td>
-              <td className="px-3 py-2">{totalDebit.toFixed(2)}</td>
-              <td className="px-3 py-2">{totalCredit.toFixed(2)}</td>
+              <td className="px-3 py-2">{money(totalDebit)}</td>
+              <td className="px-3 py-2">{money(totalCredit)}</td>
               <td colSpan={2}></td>
             </tr>
           </tfoot>

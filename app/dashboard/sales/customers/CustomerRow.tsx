@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { deleteSimpleRow } from "@/lib/simpleDelete";
 import { syncCustomerOpeningJv } from "@/lib/customerOpeningJv";
+import { money } from "@/lib/format";
 import GuardedAction from "@/app/dashboard/GuardedAction";
 import RateHistoryPanel from "@/app/dashboard/sales/RateHistoryPanel";
 
@@ -128,7 +129,7 @@ export default function CustomerRow({
         </td>
         <td className="px-4 py-2 text-gray-500">{customer.default_print_rate ?? "0.20"}</td>
         <td className="px-4 py-2 text-gray-500">{customer.default_adhesive_rate ?? "0.02"}</td>
-        <td className="px-4 py-2 text-right text-gray-500">{customer.opening_balance?.toFixed(2) ?? "0.00"}</td>
+        <td className="px-4 py-2 text-right text-gray-500">{money(customer.opening_balance ?? 0)}</td>
         <td className="px-4 py-2 text-right whitespace-nowrap">
           <GuardedAction table="customers" recordId={customer.id} recordLabel={customer.name} action="edit"
             onAllowed={() => setEditing(true)}

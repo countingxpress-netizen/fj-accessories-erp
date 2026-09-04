@@ -5,6 +5,7 @@ import { notFound } from "next/navigation";
 import { currencySymbol } from "@/lib/numberToWords";
 import NewRevisionButton from "./NewRevisionButton";
 import GuardedAction from "@/app/dashboard/GuardedAction";
+import { money } from "@/lib/format";
 
 export default async function ProformaViewPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -64,9 +65,9 @@ export default async function ProformaViewPage({ params }: { params: Promise<{ i
                   <td className="px-4 py-2 whitespace-pre-line">{it.description}{it.bookings && <span className="text-xs text-gray-400"> ({it.bookings.booking_no})</span>}</td>
                   <td className="px-4 py-2">{it.measurement}</td>
                   <td className="px-4 py-2 text-right">{it.qty_pcs}</td>
-                  <td className="px-4 py-2 text-right">{(it.qty_pcs / 12).toFixed(2)}</td>
+                  <td className="px-4 py-2 text-right">{money((it.qty_pcs / 12))}</td>
                   <td className="px-4 py-2 text-right">{sym}{Number(it.price_unit).toFixed(pi.price_decimals ?? 4)}/{it.price_basis}</td>
-                  <td className="px-4 py-2 text-right">{sym}{amount.toFixed(2)}</td>
+                  <td className="px-4 py-2 text-right">{sym}{money(amount)}</td>
                 </tr>
               );
             })}
@@ -75,7 +76,7 @@ export default async function ProformaViewPage({ params }: { params: Promise<{ i
       </div>
 
       <div className="rounded-xl border bg-white p-4 shadow-sm max-w-sm ml-auto text-sm">
-        <p>Total: <strong>{pi.currency} {pi.total_amount?.toFixed(2)}</strong></p>
+        <p>Total: <strong>{pi.currency} {money(pi.total_amount)}</strong></p>
       </div>
     </div>
   );

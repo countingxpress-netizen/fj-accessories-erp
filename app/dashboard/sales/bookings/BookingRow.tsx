@@ -7,6 +7,7 @@ import { getBookingStatusLabel } from "@/lib/bookingStatus";
 import { formatStyle } from "@/lib/formatStyle";
 import { deleteBookingCascade } from "@/lib/bookingDelete";
 import GuardedAction from "@/app/dashboard/GuardedAction";
+import { money } from "@/lib/format";
 
 function formatMeasurement(b: any) {
   const unit = b.measurement_unit;
@@ -68,8 +69,8 @@ export default function BookingRow({
       <td className="px-4 py-2 text-gray-500">{booking.buyers?.name ?? "-"}</td>
       <td className="px-4 py-2 text-gray-500">{booking.garments_name ?? "-"}</td>
       <td className="px-4 py-2 text-sm">{formatMeasurement(booking)}</td>
-      <td className="px-4 py-2 text-right">{booking.quantity_pcs?.toLocaleString()}</td>
-      <td className="px-4 py-2 text-right">{booking.required_lbs?.toFixed(2)}</td>
+      <td className="px-4 py-2 text-right">{booking.quantity_pcs?.toLocaleString("en-IN")}</td>
+      <td className="px-4 py-2 text-right">{money(booking.required_lbs)}</td>
       <td className="px-4 py-2">
         <span className={`rounded-full px-2 py-0.5 text-xs ${status.color}`}>{status.label}</span>
       </td>

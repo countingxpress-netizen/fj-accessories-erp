@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { postWastageJv } from "@/lib/inventoryCost";
 import { getCurrentUserId } from "@/lib/currentUser";
+import { money } from "@/lib/format";
 
 type ProductionOrder = {
   id: string; production_no: string; stage: string;
@@ -112,7 +113,7 @@ export default function WastageForm({
 
       {selectedOrder?.bookings && (
         <p className="text-sm text-blue-800 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2">
-          এই বুকিং-এর মোট Required Lbs: <strong>{selectedOrder.bookings.required_lbs?.toFixed(2)} Lbs</strong>
+          এই বুকিং-এর মোট Required Lbs: <strong>{money(selectedOrder.bookings.required_lbs)} Lbs</strong>
         </p>
       )}
 

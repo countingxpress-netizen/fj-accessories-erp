@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { formatDate } from "@/lib/formatDate";
 import GuardedAction from "@/app/dashboard/GuardedAction";
+import { money } from "@/lib/format";
 
 export default function LCRow({ lc }: { lc: any }) {
   const [loading, setLoading] = useState(false);
@@ -39,7 +40,7 @@ export default function LCRow({ lc }: { lc: any }) {
         {lc.creator?.full_name && <div className="text-[11px] text-gray-400">by {lc.creator.full_name}</div>}
       </td>
       <td className="px-4 py-2 text-gray-500">{lc.expiry_date ? formatDate(lc.expiry_date) : "-"}</td>
-      <td className="px-4 py-2 text-right">{lc.amount?.toFixed(2)} {lc.currency}</td>
+      <td className="px-4 py-2 text-right">{money(lc.amount)} {lc.currency}</td>
       <td className="px-4 py-2">
         <select value={lc.status} onChange={(e) => handleStatusChange(e.target.value)} disabled={loading} className="rounded border px-2 py-1 text-xs">
           <option value="active">Active</option>

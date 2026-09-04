@@ -103,7 +103,7 @@ export default function ProductionStageRow({ row, isAdmin }: { row: StageRow; is
     if (addNum === 0) return;
 
     if (addNum > remaining) {
-      setError(`Target-এর বেশি দেওয়া যাবে না — সর্বোচ্চ ${remaining.toLocaleString()} ${row.quantityUnit} বাকি আছে।`);
+      setError(`Target-এর বেশি দেওয়া যাবে না — সর্বোচ্চ ${remaining.toLocaleString("en-IN")} ${row.quantityUnit} বাকি আছে।`);
       return;
     }
 
@@ -145,9 +145,9 @@ export default function ProductionStageRow({ row, isAdmin }: { row: StageRow; is
       <td className="px-4 py-2">{row.customerName}</td>
       <td className="px-4 py-2">{row.productName}</td>
       <td className="px-4 py-2 text-gray-500 text-xs">{row.measurement}</td>
-      <td className="px-4 py-2 text-right">{row.target.toLocaleString()} {row.quantityUnit}</td>
+      <td className="px-4 py-2 text-right">{row.target.toLocaleString("en-IN")} {row.quantityUnit}</td>
       <td className={`px-4 py-2 text-right ${isDone ? "text-green-700" : "text-orange-600 font-medium"}`}>
-        {remaining.toLocaleString()} {row.quantityUnit}
+        {remaining.toLocaleString("en-IN")} {row.quantityUnit}
       </td>
       <td className="px-4 py-2">
         {correcting ? (
@@ -183,7 +183,7 @@ export default function ProductionStageRow({ row, isAdmin }: { row: StageRow; is
               <span className="text-xs text-gray-400">{row.quantityUnit}</span>
             </div>
             {cumulativeProduced > 0 && (
-              <p className="text-xs text-gray-400 mt-0.5">এ পর্যন্ত মোট: {cumulativeProduced.toLocaleString()} {row.quantityUnit}</p>
+              <p className="text-xs text-gray-400 mt-0.5">এ পর্যন্ত মোট: {cumulativeProduced.toLocaleString("en-IN")} {row.quantityUnit}</p>
             )}
             {error && <p className="text-xs text-red-600 mt-0.5">{error}</p>}
             {isAdmin && (

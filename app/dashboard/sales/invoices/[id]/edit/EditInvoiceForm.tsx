@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { generateNextDocNo } from "@/lib/docNumber";
 import { getCurrentUserId } from "@/lib/currentUser";
+import { money } from "@/lib/format";
 
 type LineItem = {
   id: string; booking_id: string; product_id: string;
@@ -129,12 +130,12 @@ export default function EditInvoiceForm({
                 <td className="px-3 py-2">
                   <input type="number" step="0.01" value={it.price} onChange={(e) => updateItem(it.id, "price", e.target.value)} className="w-full rounded border px-2 py-1 text-sm" />
                 </td>
-                <td className="px-3 py-2 text-right">{((parseFloat(it.qty) || 0) * (parseFloat(it.price) || 0)).toFixed(2)}</td>
+                <td className="px-3 py-2 text-right">{money(((parseFloat(it.qty) || 0) * (parseFloat(it.price) || 0)))}</td>
               </tr>
             ))}
           </tbody>
           <tfoot className="bg-gray-50 border-t font-semibold">
-            <tr><td colSpan={4} className="px-3 py-2 text-right">Total</td><td className="px-3 py-2 text-right">{totalAmount.toFixed(2)}</td></tr>
+            <tr><td colSpan={4} className="px-3 py-2 text-right">Total</td><td className="px-3 py-2 text-right">{money(totalAmount)}</td></tr>
           </tfoot>
         </table>
       </div>

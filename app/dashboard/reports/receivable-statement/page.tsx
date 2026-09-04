@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { formatDate } from "@/lib/formatDate";
+import { money } from "@/lib/format";
 
 export default async function ReceivableStatementPage() {
   const supabase = await createClient();
@@ -51,7 +52,7 @@ export default async function ReceivableStatementPage() {
 
       <div className="rounded-xl border bg-white p-4 shadow-sm mb-6 max-w-xs">
         <p className="text-xs text-gray-500">Total Outstanding Receivable</p>
-        <p className="text-lg font-semibold text-blue-700">{totalDue.toFixed(2)}</p>
+        <p className="text-lg font-semibold text-blue-700">{money(totalDue)}</p>
       </div>
 
       <div className="overflow-hidden rounded-xl border bg-white shadow-sm">
@@ -72,9 +73,9 @@ export default async function ReceivableStatementPage() {
                   <Link href={`/dashboard/sales/customer-ledger/${r.id}`} className="hover:underline hover:text-blue-700">{r.name}</Link>
                 </td>
                 <td className="px-4 py-2 text-gray-500">{r.lastInvoiceDate ? formatDate(r.lastInvoiceDate) : "-"}</td>
-                <td className="px-4 py-2 text-right">{r.invoiced.toFixed(2)}</td>
-                <td className="px-4 py-2 text-right">{r.paid.toFixed(2)}</td>
-                <td className="px-4 py-2 text-right font-medium">{r.due.toFixed(2)}</td>
+                <td className="px-4 py-2 text-right">{money(r.invoiced)}</td>
+                <td className="px-4 py-2 text-right">{money(r.paid)}</td>
+                <td className="px-4 py-2 text-right font-medium">{money(r.due)}</td>
               </tr>
             ))}
             {rows.length === 0 && (
@@ -82,7 +83,7 @@ export default async function ReceivableStatementPage() {
             )}
           </tbody>
           <tfoot className="border-t-2 font-semibold bg-gray-50">
-            <tr><td colSpan={4} className="px-4 py-3 text-right">Total Due</td><td className="px-4 py-3 text-right">{totalDue.toFixed(2)}</td></tr>
+            <tr><td colSpan={4} className="px-4 py-3 text-right">Total Due</td><td className="px-4 py-3 text-right">{money(totalDue)}</td></tr>
           </tfoot>
         </table>
       </div>

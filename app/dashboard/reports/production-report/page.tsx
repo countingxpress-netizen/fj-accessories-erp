@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { formatDate } from "@/lib/formatDate";
+import { money } from "@/lib/format";
 
 export default async function ProductionReportPage({
   searchParams,
@@ -48,15 +49,15 @@ export default async function ProductionReportPage({
       <div className="grid grid-cols-3 gap-4 mb-6">
         <div className="rounded-xl border bg-white p-4 shadow-sm">
           <p className="text-xs text-gray-500">Total Material Consumption</p>
-          <p className="text-lg font-semibold">{totalConsumption.toFixed(2)} Lbs</p>
+          <p className="text-lg font-semibold">{money(totalConsumption)} Lbs</p>
         </div>
         <div className="rounded-xl border bg-white p-4 shadow-sm">
           <p className="text-xs text-gray-500">Total Wastage</p>
-          <p className="text-lg font-semibold">{totalWastage.toFixed(2)} Lbs</p>
+          <p className="text-lg font-semibold">{money(totalWastage)} Lbs</p>
         </div>
         <div className="rounded-xl border bg-white p-4 shadow-sm">
           <p className="text-xs text-gray-500">Wastage %</p>
-          <p className="text-lg font-semibold">{wastagePercent.toFixed(2)}%</p>
+          <p className="text-lg font-semibold">{money(wastagePercent)}%</p>
         </div>
       </div>
 
@@ -83,8 +84,8 @@ export default async function ProductionReportPage({
                   <td className="px-4 py-2 font-medium">{o.production_no}</td>
                   <td className="px-4 py-2">{o.bookings?.customers?.name} / {o.bookings?.finished_goods?.product_name}</td>
                   <td className="px-4 py-2 text-right">{o.quantity_pcs}</td>
-                  <td className="px-4 py-2 text-right">{consumption.toFixed(2)}</td>
-                  <td className="px-4 py-2 text-right">{wastage.toFixed(2)}</td>
+                  <td className="px-4 py-2 text-right">{money(consumption)}</td>
+                  <td className="px-4 py-2 text-right">{money(wastage)}</td>
                   <td className="px-4 py-2 capitalize">{o.stage}</td>
                 </tr>
               );

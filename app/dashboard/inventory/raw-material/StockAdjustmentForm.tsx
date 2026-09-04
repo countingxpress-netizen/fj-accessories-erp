@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { money } from "@/lib/format";
 
 type Material = { id: string; material_name: string };
 type Warehouse = { id: string; name: string };
@@ -48,7 +49,7 @@ export default function StockAdjustmentForm({
 
     if (newQty < 0) {
       setLoading(false);
-      setError(`পর্যাপ্ত স্টক নেই। বর্তমান স্টক: ${currentQty.toFixed(2)} Lbs`);
+      setError(`পর্যাপ্ত স্টক নেই। বর্তমান স্টক: ${money(currentQty)} Lbs`);
       return;
     }
 

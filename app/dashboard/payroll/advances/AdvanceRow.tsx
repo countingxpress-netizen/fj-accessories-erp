@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { formatDate } from "@/lib/formatDate";
 import { reversePayrollJv } from "@/lib/payrollJv";
 import GuardedAction from "@/app/dashboard/GuardedAction";
+import { money } from "@/lib/format";
 
 export default function AdvanceRow({ row }: { row: any }) {
   const [loading, setLoading] = useState(false);
@@ -27,7 +28,7 @@ export default function AdvanceRow({ row }: { row: any }) {
         {row.creator?.full_name && <div className="text-[11px] text-gray-400">by {row.creator.full_name}</div>}
       </td>
       <td className="px-4 py-2">{row.employees?.employee_code} — {row.employees?.name}</td>
-      <td className="px-4 py-2 text-right font-medium">{Number(row.amount).toFixed(2)}</td>
+      <td className="px-4 py-2 text-right font-medium">{money(Number(row.amount))}</td>
       <td className="px-4 py-2 text-gray-600">{row.note || "-"}</td>
       <td className="px-4 py-2 text-right">
         <GuardedAction table="employee_advances" recordId={row.id} recordLabel={`${row.employees?.name ?? ""} ${formatDate(row.advance_date)}`} action="delete"

@@ -6,6 +6,7 @@ import { generateNextDocNo } from "@/lib/docNumber";
 import { calcTubeCutting, toInches } from "@/lib/calcTubeCutting";
 import { getCurrentUserId } from "@/lib/currentUser";
 import { resolveRate } from "@/lib/rateHistory";
+import { money } from "@/lib/format";
 
 type Booking = {
   id: string; booking_no: string; booking_date: string | null; quantity_pcs: number; product_id: string; customer_id: string;
@@ -303,8 +304,8 @@ export default function SalesInvoiceForm({
                         Booking {b.booking_date ?? "?"} → {bookingPricePerLbs(b) || "—"}
                       </span>
                     </td>
-                    <td className="px-3 py-2 text-right">{(Math.round(unitPrice * 100) / 100).toFixed(2)}</td>
-                    <td className="px-3 py-2 text-right">{checked ? getLineAmount(b.remaining, unitPrice).toLocaleString() + ".00" : "-"}</td>
+                    <td className="px-3 py-2 text-right">{money((Math.round(unitPrice * 100) / 100))}</td>
+                    <td className="px-3 py-2 text-right">{checked ? money(getLineAmount(b.remaining, unitPrice)) : "-"}</td>
                   </tr>
                 );
               })}
@@ -313,7 +314,7 @@ export default function SalesInvoiceForm({
               )}
             </tbody>
             <tfoot className="bg-gray-50 border-t font-semibold">
-              <tr><td colSpan={9} className="px-3 py-2 text-right">Total</td><td className="px-3 py-2 text-right">{totalAmount.toLocaleString()}.00</td></tr>
+              <tr><td colSpan={9} className="px-3 py-2 text-right">Total</td><td className="px-3 py-2 text-right">{money(totalAmount)}</td></tr>
             </tfoot>
           </table>
         </div>

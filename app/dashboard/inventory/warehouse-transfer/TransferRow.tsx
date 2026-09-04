@@ -3,6 +3,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { deleteWarehouseTransferCascade } from "@/lib/warehouseTransferDelete";
 import GuardedAction from "@/app/dashboard/GuardedAction";
+import { money } from "@/lib/format";
 
 export default function TransferRow({ transfer }: { transfer: any }) {
   const router = useRouter();
@@ -40,7 +41,7 @@ export default function TransferRow({ transfer }: { transfer: any }) {
       <td className="px-4 py-2 text-right">
         {transfer.entered_quantity} {transfer.unit === "bags" ? "Bags" : "Lbs"}
         {transfer.unit === "bags" && (
-          <span className="text-gray-400"> ({transfer.quantity_lbs.toFixed(2)} Lbs)</span>
+          <span className="text-gray-400"> ({money(transfer.quantity_lbs)} Lbs)</span>
         )}
       </td>
       <td className="px-4 py-2 text-right whitespace-nowrap">

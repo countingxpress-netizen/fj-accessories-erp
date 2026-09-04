@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { money } from "@/lib/format";
 
 export default function EditBookingForm({ booking }: { booking: any }) {
   const [style, setStyle] = useState(booking.style ?? "");
@@ -41,7 +42,7 @@ export default function EditBookingForm({ booking }: { booking: any }) {
         <p><span className="text-gray-500">Measurement:</span> {booking.measurement_type} — L:{booking.length_val} W:{booking.width_val} {booking.flap_val ? `Flap:${booking.flap_val}` : ""} {booking.gusset_val ? `Gusset:${booking.gusset_val}` : ""} ({booking.measurement_unit})</p>
         <p><span className="text-gray-500">Order Thickness:</span> {booking.thickness_mm} mm | <span className="text-gray-500">Production Thickness:</span> {booking.production_thickness_mm} mm</p>
         <p><span className="text-gray-500">Material Type:</span> {booking.material_type}</p>
-        <p><span className="text-gray-500">Required:</span> {booking.required_lbs?.toFixed(2)} Lbs</p>
+        <p><span className="text-gray-500">Required:</span> {money(booking.required_lbs)} Lbs</p>
       </div>
       <p className="text-xs text-orange-600 bg-orange-50 border border-orange-200 rounded-lg p-2">
         নোট: উপরের তথ্যগুলো (Quantity, Measurement, Material, Thickness) সরাসরি এখান থেকে বদলানো যাবে না — এসব বদলাতে হলে বুকিং মুছে নতুন করে দিন। নিচের ফিল্ডগুলো বদলানো যাবে।

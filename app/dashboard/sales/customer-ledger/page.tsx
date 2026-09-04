@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { money } from "@/lib/format";
 
 export default async function CustomerLedgerListPage() {
   const supabase = await createClient();
@@ -25,7 +26,7 @@ export default async function CustomerLedgerListPage() {
         {(customers ?? []).map((c) => (
           <Link key={c.id} href={`/dashboard/sales/customer-ledger/${c.id}`} className="flex items-center justify-between px-4 py-3 text-sm hover:bg-gray-50">
             <span className="font-medium text-gray-800">{c.name}</span>
-            <span className="text-gray-500">মোট বিক্রয়: {(totals[c.id] ?? 0).toFixed(2)} →</span>
+            <span className="text-gray-500">মোট বিক্রয়: {money((totals[c.id] ?? 0))} →</span>
           </Link>
         ))}
         {(!customers || customers.length === 0) && (

@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { formatDate } from "@/lib/formatDate";
 import { notFound } from "next/navigation";
 import PrintButton from "@/app/dashboard/PrintButton";
+import { money } from "@/lib/format";
 
 const titles: Record<string, string> = {
   blowing: "Blowing Production Schedule",
@@ -62,11 +63,11 @@ export default async function SchedulePrintPage({
             <thead><tr className="border-b-2 border-gray-800"><th className="text-left py-2">Material</th><th className="text-right py-2">Quantity (Lbs)</th></tr></thead>
             <tbody>
               {(materials ?? []).map((m: any, i: number) => (
-                <tr key={i} className="border-b"><td className="py-2">{m.raw_materials?.material_name}</td><td className="text-right py-2">{m.quantity_lbs?.toFixed(2)}</td></tr>
+                <tr key={i} className="border-b"><td className="py-2">{m.raw_materials?.material_name}</td><td className="text-right py-2">{money(m.quantity_lbs)}</td></tr>
               ))}
             </tbody>
           </table>
-          <p className="text-sm">Total Required: <strong>{order.required_lbs?.toFixed(2)} Lbs</strong></p>
+          <p className="text-sm">Total Required: <strong>{money(order.required_lbs)} Lbs</strong></p>
         </>
       )}
 

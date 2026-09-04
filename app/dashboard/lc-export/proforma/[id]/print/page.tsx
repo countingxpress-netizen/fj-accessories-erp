@@ -3,6 +3,7 @@ import { formatDate } from "@/lib/formatDate";
 import { notFound } from "next/navigation";
 import PrintButton from "@/app/dashboard/PrintButton";
 import { amountInWords, currencySymbol } from "@/lib/numberToWords";
+import { money } from "@/lib/format";
 
 export default async function PIPrintPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -106,31 +107,31 @@ export default async function PIPrintPage({ params }: { params: Promise<{ id: st
                 <td className="border border-gray-800 text-center py-1 px-2">{it.sl_no}</td>
                 <td className="border border-gray-800 py-1 px-2 whitespace-pre-line">{it.description}</td>
                 <td className="border border-gray-800 py-1 px-2">{it.measurement}</td>
-                <td className="border border-gray-800 text-right py-1 px-2">{it.qty_pcs.toLocaleString()}</td>
-                <td className="border border-gray-800 text-right py-1 px-2">{(it.qty_pcs / 12).toFixed(2)}</td>
+                <td className="border border-gray-800 text-right py-1 px-2">{it.qty_pcs.toLocaleString("en-IN")}</td>
+                <td className="border border-gray-800 text-right py-1 px-2">{money((it.qty_pcs / 12))}</td>
                 <td className="border border-gray-800 text-right py-1 px-2">{sym}{Number(it.price_unit).toFixed(pi.price_decimals ?? 4)}/{it.price_basis}</td>
-                <td className="border border-gray-800 text-right py-1 px-2">{sym}{amount.toFixed(2)}</td>
+                <td className="border border-gray-800 text-right py-1 px-2">{sym}{money(amount)}</td>
               </tr>
             );
           })}
           <tr className="font-semibold">
             <td className="border border-gray-800 text-center py-1" colSpan={3}>Total =</td>
-            <td className="border border-gray-800 text-right py-1 px-2">{totalQtyPcs.toLocaleString()}</td>
-            <td className="border border-gray-800 text-right py-1 px-2">{totalQtyDzn.toFixed(2)}</td>
+            <td className="border border-gray-800 text-right py-1 px-2">{totalQtyPcs.toLocaleString("en-IN")}</td>
+            <td className="border border-gray-800 text-right py-1 px-2">{money(totalQtyDzn)}</td>
             <td className="border border-gray-800"></td>
-            <td className="border border-gray-800 text-right py-1 px-2">{sym}{subtotal.toFixed(2)}</td>
+            <td className="border border-gray-800 text-right py-1 px-2">{sym}{money(subtotal)}</td>
           </tr>
           {pi.discount_type !== "none" && (
             <tr>
               <td colSpan={6} className="border border-gray-800 text-right py-1 px-2">
                 (-) Discount {pi.discount_type === "percentage" ? `${pi.discount_value}%` : ""} =
               </td>
-              <td className="border border-gray-800 text-right py-1 px-2">{sym}{discountAmount.toFixed(2)}</td>
+              <td className="border border-gray-800 text-right py-1 px-2">{sym}{money(discountAmount)}</td>
             </tr>
           )}
           <tr className="font-bold">
             <td colSpan={6} className="border border-gray-800 text-right py-1 px-2">Total =</td>
-            <td className="border border-gray-800 text-right py-1 px-2">{sym}{pi.total_amount?.toFixed(2)}</td>
+            <td className="border border-gray-800 text-right py-1 px-2">{sym}{money(pi.total_amount)}</td>
           </tr>
         </tbody>
       </table>

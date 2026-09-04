@@ -4,6 +4,7 @@ import { formatDate } from "@/lib/formatDate";
 import { notFound } from "next/navigation";
 import PaymentActions from "./PaymentActions";
 import GuardedAction from "@/app/dashboard/GuardedAction";
+import { money } from "@/lib/format";
 
 export default async function PaymentViewPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -44,9 +45,9 @@ export default async function PaymentViewPage({ params }: { params: Promise<{ id
         <p><span className="text-gray-500">Payment Date:</span> {formatDate(payment.payment_date)}</p>
         <p><span className="text-gray-500">Payment Mode:</span> {(payment.payment_mode ?? "cash").replace(/_/g, " ")}</p>
         <p><span className="text-gray-500">Deposit To:</span> {depositAccount ? `${depositAccount.account_code} - ${depositAccount.account_name}` : "-"}</p>
-        {payment.bank_charges > 0 && <p><span className="text-gray-500">Bank Charges:</span> {payment.bank_charges.toFixed(2)}</p>}
+        {payment.bank_charges > 0 && <p><span className="text-gray-500">Bank Charges:</span> {money(payment.bank_charges)}</p>}
         <p><span className="text-gray-500">Note:</span> {payment.note || "-"}</p>
-        <p className="text-base font-semibold"><span className="text-gray-500 font-normal">Total Amount:</span> {payment.amount.toFixed(2)}</p>
+        <p className="text-base font-semibold"><span className="text-gray-500 font-normal">Total Amount:</span> {money(payment.amount)}</p>
       </div>
 
       <h2 className="text-sm font-semibold uppercase text-gray-500 mb-2">Applied To Invoices</h2>
@@ -60,7 +61,7 @@ export default async function PaymentViewPage({ params }: { params: Promise<{ id
               <tr key={a.id} className="border-t">
                 <td className="px-4 py-2">{a.sales_invoices?.invoice_no ?? "-"}</td>
                 <td className="px-4 py-2 text-gray-500">{a.sales_invoices ? formatDate(a.sales_invoices.invoice_date) : "-"}</td>
-                <td className="px-4 py-2 text-right">{a.amount.toFixed(2)}</td>
+                <td className="px-4 py-2 text-right">{money(a.amount)}</td>
               </tr>
             ))}
             {(!allocations || allocations.length === 0) && (

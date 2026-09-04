@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { formatDate } from "@/lib/formatDate";
 import { deleteCustomerPaymentCascade } from "@/lib/paymentReceivedDelete";
 import GuardedAction from "@/app/dashboard/GuardedAction";
+import { money } from "@/lib/format";
 
 export default function PaymentReceivedRow({
   payment, selected, onToggleSelect,
@@ -40,7 +41,7 @@ export default function PaymentReceivedRow({
       <td className="px-4 py-2">{payment.customers?.name ?? "-"}</td>
       <td className="px-4 py-2 text-gray-500 capitalize">{(payment.payment_mode ?? "cash").replace(/_/g, " ")}</td>
       <td className="px-4 py-2 text-gray-500">{payment.note || "-"}</td>
-      <td className="px-4 py-2 text-right">{payment.amount.toFixed(2)}</td>
+      <td className="px-4 py-2 text-right">{money(payment.amount)}</td>
       <td className="px-4 py-2 text-right whitespace-nowrap">
         <Link href={`/dashboard/sales/payment-received/${payment.id}`} className="text-blue-700 hover:underline text-xs mr-2">View</Link>
         <GuardedAction table="customer_payments" recordId={payment.id} recordLabel={`${payment.customers?.name ?? ""} ${formatDate(payment.payment_date)}`} action="delete"

@@ -12,7 +12,7 @@ type Account = { id: string; account_code: string; account_name: string };
 
 const FG_CODE = "1210";
 const WIP_CODE = "1220";
-const money = (n: number) => n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const money = (n: number) => n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
 export default function OpeningInventoryForm({

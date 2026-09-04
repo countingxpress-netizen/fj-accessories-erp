@@ -6,7 +6,7 @@ import GuardedAction from "@/app/dashboard/GuardedAction";
 
 type Warehouse = { id: string; name: string; location: string | null };
 
-const fmt = (n: number) => n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const fmt = (n: number) => n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 export default function WarehouseRow({
   warehouse,

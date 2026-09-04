@@ -2,6 +2,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import ExpenseForm from "./ExpenseForm";
 import ExpensesTable from "./ExpensesTable";
+import { money } from "@/lib/format";
 
 export default async function ExpensesPage({
   searchParams,
@@ -54,7 +55,7 @@ export default async function ExpensesPage({
 
       <div className="rounded-xl border bg-white p-4 shadow-sm mb-4 max-w-xs">
         <p className="text-xs text-gray-500">Total Expense</p>
-        <p className="text-lg font-semibold">{total.toFixed(2)}</p>
+        <p className="text-lg font-semibold">{money(total)}</p>
       </div>
 
       <ExpensesTable expenses={expenses ?? []} />

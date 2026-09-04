@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { formatDate } from "@/lib/formatDate";
 import { deleteInvoiceCascade } from "@/lib/invoiceDelete";
 import GuardedAction from "@/app/dashboard/GuardedAction";
+import { money } from "@/lib/format";
 
 export default function InvoiceRow({
   invoice, selected, onToggleSelect,
@@ -44,9 +45,9 @@ export default function InvoiceRow({
       </td>
       <td className="px-4 py-2">{invoice.customers?.name ?? "-"}</td>
       <td className="px-4 py-2 text-xs text-gray-500">{bookingNos}</td>
-      <td className="px-4 py-2 text-right">{qty.toLocaleString()}</td>
-      <td className="px-4 py-2 text-right">{total.toFixed(2)}</td>
-      <td className="px-4 py-2 text-right text-purple-700">{invoice.commission != null ? invoice.commission.toFixed(2) : "-"}</td>
+      <td className="px-4 py-2 text-right">{qty.toLocaleString("en-IN")}</td>
+      <td className="px-4 py-2 text-right">{money(total)}</td>
+      <td className="px-4 py-2 text-right text-purple-700">{invoice.commission != null ? money(invoice.commission) : "-"}</td>
       <td className="px-4 py-2 text-right whitespace-nowrap">
         <Link href={`/dashboard/sales/invoices/${invoice.id}/print`} target="_blank" className="text-blue-700 hover:underline text-xs mr-2">View</Link>
         {invoice.customers?.code === "AT" && (

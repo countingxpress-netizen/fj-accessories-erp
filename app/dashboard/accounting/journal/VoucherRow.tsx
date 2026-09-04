@@ -3,6 +3,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { deleteSimpleRow } from "@/lib/simpleDelete";
 import GuardedAction from "@/app/dashboard/GuardedAction";
+import { money } from "@/lib/format";
 
 export default function VoucherRow({
   voucher, selected, onToggleSelect,
@@ -42,7 +43,7 @@ export default function VoucherRow({
       <td className="px-4 py-2 font-medium">{voucher.voucher_no}</td>
       <td className="px-4 py-2 text-gray-500">{voucher.voucher_date}</td>
       <td className="px-4 py-2">{voucher.narration || "-"}</td>
-      <td className="px-4 py-2 text-right">{total.toFixed(2)}</td>
+      <td className="px-4 py-2 text-right">{money(total)}</td>
       <td className="px-4 py-2 text-gray-500 text-xs">{voucher.creator?.full_name ?? "-"}</td>
       <td className="px-4 py-2 text-right whitespace-nowrap">
         <GuardedAction

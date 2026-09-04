@@ -2,7 +2,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 
 const LBS_PER_BAG = 55;
-const money = (n: number) => n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const money = (n: number) => n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 export default async function StockReportPage() {
   const supabase = await createClient();
@@ -34,12 +34,12 @@ export default async function StockReportPage() {
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mb-6">
         <div className="rounded-xl border bg-white p-4 shadow-sm">
           <p className="text-xs text-gray-500">Raw Material</p>
-          <p className="text-lg font-semibold">{totalRawLbs.toFixed(2)} Lbs</p>
+          <p className="text-lg font-semibold">{money(totalRawLbs)} Lbs</p>
           <p className="text-xs text-gray-500">মূল্য ৳{money(rawValue)}</p>
         </div>
         <div className="rounded-xl border bg-white p-4 shadow-sm">
           <p className="text-xs text-gray-500">Finished Goods</p>
-          <p className="text-lg font-semibold">{totalFgPcs.toLocaleString()} Pcs</p>
+          <p className="text-lg font-semibold">{totalFgPcs.toLocaleString("en-IN")} Pcs</p>
           <p className="text-xs text-gray-500">মূল্য ৳{money(fgValue)}</p>
         </div>
         <div className="rounded-xl border bg-white p-4 shadow-sm">
@@ -71,9 +71,9 @@ export default async function StockReportPage() {
                   <td className="px-4 py-2">
                     <Link href={`/dashboard/inventory/raw-material/${m.id}`} className="hover:underline hover:text-blue-700">{m.material_name}</Link>
                   </td>
-                  <td className="px-4 py-2 text-right">{lbs.toFixed(2)}</td>
-                  <td className="px-4 py-2 text-right">{(lbs * 0.453592).toFixed(2)}</td>
-                  <td className="px-4 py-2 text-right">{(lbs / LBS_PER_BAG).toFixed(2)}</td>
+                  <td className="px-4 py-2 text-right">{money(lbs)}</td>
+                  <td className="px-4 py-2 text-right">{money((lbs * 0.453592))}</td>
+                  <td className="px-4 py-2 text-right">{money((lbs / LBS_PER_BAG))}</td>
                   <td className="px-4 py-2 text-right text-gray-500">{cost ? cost.toFixed(4) : "—"}</td>
                   <td className="px-4 py-2 text-right">{money(lbs * cost)}</td>
                 </tr>
@@ -104,7 +104,7 @@ export default async function StockReportPage() {
               return (
                 <tr key={p.id} className="border-t">
                   <td className="px-4 py-2">{p.product_name}</td>
-                  <td className="px-4 py-2 text-right">{pcs.toLocaleString()}</td>
+                  <td className="px-4 py-2 text-right">{pcs.toLocaleString("en-IN")}</td>
                   <td className="px-4 py-2 text-right text-gray-500">{cost ? cost.toFixed(4) : "—"}</td>
                   <td className="px-4 py-2 text-right">{money(pcs * cost)}</td>
                 </tr>

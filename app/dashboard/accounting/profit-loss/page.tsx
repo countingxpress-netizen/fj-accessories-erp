@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { money } from "@/lib/format";
 
 export default async function ProfitLossPage({
   searchParams,
@@ -88,7 +89,7 @@ export default async function ProfitLossPage({
                   <td className="px-4 py-2">
                     {r.account_code} - {r.account_name}
                   </td>
-                  <td className="px-4 py-2 text-right">{r.amount.toFixed(2)}</td>
+                  <td className="px-4 py-2 text-right">{money(r.amount)}</td>
                 </tr>
               ))}
               {incomeRows.length === 0 && (
@@ -100,7 +101,7 @@ export default async function ProfitLossPage({
             <tfoot className="border-t-2 font-semibold bg-gray-50">
               <tr>
                 <td className="px-4 py-2">Total Income</td>
-                <td className="px-4 py-2 text-right">{totalIncome.toFixed(2)}</td>
+                <td className="px-4 py-2 text-right">{money(totalIncome)}</td>
               </tr>
             </tfoot>
           </table>
@@ -115,7 +116,7 @@ export default async function ProfitLossPage({
                   <td className="px-4 py-2">
                     {r.account_code} - {r.account_name}
                   </td>
-                  <td className="px-4 py-2 text-right">{r.amount.toFixed(2)}</td>
+                  <td className="px-4 py-2 text-right">{money(r.amount)}</td>
                 </tr>
               ))}
               {expenseRows.length === 0 && (
@@ -127,7 +128,7 @@ export default async function ProfitLossPage({
             <tfoot className="border-t-2 font-semibold bg-gray-50">
               <tr>
                 <td className="px-4 py-2">Total Expense</td>
-                <td className="px-4 py-2 text-right">{totalExpense.toFixed(2)}</td>
+                <td className="px-4 py-2 text-right">{money(totalExpense)}</td>
               </tr>
             </tfoot>
           </table>
@@ -137,7 +138,7 @@ export default async function ProfitLossPage({
       <div className={`mt-6 rounded-xl border p-4 text-center text-lg font-semibold ${
         netProfit >= 0 ? "bg-green-50 text-green-800 border-green-200" : "bg-red-50 text-red-800 border-red-200"
       }`}>
-        {netProfit >= 0 ? "Net Profit" : "Net Loss"}: {Math.abs(netProfit).toFixed(2)}
+        {netProfit >= 0 ? "Net Profit" : "Net Loss"}: {money(Math.abs(netProfit))}
       </div>
     </div>
   );

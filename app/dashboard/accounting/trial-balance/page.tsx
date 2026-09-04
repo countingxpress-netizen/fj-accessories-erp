@@ -1,6 +1,7 @@
 import React from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { money } from "@/lib/format";
 
 const typeLabels: Record<string, string> = {
   asset: "Assets",
@@ -97,10 +98,10 @@ export default async function TrialBalancePage() {
                         </Link>
                       </td>
                       <td className="px-4 py-2 text-right">
-                        {r.debitBalance > 0 ? r.debitBalance.toFixed(2) : ""}
+                        {r.debitBalance > 0 ? money(r.debitBalance) : ""}
                       </td>
                       <td className="px-4 py-2 text-right">
-                        {r.creditBalance > 0 ? r.creditBalance.toFixed(2) : ""}
+                        {r.creditBalance > 0 ? money(r.creditBalance) : ""}
                       </td>
                     </tr>
                   ))}
@@ -118,8 +119,8 @@ export default async function TrialBalancePage() {
           <tfoot className="border-t-2 font-semibold bg-gray-50">
             <tr>
               <td colSpan={2} className="px-4 py-3 text-right">Grand Total</td>
-              <td className="px-4 py-3 text-right">{grandDebit.toFixed(2)}</td>
-              <td className="px-4 py-3 text-right">{grandCredit.toFixed(2)}</td>
+              <td className="px-4 py-3 text-right">{money(grandDebit)}</td>
+              <td className="px-4 py-3 text-right">{money(grandCredit)}</td>
             </tr>
           </tfoot>
         </table>
@@ -132,7 +133,7 @@ export default async function TrialBalancePage() {
           </p>
         ) : (
           <p className="text-sm text-red-600 font-medium">
-            ⚠ Debit ও Credit মিলছে না (পার্থক্য: {Math.abs(grandDebit - grandCredit).toFixed(2)}) — কোনো Journal Voucher ভুলভাবে এন্ট্রি হয়ে থাকতে পারে।
+            ⚠ Debit ও Credit মিলছে না (পার্থক্য: {money(Math.abs(grandDebit - grandCredit))}) — কোনো Journal Voucher ভুলভাবে এন্ট্রি হয়ে থাকতে পারে।
           </p>
         )}
       </div>

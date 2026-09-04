@@ -6,7 +6,7 @@ import PrintButton from "@/app/dashboard/PrintButton";
 import { amountInWords } from "@/lib/numberToWords";
 
 function fmt(n: number) {
-  return n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 function formatMeasurement(b: any) {
@@ -149,7 +149,7 @@ export default async function InvoicePrintPage({ params }: { params: Promise<{ i
               <td className="py-2">{item.finished_goods?.product_name}</td>
               <td className="py-2 text-gray-600 text-xs">{formatMeasurement(item.bookings)}</td>
               <td className="text-right py-2">{item.quantity_pcs}</td>
-              <td className="text-right py-2">{item.unit_price.toFixed(2)}</td>
+              <td className="text-right py-2">{fmt(item.unit_price)}</td>
               <td className="text-right py-2">{fmt(item.amount)}</td>
             </tr>
           ))}

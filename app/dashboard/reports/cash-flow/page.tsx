@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { formatDate } from "@/lib/formatDate";
+import { money } from "@/lib/format";
 
 export default async function CashFlowPage({
   searchParams,
@@ -55,15 +56,15 @@ export default async function CashFlowPage({
       <div className="grid grid-cols-3 gap-4 mb-6">
         <div className="rounded-xl border bg-white p-4 shadow-sm">
           <p className="text-xs text-gray-500">Total Inflow</p>
-          <p className="text-lg font-semibold text-green-700">{totalInflow.toFixed(2)}</p>
+          <p className="text-lg font-semibold text-green-700">{money(totalInflow)}</p>
         </div>
         <div className="rounded-xl border bg-white p-4 shadow-sm">
           <p className="text-xs text-gray-500">Total Outflow</p>
-          <p className="text-lg font-semibold text-red-700">{totalOutflow.toFixed(2)}</p>
+          <p className="text-lg font-semibold text-red-700">{money(totalOutflow)}</p>
         </div>
         <div className="rounded-xl border bg-white p-4 shadow-sm">
           <p className="text-xs text-gray-500">Net Cash Flow</p>
-          <p className={`text-lg font-semibold ${netCashFlow >= 0 ? "text-green-700" : "text-red-700"}`}>{netCashFlow.toFixed(2)}</p>
+          <p className={`text-lg font-semibold ${netCashFlow >= 0 ? "text-green-700" : "text-red-700"}`}>{money(netCashFlow)}</p>
         </div>
       </div>
 
@@ -84,8 +85,8 @@ export default async function CashFlowPage({
                 <td className="px-4 py-2 text-gray-500">{formatDate(l.journal_vouchers?.voucher_date)}</td>
                 <td className="px-4 py-2">{l.chart_of_accounts?.account_name}</td>
                 <td className="px-4 py-2 text-gray-600">{l.memo || l.journal_vouchers?.narration || "-"}</td>
-                <td className="px-4 py-2 text-right">{l.debit ? l.debit.toFixed(2) : ""}</td>
-                <td className="px-4 py-2 text-right">{l.credit ? l.credit.toFixed(2) : ""}</td>
+                <td className="px-4 py-2 text-right">{l.debit ? money(l.debit) : ""}</td>
+                <td className="px-4 py-2 text-right">{l.credit ? money(l.credit) : ""}</td>
               </tr>
             ))}
             {sorted.length === 0 && (

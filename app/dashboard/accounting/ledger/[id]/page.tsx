@@ -2,6 +2,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { notFound } from "next/navigation";
 import { formatDate } from "@/lib/formatDate";
+import { money } from "@/lib/format";
 
 // Debit-normal accounts (asset, expense): debit বাড়ায়, credit কমায়
 // Credit-normal accounts (liability, equity, income): credit বাড়ায়, debit কমায়
@@ -87,10 +88,10 @@ export default async function AccountLedgerPage({
                 <td className="px-4 py-2 text-gray-600">
                   {l.memo || l.journal_vouchers?.narration || "-"}
                 </td>
-                <td className="px-4 py-2 text-right">{l.debit ? l.debit.toFixed(2) : ""}</td>
-                <td className="px-4 py-2 text-right">{l.credit ? l.credit.toFixed(2) : ""}</td>
+                <td className="px-4 py-2 text-right">{l.debit ? money(l.debit) : ""}</td>
+                <td className="px-4 py-2 text-right">{l.credit ? money(l.credit) : ""}</td>
                 <td className="px-4 py-2 text-right font-medium">
-                  {l.runningBalance.toFixed(2)}
+                  {money(l.runningBalance)}
                 </td>
               </tr>
             ))}
@@ -105,10 +106,10 @@ export default async function AccountLedgerPage({
           <tfoot className="bg-gray-50 border-t font-medium">
             <tr>
               <td colSpan={3} className="px-4 py-2 text-right">Total</td>
-              <td className="px-4 py-2 text-right">{totalDebit.toFixed(2)}</td>
-              <td className="px-4 py-2 text-right">{totalCredit.toFixed(2)}</td>
+              <td className="px-4 py-2 text-right">{money(totalDebit)}</td>
+              <td className="px-4 py-2 text-right">{money(totalCredit)}</td>
               <td className="px-4 py-2 text-right">
-                {rows.length > 0 ? rows[rows.length - 1].runningBalance.toFixed(2) : "0.00"}
+                {rows.length > 0 ? money(rows[rows.length - 1].runningBalance) : "0.00"}
               </td>
             </tr>
           </tfoot>

@@ -15,7 +15,7 @@ type Material = {
 };
 
 const UNITS = ["lbs", "kg", "bag"];
-const num = (n: number) => n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const num = (n: number) => n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 export default function RawMaterialRow({
   material,

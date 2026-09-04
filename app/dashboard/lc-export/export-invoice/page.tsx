@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { formatDate } from "@/lib/formatDate";
 import ExportInvoiceForm from "./ExportInvoiceForm";
+import { money } from "@/lib/format";
 
 export default async function ExportInvoicePage() {
   const supabase = await createClient();
@@ -36,7 +37,7 @@ export default async function ExportInvoicePage() {
                 </td>
                 <td className="px-4 py-2">{inv.customers?.name ?? "-"}</td>
                 <td className="px-4 py-2 text-gray-500">{inv.lc_register?.lc_no ?? "-"}</td>
-                <td className="px-4 py-2 text-right">{inv.amount?.toFixed(2)}</td>
+                <td className="px-4 py-2 text-right">{money(inv.amount)}</td>
               </tr>
             ))}
             {(!invoices || invoices.length === 0) && (

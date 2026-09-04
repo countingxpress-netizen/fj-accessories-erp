@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { hourlyRate, monthRange } from "@/lib/payroll";
+import { money } from "@/lib/format";
 
 type Employee = {
   id: string; name: string; employee_code: string;
@@ -80,8 +81,8 @@ export default function OvertimeReport({ employees }: { employees: Employee[] })
                 <td className="px-4 py-2">{r.e.employee_code} — {r.e.name}</td>
                 <td className="px-4 py-2 text-gray-500">{r.e.department || "-"}</td>
                 <td className="px-4 py-2 text-right">{r.hours}</td>
-                <td className="px-4 py-2 text-right">{r.rate.toFixed(2)}</td>
-                <td className="px-4 py-2 text-right">{r.amount.toFixed(2)}</td>
+                <td className="px-4 py-2 text-right">{money(r.rate)}</td>
+                <td className="px-4 py-2 text-right">{money(r.amount)}</td>
               </tr>
             ))}
             {rows.length === 0 && (
@@ -94,7 +95,7 @@ export default function OvertimeReport({ employees }: { employees: Employee[] })
                 <td className="px-4 py-2" colSpan={2}>মোট</td>
                 <td className="px-4 py-2 text-right">{totalHours}</td>
                 <td />
-                <td className="px-4 py-2 text-right">{totalAmount.toFixed(2)}</td>
+                <td className="px-4 py-2 text-right">{money(totalAmount)}</td>
               </tr>
             </tfoot>
           )}

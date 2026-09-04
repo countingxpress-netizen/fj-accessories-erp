@@ -2,6 +2,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { formatDate } from "@/lib/formatDate";
 import { notFound } from "next/navigation";
+import { money } from "@/lib/format";
 
 function getRangeDates(range: string | undefined, customFrom?: string, customTo?: string) {
   const now = new Date();
@@ -145,7 +146,7 @@ export default async function CustomerLedgerDetailPage({
             {(rangeFrom || rangeTo) && (
               <tr className="border-t bg-gray-50/60">
                 <td colSpan={6} className="px-4 py-2 font-medium text-gray-600">Opening Balance (এই সময়ের আগ পর্যন্ত)</td>
-                <td className="px-4 py-2 text-right font-medium">{carryForward.toFixed(2)}</td>
+                <td className="px-4 py-2 text-right font-medium">{money(carryForward)}</td>
               </tr>
             )}
             {displayRows.map((r, i) => (
@@ -158,9 +159,9 @@ export default async function CustomerLedgerDetailPage({
                 </td>
                 <td className="px-4 py-2">{r.ref}</td>
                 <td className="px-4 py-2 text-gray-600">{r.desc}</td>
-                <td className="px-4 py-2 text-right">{r.debit ? r.debit.toFixed(2) : ""}</td>
-                <td className="px-4 py-2 text-right">{r.credit ? r.credit.toFixed(2) : ""}</td>
-                <td className="px-4 py-2 text-right font-medium">{r.balance.toFixed(2)}</td>
+                <td className="px-4 py-2 text-right">{r.debit ? money(r.debit) : ""}</td>
+                <td className="px-4 py-2 text-right">{r.credit ? money(r.credit) : ""}</td>
+                <td className="px-4 py-2 text-right font-medium">{money(r.balance)}</td>
               </tr>
             ))}
             {displayRows.length === 0 && (
@@ -170,9 +171,9 @@ export default async function CustomerLedgerDetailPage({
           <tfoot className="border-t-2 font-semibold bg-gray-50">
             <tr>
               <td colSpan={4} className="px-4 py-3 text-right">Total</td>
-              <td className="px-4 py-3 text-right">{totalDebit.toFixed(2)}</td>
-              <td className="px-4 py-3 text-right">{totalCredit.toFixed(2)}</td>
-              <td className="px-4 py-3 text-right">{finalBalance.toFixed(2)} (বাকি)</td>
+              <td className="px-4 py-3 text-right">{money(totalDebit)}</td>
+              <td className="px-4 py-3 text-right">{money(totalCredit)}</td>
+              <td className="px-4 py-3 text-right">{money(finalBalance)} (বাকি)</td>
             </tr>
           </tfoot>
         </table>

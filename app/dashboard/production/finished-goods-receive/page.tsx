@@ -44,7 +44,7 @@ export default async function FinishedGoodsReceivePage() {
                 <td className="px-4 py-2 text-gray-500">{r.received_date}</td>
                 <td className="px-4 py-2">{r.production_orders?.production_no ?? "-"}</td>
                 <td className="px-4 py-2">{r.finished_goods?.product_name ?? "-"}</td>
-                <td className="px-4 py-2 text-right">{r.quantity_pcs?.toLocaleString()}</td>
+                <td className="px-4 py-2 text-right">{r.quantity_pcs?.toLocaleString("en-IN")}</td>
               </tr>
             ))}
             {(!receives || receives.length === 0) && (

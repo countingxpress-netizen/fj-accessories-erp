@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { formatDate } from "@/lib/formatDate";
+import { money } from "@/lib/format";
 
 const referenceLabels: Record<string, string> = {
   manual_adjustment: "Manual Adjustment",
@@ -117,7 +118,7 @@ export default async function StockLedgerPage({
                     {e.txn_type === "in" ? "In ↑" : "Out ↓"}
                   </span>
                 </td>
-                <td className="px-4 py-2 text-right">{e.quantity.toFixed(2)}</td>
+                <td className="px-4 py-2 text-right">{money(e.quantity)}</td>
                 <td className="px-4 py-2 text-gray-500">
                   {referenceLabels[e.reference_type] ?? e.reference_type ?? "-"}
                 </td>

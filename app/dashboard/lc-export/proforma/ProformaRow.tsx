@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { formatDate } from "@/lib/formatDate";
 import { currencySymbol } from "@/lib/numberToWords";
 import GuardedAction from "@/app/dashboard/GuardedAction";
+import { money } from "@/lib/format";
 
 const statusLabels: Record<string, string> = {
   draft: "Draft", sent: "Sent", in_garments: "In Garments", lc_opened: "LC Opened", paid: "Paid",
@@ -52,10 +53,10 @@ export default function ProformaRow({ pi, salesInvoiceValue, garments }: { pi: a
       </td>
       <td className="px-4 py-2">{pi.customers?.name ?? (pi.is_manual ? "Manual" : "-")}</td>
       <td className="px-4 py-2 text-gray-500">{garments}</td>
-      <td className="px-4 py-2 text-right font-medium">{currencySymbol(pi.currency)}{pi.total_amount?.toFixed(2)}</td>
-      <td className="px-4 py-2 text-right text-gray-500">{salesInvoiceValue > 0 ? salesInvoiceValue.toFixed(2) : "-"}</td>
+      <td className="px-4 py-2 text-right font-medium">{currencySymbol(pi.currency)}{money(pi.total_amount)}</td>
+      <td className="px-4 py-2 text-right text-gray-500">{salesInvoiceValue > 0 ? money(salesInvoiceValue) : "-"}</td>
       <td className={`px-4 py-2 text-right text-xs ${salesInvoiceValue > 0 ? (difference >= 0 ? "text-green-600" : "text-red-600") : "text-gray-400"}`}>
-        {salesInvoiceValue > 0 ? difference.toFixed(2) : "-"}
+        {salesInvoiceValue > 0 ? money(difference) : "-"}
       </td>
       <td className="px-4 py-2">
         <span className={`rounded-full px-2 py-0.5 text-xs ${statusColors[pi.status]}`}>{statusLabels[pi.status]}</span>

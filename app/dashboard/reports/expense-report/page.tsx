@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { money } from "@/lib/format";
 
 export default async function ExpenseReportPage({
   searchParams,
@@ -59,7 +60,7 @@ export default async function ExpenseReportPage({
               <tr key={r.id} className="border-t">
                 <td className="px-4 py-2 text-gray-500">{r.account_code}</td>
                 <td className="px-4 py-2">{r.account_name}</td>
-                <td className="px-4 py-2 text-right">{r.amount.toFixed(2)}</td>
+                <td className="px-4 py-2 text-right">{money(r.amount)}</td>
                 <td className="px-4 py-2 text-right text-gray-500">{total > 0 ? ((r.amount / total) * 100).toFixed(1) : "0"}%</td>
               </tr>
             ))}
@@ -68,7 +69,7 @@ export default async function ExpenseReportPage({
             )}
           </tbody>
           <tfoot className="border-t-2 font-semibold bg-gray-50">
-            <tr><td colSpan={2} className="px-4 py-3 text-right">Total Expense</td><td className="px-4 py-3 text-right">{total.toFixed(2)}</td><td></td></tr>
+            <tr><td colSpan={2} className="px-4 py-3 text-right">Total Expense</td><td className="px-4 py-3 text-right">{money(total)}</td><td></td></tr>
           </tfoot>
         </table>
       </div>

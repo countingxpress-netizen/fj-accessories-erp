@@ -7,6 +7,7 @@ import { calcPiUnitPrice, calcPiUnitPriceWithMarkup, calcPiWeightLbs } from "@/l
 import { resolveRate } from "@/lib/rateHistory";
 import { amountInWords } from "@/lib/numberToWords";
 import { getCurrentUserId } from "@/lib/currentUser";
+import { money } from "@/lib/format";
 
 type Booking = {
   id: string; booking_no: string; booking_date: string | null; quantity_pcs: number; product_id: string; customer_id: string;
@@ -585,7 +586,7 @@ export default function ProformaForm({
                       )}
                     </td>
                     <td className="px-3 py-2 text-right">
-                      {calcLineAmount(b.quantity_pcs, roundPrice(parseFloat(bookingPrice[b.id] || "0")), basis).toFixed(2)}
+                      {money(calcLineAmount(b.quantity_pcs, roundPrice(parseFloat(bookingPrice[b.id] || "0")), basis))}
                     </td>
                   </tr>
                 );
@@ -625,7 +626,7 @@ export default function ProformaForm({
                     </select>
                   </td>
                   <td className="px-3 py-2"><input type="number" step="0.0001" value={l.priceUnit} onChange={(e) => updateManualLine(i, "priceUnit", e.target.value)} className="w-full rounded border px-2 py-1 text-sm" /></td>
-                  <td className="px-3 py-2 text-right">{calcLineAmount(parseFloat(l.qtyPcs) || 0, parseFloat(l.priceUnit) || 0, l.priceBasis).toFixed(2)}</td>
+                  <td className="px-3 py-2 text-right">{money(calcLineAmount(parseFloat(l.qtyPcs) || 0, parseFloat(l.priceUnit) || 0, l.priceBasis))}</td>
                   <td className="px-3 py-2 text-right">
                     {manualLines.length > 1 && <button type="button" onClick={() => removeManualLine(i)} className="text-red-600 text-xs hover:underline">সরান</button>}
                   </td>
@@ -679,7 +680,7 @@ export default function ProformaForm({
             <input type="number" step="0.01" value={totalWeightKg} onChange={(e) => { setTotalWeightKg(e.target.value); setWeightTouched(true); }} className="rounded-lg border px-3 py-2 text-sm w-32" />
             {weightTouched && autoWeightKg > 0 && (
               <button type="button" onClick={() => { setWeightTouched(false); setTotalWeightKg(autoWeightKg.toFixed(2)); }} className="text-xs text-blue-600 hover:underline whitespace-nowrap">
-                Auto {autoWeightKg.toFixed(2)}
+                Auto {money(autoWeightKg)}
               </button>
             )}
           </div>
@@ -722,9 +723,9 @@ export default function ProformaForm({
       </div>
 
       <div className="rounded-lg bg-gray-50 border p-4 space-y-1 text-sm">
-        <p>Subtotal: <strong>{currency} {subtotal.toFixed(2)}</strong></p>
-        {discountType !== "none" && <p>Discount: <strong>{currency} {discountAmount.toFixed(2)}</strong></p>}
-        <p className="text-base">Total: <strong>{currency} {totalAmount.toFixed(2)}</strong></p>
+        <p>Subtotal: <strong>{currency} {money(subtotal)}</strong></p>
+        {discountType !== "none" && <p>Discount: <strong>{currency} {money(discountAmount)}</strong></p>}
+        <p className="text-base">Total: <strong>{currency} {money(totalAmount)}</strong></p>
         <p className="text-xs text-gray-500 italic">{amountInWords(totalAmount, currency)}</p>
       </div>
 

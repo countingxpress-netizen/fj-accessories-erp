@@ -6,6 +6,7 @@ import { generateNextDocNo } from "@/lib/docNumber";
 import { toInches } from "@/lib/calcTubeCutting";
 import { postBookingConsumptionJv } from "@/lib/inventoryCost";
 import { getCurrentUserId } from "@/lib/currentUser";
+import { money } from "@/lib/format";
 
 type Customer = { id: string; name: string; default_print_rate: number | null; default_adhesive_rate: number | null };
 type Warehouse = { id: string; name: string };
@@ -746,23 +747,23 @@ const selected = customers.find((c) => String(c.id) === String(newCustomerId));
       {calculated && (
         <div className="rounded-lg bg-blue-50 border border-blue-200 p-4 space-y-1">
           <p className="text-sm font-medium text-blue-900">
-            Tube: {calculated.tube.toFixed(2)} {unit} | Cutting: {calculated.cutting.toFixed(2)} {unit}
+            Tube: {money(calculated.tube)} {unit} | Cutting: {money(calculated.cutting)} {unit}
           </p>
           <p className="text-sm text-blue-800">
-            Required: <strong>{calculated.finalLbs.toFixed(2)} Lbs</strong> ≈ {calculated.kg.toFixed(2)} Kg ≈ {calculated.bags.toFixed(2)} Bags
+            Required: <strong>{money(calculated.finalLbs)} Lbs</strong> ≈ {money(calculated.kg)} Kg ≈ {money(calculated.bags)} Bags
           </p>
           {materialType === "pe_standard" && (
-            <p className="text-sm text-blue-800">LLDPE: {calculated.lldpe.toFixed(2)} Lbs | LDPE: {calculated.ldpe.toFixed(2)} Lbs</p>
+            <p className="text-sm text-blue-800">LLDPE: {money(calculated.lldpe)} Lbs | LDPE: {money(calculated.ldpe)} Lbs</p>
           )}
           {materialType === "pe_rld" && (
-            <p className="text-sm text-blue-800">LLDPE: {calculated.lldpe.toFixed(2)} Lbs | Recycled Chips: {calculated.rld.toFixed(2)} Lbs | LDPE: {calculated.ldpe.toFixed(2)} Lbs</p>
+            <p className="text-sm text-blue-800">LLDPE: {money(calculated.lldpe)} Lbs | Recycled Chips: {money(calculated.rld)} Lbs | LDPE: {money(calculated.ldpe)} Lbs</p>
           )}
           {materialType === "pp" && (
-            <p className="text-sm text-blue-800">PP: {calculated.pp.toFixed(2)} Lbs</p>
+            <p className="text-sm text-blue-800">PP: {money(calculated.pp)} Lbs</p>
           )}
           {materialType === "custom" && (
             <p className="text-sm text-blue-800">
-              {calculated.customSplit.map((c) => `${materials.find((m) => m.id === c.material_id)?.material_name}: ${c.qty.toFixed(2)} Lbs`).join(" | ") || "শতাংশ দিন"}
+              {calculated.customSplit.map((c) => `${materials.find((m) => m.id === c.material_id)?.material_name}: ${money(c.qty)} Lbs`).join(" | ") || "শতাংশ দিন"}
             </p>
           )}
         </div>
@@ -800,7 +801,7 @@ const selected = customers.find((c) => String(c.id) === String(newCustomerId));
                   <td className="px-3 py-2">{item.customerBookingRef || "-"}</td>
                   <td className="px-3 py-2">{item.productDetails || "-"}</td>
                   <td className="px-3 py-2 text-right">{item.quantity}</td>
-                  <td className="px-3 py-2 text-right">{item.finalLbs.toFixed(2)}</td>
+                  <td className="px-3 py-2 text-right">{money(item.finalLbs)}</td>
                   <td className="px-3 py-2">{item.warehouseName}</td>
                   <td className="px-3 py-2 text-right">
                     <button type="button" onClick={() => removePendingItem(i)} className="text-red-600 text-xs hover:underline">সরান</button>

@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { todayLocal } from "@/lib/payroll";
 import { postPayrollPayment, reversePayrollJv } from "@/lib/payrollJv";
 import GuardedAction from "@/app/dashboard/GuardedAction";
+import { money } from "@/lib/format";
 
 const monthNames = ["","January","February","March","April","May","June","July","August","September","October","November","December"];
 
@@ -55,15 +56,15 @@ export default function SalaryRow({ row, cashBankAccounts }: { row: any; cashBan
         {monthNames[row.month]} {row.year}
         {row.creator?.full_name && <div className="text-[11px] text-gray-400">by {row.creator.full_name}</div>}
       </td>
-      <td className="px-4 py-2 text-right">{row.basic?.toFixed(2)}</td>
+      <td className="px-4 py-2 text-right">{money(row.basic)}</td>
       <td className="px-4 py-2 text-right">{row.salary_type === "fixed" ? "—" : (row.ot_hours ?? 0)}</td>
       <td className="px-4 py-2 text-right">{row.salary_type === "fixed" ? "—" : `${row.absent_days ?? 0}d`}</td>
       <td className={`px-4 py-2 text-right ${(row.net_adjustment ?? 0) < 0 ? "text-red-600" : ""}`}>
-        {row.salary_type === "fixed" ? "—" : (row.net_adjustment ?? 0).toFixed(2)}
+        {row.salary_type === "fixed" ? "—" : money((row.net_adjustment ?? 0))}
       </td>
-      <td className="px-4 py-2 text-right">{(row.advance ?? 0).toFixed(2)}</td>
-      <td className="px-4 py-2 text-right">{(row.other_deduction ?? 0).toFixed(2)}</td>
-      <td className="px-4 py-2 text-right font-medium">{row.net_salary?.toFixed(2)}</td>
+      <td className="px-4 py-2 text-right">{money((row.advance ?? 0))}</td>
+      <td className="px-4 py-2 text-right">{money((row.other_deduction ?? 0))}</td>
+      <td className="px-4 py-2 text-right font-medium">{money(row.net_salary)}</td>
       <td className="px-4 py-2">
         {row.paid ? <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs text-green-700">Paid</span> : <span className="rounded-full bg-orange-100 px-2 py-0.5 text-xs text-orange-700">Unpaid</span>}
       </td>

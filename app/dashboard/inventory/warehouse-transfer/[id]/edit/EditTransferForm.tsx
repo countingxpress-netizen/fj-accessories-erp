@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { money } from "@/lib/format";
 
 const LBS_PER_BAG = 55;
 
@@ -188,7 +189,7 @@ export default function EditTransferForm({
           </select>
         </div>
         {quantity && (
-          <p className="text-sm text-gray-500 pb-2">= {quantityLbs.toFixed(2)} Lbs</p>
+          <p className="text-sm text-gray-500 pb-2">= {money(quantityLbs)} Lbs</p>
         )}
       </div>
 

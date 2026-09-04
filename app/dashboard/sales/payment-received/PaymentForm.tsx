@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { generateNextDocNo } from "@/lib/docNumber";
 import { formatDate } from "@/lib/formatDate";
 import { getCurrentUserId } from "@/lib/currentUser";
+import { money } from "@/lib/format";
 
 type Customer = { id: string; name: string };
 type Account = { id: string; account_code: string; account_name: string };
@@ -195,7 +196,7 @@ export default function PaymentForm({
             </div>
             <label className="flex items-center gap-2 text-sm bg-blue-50 border border-blue-200 rounded-lg px-3 py-2">
               <input type="checkbox" checked={isFullReceived} onChange={(e) => toggleReceivedFull(e.target.checked)} />
-              Received Full Amount (BDT {totalDue.toFixed(2)})
+              Received Full Amount (BDT {money(totalDue)})
             </label>
           </div>
 
@@ -217,8 +218,8 @@ export default function PaymentForm({
                   <tr key={inv.id} className="border-t">
                     <td className="px-3 py-2 font-medium">{inv.invoice_no}</td>
                     <td className="px-3 py-2 text-gray-500">{formatDate(inv.invoice_date)}</td>
-                    <td className="px-3 py-2 text-right">{inv.total.toFixed(2)}</td>
-                    <td className="px-3 py-2 text-right">{inv.due.toFixed(2)}</td>
+                    <td className="px-3 py-2 text-right">{money(inv.total)}</td>
+                    <td className="px-3 py-2 text-right">{money(inv.due)}</td>
                     <td className="px-3 py-2">
                       <input
                         type="number" step="0.01" min="0" max={inv.due}

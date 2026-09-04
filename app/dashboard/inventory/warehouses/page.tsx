@@ -3,7 +3,7 @@ import AddWarehouseForm from "./AddWarehouseForm";
 import WarehouseRow from "./WarehouseRow";
 import Link from "next/link";
 
-const fmt = (n: number) => n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const fmt = (n: number) => n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 export default async function WarehousesPage() {
   const supabase = await createClient();

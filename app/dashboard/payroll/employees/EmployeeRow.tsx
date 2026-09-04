@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { salaryTypeOf, type SalaryType } from "@/lib/payroll";
 import GuardedAction from "@/app/dashboard/GuardedAction";
+import { money } from "@/lib/format";
 
 function TypeBadge({ type }: { type: SalaryType }) {
   return type === "production" ? (
@@ -58,7 +59,7 @@ export default function EmployeeRow({ employee, salaryType, effectiveBasic }: { 
         </td>
         <td className="px-4 py-2"><TypeBadge type={previewType} /></td>
         <td className="px-4 py-2"><input type="number" step="0.01" value={basicSalary} onChange={(e) => setBasicSalary(e.target.value)} className="w-24 rounded border px-2 py-1 text-sm" /></td>
-        <td className="px-4 py-2 text-right text-gray-400">{effectiveBasic.toFixed(2)}</td>
+        <td className="px-4 py-2 text-right text-gray-400">{money(effectiveBasic)}</td>
         <td className="px-4 py-2">
           <input type="checkbox" checked={isActive} onChange={(e) => setIsActive(e.target.checked)} />
           <input type="date" value={joinDate} onChange={(e) => setJoinDate(e.target.value)} className="mt-1 block rounded border px-2 py-1 text-xs" title="Join date" />
@@ -79,9 +80,9 @@ export default function EmployeeRow({ employee, salaryType, effectiveBasic }: { 
       <td className="px-4 py-2 text-gray-500">{employee.designation || "-"}</td>
       <td className="px-4 py-2 text-gray-500">{employee.department || "-"}</td>
       <td className="px-4 py-2"><TypeBadge type={salaryType} /></td>
-      <td className="px-4 py-2 text-right">{employee.basic_salary?.toFixed(2)}</td>
+      <td className="px-4 py-2 text-right">{money(employee.basic_salary)}</td>
       <td className={`px-4 py-2 text-right ${effectiveBasic !== employee.basic_salary ? "font-medium text-indigo-700" : "text-gray-400"}`}>
-        {effectiveBasic.toFixed(2)}
+        {money(effectiveBasic)}
       </td>
       <td className="px-4 py-2">
         {employee.is_active ? <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs text-green-700">Active</span> : <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600">Inactive</span>}

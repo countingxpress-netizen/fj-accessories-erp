@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/client";
 import { formatDate } from "@/lib/formatDate";
 import { deleteSupplierPaymentCascade } from "@/lib/paymentGivenDelete";
 import GuardedAction from "@/app/dashboard/GuardedAction";
+import { money } from "@/lib/format";
 
 export default function PaymentGivenRow({
   payment, selected, onToggleSelect,
@@ -38,7 +39,7 @@ export default function PaymentGivenRow({
       </td>
       <td className="px-4 py-2">{payment.suppliers?.name ?? "-"}</td>
       <td className="px-4 py-2 text-gray-500">{payment.note || "-"}</td>
-      <td className="px-4 py-2 text-right">{payment.amount.toFixed(2)}</td>
+      <td className="px-4 py-2 text-right">{money(payment.amount)}</td>
       <td className="px-4 py-2 text-right whitespace-nowrap">
         <GuardedAction table="supplier_payments" recordId={payment.id} recordLabel={`${payment.suppliers?.name ?? ""} ${formatDate(payment.payment_date)}`} action="delete"
           onAllowed={handleDelete}

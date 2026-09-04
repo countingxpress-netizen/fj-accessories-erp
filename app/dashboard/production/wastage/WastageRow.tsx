@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { formatDate } from "@/lib/formatDate";
 import { postWastageJv, reverseInventoryJv } from "@/lib/inventoryCost";
 import GuardedAction from "@/app/dashboard/GuardedAction";
+import { money } from "@/lib/format";
 
 const stageLabels: Record<string, string> = { blowing: "Blowing", printing: "Printing", cutting: "Cutting" };
 
@@ -157,7 +158,7 @@ export default function WastageRow({ wastage, warehouses }: { wastage: any; ware
         {wastage.production_orders?.bookings?.customers?.name ?? "-"} / {wastage.production_orders?.bookings?.booking_no ?? "-"}
       </td>
       <td className="px-4 py-2">{stageLabels[wastage.stage] ?? wastage.stage}</td>
-      <td className="px-4 py-2 text-right">{wastage.quantity_lbs.toFixed(2)}</td>
+      <td className="px-4 py-2 text-right">{money(wastage.quantity_lbs)}</td>
       <td className="px-4 py-2">
         {wastage.recycled ? <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs text-green-700">Yes</span> : <span className="text-gray-400 text-xs">No</span>}
       </td>

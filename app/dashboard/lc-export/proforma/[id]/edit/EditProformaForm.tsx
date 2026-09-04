@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { amountInWords, currencySymbol } from "@/lib/numberToWords";
+import { money } from "@/lib/format";
 
 type Garment = { id: string; customer_id: string; name: string; address: string | null };
 type AdvisingBank = { id: string; name: string; branch: string | null; address: string | null; swift: string | null };
@@ -172,7 +173,7 @@ export default function EditProformaForm({
                   </select>
                 </td>
                 <td className="px-3 py-2"><input type="number" step="0.0001" value={l.priceUnit} onChange={(e) => updateLine(i, "priceUnit", e.target.value)} className="w-full rounded border px-2 py-1 text-sm" /></td>
-                <td className="px-3 py-2 text-right">{sym}{calcAmount(l.qtyPcs, l.priceUnit, l.priceBasis).toFixed(2)}</td>
+                <td className="px-3 py-2 text-right">{sym}{money(calcAmount(l.qtyPcs, l.priceUnit, l.priceBasis))}</td>
               </tr>
             ))}
           </tbody>
@@ -273,9 +274,9 @@ export default function EditProformaForm({
       </div>
 
       <div className="rounded-lg bg-gray-50 border p-4 space-y-1 text-sm">
-        <p>Subtotal: <strong>{sym}{subtotal.toFixed(2)}</strong></p>
-        {discountType !== "none" && <p>Discount: <strong>{sym}{discountAmount.toFixed(2)}</strong></p>}
-        <p className="text-base">Total: <strong>{sym}{totalAmount.toFixed(2)}</strong></p>
+        <p>Subtotal: <strong>{sym}{money(subtotal)}</strong></p>
+        {discountType !== "none" && <p>Discount: <strong>{sym}{money(discountAmount)}</strong></p>}
+        <p className="text-base">Total: <strong>{sym}{money(totalAmount)}</strong></p>
         <p className="text-xs text-gray-500 italic">{amountInWords(totalAmount, currency)}</p>
       </div>
 

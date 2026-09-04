@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/client";
 import { formatDate } from "@/lib/formatDate";
 import { deleteExpenseCascade } from "@/lib/expenseDelete";
 import GuardedAction from "@/app/dashboard/GuardedAction";
+import { money } from "@/lib/format";
 
 export default function ExpenseRow({
   expense, selected, onToggleSelect,
@@ -39,7 +40,7 @@ export default function ExpenseRow({
       <td className="px-4 py-2">{expense.chart_of_accounts?.account_name ?? "-"}</td>
       <td className="px-4 py-2 text-gray-500">{expense.payee || "-"}</td>
       <td className="px-4 py-2 text-gray-600">{expense.description || "-"}</td>
-      <td className="px-4 py-2 text-right">{expense.amount?.toFixed(2)}</td>
+      <td className="px-4 py-2 text-right">{money(expense.amount)}</td>
       <td className="px-4 py-2 text-right">
         <GuardedAction table="expenses" recordId={expense.id} recordLabel={expense.description ?? formatDate(expense.expense_date)} action="delete"
           onAllowed={handleDelete}

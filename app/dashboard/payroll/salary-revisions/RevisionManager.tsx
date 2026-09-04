@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { effectiveBasic, todayLocal, type SalaryRevision } from "@/lib/payroll";
 import { formatDate } from "@/lib/formatDate";
 import GuardedAction from "@/app/dashboard/GuardedAction";
+import { money } from "@/lib/format";
 
 type Employee = { id: string; name: string; employee_code: string; basic_salary: number };
 type Revision = SalaryRevision & { id: string; employee_id: string; note: string | null };
@@ -103,16 +104,16 @@ export default function RevisionManager({
               return (
                 <tr key={emp.id} className="border-t align-top">
                   <td className="px-4 py-2 whitespace-nowrap">{emp.employee_code} — {emp.name}</td>
-                  <td className="px-4 py-2 text-right font-medium">{eff.toFixed(2)}</td>
+                  <td className="px-4 py-2 text-right font-medium">{money(eff)}</td>
                   <td className="px-4 py-2">
                     {hist.length === 0 ? (
-                      <span className="text-gray-400 italic">— (মূল Basic {emp.basic_salary.toFixed(2)})</span>
+                      <span className="text-gray-400 italic">— (মূল Basic {money(emp.basic_salary)})</span>
                     ) : (
                       <ul className="space-y-1">
                         {hist.map((r) => (
                           <li key={r.id} className="flex items-center gap-2">
                             <span className="tabular-nums">{formatDate(r.effective_date)}</span>
-                            <span className="font-medium">{r.basic_salary.toFixed(2)}</span>
+                            <span className="font-medium">{money(r.basic_salary)}</span>
                             {r.note && <span className="text-gray-500">— {r.note}</span>}
                             <GuardedAction table="salary_revisions" recordId={r.id} recordLabel={`${emp.name} ${formatDate(r.effective_date)}`} action="delete"
                               onAllowed={() => handleDelete(r.id)}

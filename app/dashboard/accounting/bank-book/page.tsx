@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { money } from "@/lib/format";
 
 export default async function BankBookPage({
   searchParams,
@@ -125,7 +126,7 @@ export default async function BankBookPage({
                     <td colSpan={5} className="px-4 py-2 font-medium text-gray-600">
                       Opening Balance
                     </td>
-                    <td className="px-4 py-2 text-right font-medium">{openingBalance.toFixed(2)}</td>
+                    <td className="px-4 py-2 text-right font-medium">{money(openingBalance)}</td>
                   </tr>
                 )}
                 {rows.map((l: any) => (
@@ -142,9 +143,9 @@ export default async function BankBookPage({
                     <td className="px-4 py-2 text-gray-600">
                       {l.memo || l.journal_vouchers?.narration || "-"}
                     </td>
-                    <td className="px-4 py-2 text-right">{l.debit ? l.debit.toFixed(2) : ""}</td>
-                    <td className="px-4 py-2 text-right">{l.credit ? l.credit.toFixed(2) : ""}</td>
-                    <td className="px-4 py-2 text-right font-medium">{l.runningBalance.toFixed(2)}</td>
+                    <td className="px-4 py-2 text-right">{l.debit ? money(l.debit) : ""}</td>
+                    <td className="px-4 py-2 text-right">{l.credit ? money(l.credit) : ""}</td>
+                    <td className="px-4 py-2 text-right font-medium">{money(l.runningBalance)}</td>
                   </tr>
                 ))}
                 {rows.length === 0 && (
@@ -158,10 +159,10 @@ export default async function BankBookPage({
               <tfoot className="border-t-2 font-semibold bg-gray-50">
                 <tr>
                   <td colSpan={3} className="px-4 py-3 text-right">Total</td>
-                  <td className="px-4 py-3 text-right">{totalDeposit.toFixed(2)}</td>
-                  <td className="px-4 py-3 text-right">{totalWithdrawal.toFixed(2)}</td>
+                  <td className="px-4 py-3 text-right">{money(totalDeposit)}</td>
+                  <td className="px-4 py-3 text-right">{money(totalWithdrawal)}</td>
                   <td className="px-4 py-3 text-right">
-                    {rows.length > 0 ? rows[rows.length - 1].runningBalance.toFixed(2) : openingBalance.toFixed(2)}
+                    {rows.length > 0 ? money(rows[rows.length - 1].runningBalance) : money(openingBalance)}
                   </td>
                 </tr>
               </tfoot>

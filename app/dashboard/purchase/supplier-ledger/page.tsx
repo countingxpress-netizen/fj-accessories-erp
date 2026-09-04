@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { money } from "@/lib/format";
 
 export default async function SupplierLedgerListPage() {
   const supabase = await createClient();
@@ -39,7 +40,7 @@ export default async function SupplierLedgerListPage() {
           >
             <span className="font-medium text-gray-800">{s.name}</span>
             <span className="text-gray-500">
-              মোট ক্রয়: {(totals[s.id] ?? 0).toFixed(2)} →
+              মোট ক্রয়: {money((totals[s.id] ?? 0))} →
             </span>
           </Link>
         ))}

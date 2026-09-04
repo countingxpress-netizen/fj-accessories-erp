@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { todayLocal, monthRange } from "@/lib/payroll";
 
 function fmt(n: number) {
-  return n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 const STATUS_LABELS: Record<string, string> = {

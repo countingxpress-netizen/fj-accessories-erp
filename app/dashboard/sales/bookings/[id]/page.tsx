@@ -6,6 +6,7 @@ import { calcTubeCutting, calcRequiredLbs } from "@/lib/calcTubeCutting";
 import { notFound } from "next/navigation";
 import PrintButton from "@/app/dashboard/PrintButton";
 import GuardedAction from "@/app/dashboard/GuardedAction";
+import { money } from "@/lib/format";
 
 export default async function BookingViewPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -212,14 +213,14 @@ export default async function BookingViewPage({ params }: { params: Promise<{ id
                   <td className="border border-gray-800 px-2 py-2">{b.product_details || b.finished_goods?.product_name || "-"}</td>
                   <td className="border border-gray-800 px-2 py-2">{measurement}</td>
                   <td className="border border-gray-800 px-2 py-2 text-right">{b.quantity_pcs}</td>
-                  <td className="border border-gray-800 px-2 py-2 text-right">{price ? price.unitPrice.toFixed(2) : "-"}</td>
-                  <td className="border border-gray-800 px-2 py-2 text-right">{price ? price.totalAmount.toFixed(2) : "-"}</td>
-                  <td className="border border-gray-800 px-2 py-2 text-center print:hidden">{tube.toFixed(2)} {unit}</td>
-                  <td className="border border-gray-800 px-2 py-2 text-center print:hidden">{cutting.toFixed(2)} {unit}</td>
+                  <td className="border border-gray-800 px-2 py-2 text-right">{price ? money(price.unitPrice) : "-"}</td>
+                  <td className="border border-gray-800 px-2 py-2 text-right">{price ? money(price.totalAmount) : "-"}</td>
+                  <td className="border border-gray-800 px-2 py-2 text-center print:hidden">{money(tube)} {unit}</td>
+                  <td className="border border-gray-800 px-2 py-2 text-center print:hidden">{money(cutting)} {unit}</td>
                   <td className="border border-gray-800 px-2 py-2 text-center">{b.thickness_mm}</td>
                   <td className="border border-gray-800 px-2 py-2 text-center print:hidden">{b.production_thickness_mm}</td>
                   <td className="border border-gray-800 px-2 py-2 text-center print:hidden">{b.pi_thickness_mm ?? "-"}</td>
-                  <td className="border border-gray-800 px-2 py-2 text-right">{orderLbs.toFixed(2)}</td>
+                  <td className="border border-gray-800 px-2 py-2 text-right">{money(orderLbs)}</td>
                   <td className="border border-gray-800 px-2 py-2 text-right print:hidden">{b.required_lbs}</td>
                   <td className="border border-gray-800 px-2 py-2 text-center">{statusLabel}</td>
                 </tr>
@@ -227,16 +228,16 @@ export default async function BookingViewPage({ params }: { params: Promise<{ id
             })}
             <tr className="font-semibold bg-gray-50">
               <td className="border border-gray-800 px-2 py-2 text-right" colSpan={4}>Total</td>
-              <td className="border border-gray-800 px-2 py-2 text-right">{totalQuantity.toLocaleString()}</td>
+              <td className="border border-gray-800 px-2 py-2 text-right">{totalQuantity.toLocaleString("en-IN")}</td>
               <td className="border border-gray-800 px-2 py-2"></td>
-              <td className="border border-gray-800 px-2 py-2 text-right">{totalAmountSum.toFixed(2)}</td>
+              <td className="border border-gray-800 px-2 py-2 text-right">{money(totalAmountSum)}</td>
               <td className="border border-gray-800 px-2 py-2 print:hidden"></td>
               <td className="border border-gray-800 px-2 py-2 print:hidden"></td>
               <td className="border border-gray-800 px-2 py-2"></td>
               <td className="border border-gray-800 px-2 py-2 print:hidden"></td>
               <td className="border border-gray-800 px-2 py-2 print:hidden"></td>
-              <td className="border border-gray-800 px-2 py-2 text-right">{totalOrderLbs.toFixed(2)}</td>
-              <td className="border border-gray-800 px-2 py-2 text-right print:hidden">{totalProductionLbs.toFixed(2)}</td>
+              <td className="border border-gray-800 px-2 py-2 text-right">{money(totalOrderLbs)}</td>
+              <td className="border border-gray-800 px-2 py-2 text-right print:hidden">{money(totalProductionLbs)}</td>
               <td className="border border-gray-800 px-2 py-2"></td>
             </tr>
           </tbody>

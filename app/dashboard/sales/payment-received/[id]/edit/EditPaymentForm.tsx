@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { generateNextDocNo } from "@/lib/docNumber";
 import { formatDate } from "@/lib/formatDate";
 import { getCurrentUserId } from "@/lib/currentUser";
+import { money } from "@/lib/format";
 
 type Account = { id: string; account_code: string; account_name: string };
 type Invoice = { id: string; invoice_no: string; invoice_date: string; total: number; due: number };
@@ -105,7 +106,7 @@ export default function EditPaymentForm({
 
   return (
     <form onSubmit={handleSubmit} className="rounded-xl border bg-white p-6 shadow-sm space-y-4 max-w-2xl">
-      <p className="text-sm text-gray-600">Total Amount: <strong>{totalAmount.toFixed(2)}</strong></p>
+      <p className="text-sm text-gray-600">Total Amount: <strong>{money(totalAmount)}</strong></p>
 
       <div className="rounded-lg border overflow-hidden">
         <div className="bg-gray-50 px-3 py-2 text-sm font-semibold text-gray-700">Invoice Allocations</div>
@@ -125,8 +126,8 @@ export default function EditPaymentForm({
               <tr key={inv.id} className="border-t">
                 <td className="px-3 py-2 font-medium">{inv.invoice_no}</td>
                 <td className="px-3 py-2 text-gray-500">{formatDate(inv.invoice_date)}</td>
-                <td className="px-3 py-2 text-right">{inv.total.toFixed(2)}</td>
-                <td className="px-3 py-2 text-right">{inv.due.toFixed(2)}</td>
+                <td className="px-3 py-2 text-right">{money(inv.total)}</td>
+                <td className="px-3 py-2 text-right">{money(inv.due)}</td>
                 <td className="px-3 py-2">
                   <input
                     type="number" step="0.01" min="0" max={inv.due}

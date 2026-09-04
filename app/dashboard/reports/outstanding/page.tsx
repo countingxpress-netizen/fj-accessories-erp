@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { money } from "@/lib/format";
 
 export default async function OutstandingReportPage() {
   const supabase = await createClient();
@@ -46,11 +47,11 @@ export default async function OutstandingReportPage() {
       <div className="grid grid-cols-2 gap-4 mb-6">
         <div className="rounded-xl border bg-white p-4 shadow-sm">
           <p className="text-xs text-gray-500">Total Receivable (কাস্টমার বাকি)</p>
-          <p className="text-lg font-semibold text-blue-700">{totalReceivable.toFixed(2)}</p>
+          <p className="text-lg font-semibold text-blue-700">{money(totalReceivable)}</p>
         </div>
         <div className="rounded-xl border bg-white p-4 shadow-sm">
           <p className="text-xs text-gray-500">Total Payable (সাপ্লায়ার পাওনা)</p>
-          <p className="text-lg font-semibold text-amber-700">{totalPayable.toFixed(2)}</p>
+          <p className="text-lg font-semibold text-amber-700">{money(totalPayable)}</p>
         </div>
       </div>
 
@@ -66,7 +67,7 @@ export default async function OutstandingReportPage() {
                 <td className="px-4 py-2">
                   <Link href={`/dashboard/sales/customer-ledger/${c.id}`} className="hover:underline hover:text-blue-700">{c.name}</Link>
                 </td>
-                <td className="px-4 py-2 text-right">{(customerDue[c.id] ?? 0).toFixed(2)}</td>
+                <td className="px-4 py-2 text-right">{money((customerDue[c.id] ?? 0))}</td>
               </tr>
             ))}
             {(customers ?? []).filter((c) => (customerDue[c.id] ?? 0) > 0).length === 0 && (
@@ -88,7 +89,7 @@ export default async function OutstandingReportPage() {
                 <td className="px-4 py-2">
                   <Link href={`/dashboard/purchase/supplier-ledger/${s.id}`} className="hover:underline hover:text-blue-700">{s.name}</Link>
                 </td>
-                <td className="px-4 py-2 text-right">{(supplierDue[s.id] ?? 0).toFixed(2)}</td>
+                <td className="px-4 py-2 text-right">{money((supplierDue[s.id] ?? 0))}</td>
               </tr>
             ))}
             {(suppliers ?? []).filter((s) => (supplierDue[s.id] ?? 0) > 0).length === 0 && (

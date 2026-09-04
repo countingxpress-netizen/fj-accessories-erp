@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { generateNextDocNo } from "@/lib/docNumber";
 import { postBookingConsumptionJv } from "@/lib/inventoryCost";
+import { money } from "@/lib/format";
 
 
 
@@ -68,7 +69,7 @@ export default function ProductionOrderForm({
     const currentQty = stock?.quantity_lbs ?? 0;
     if (currentQty < qty) {
       setLoading(false);
-      setError(`পর্যাপ্ত স্টক নেই। বর্তমান স্টক: ${currentQty.toFixed(2)} Lbs, প্রয়োজন: ${qty.toFixed(2)} Lbs`);
+      setError(`পর্যাপ্ত স্টক নেই। বর্তমান স্টক: ${money(currentQty)} Lbs, প্রয়োজন: ${money(qty)} Lbs`);
       return;
     }
 

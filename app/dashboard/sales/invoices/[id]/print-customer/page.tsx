@@ -6,7 +6,7 @@ import { amountInWords } from "@/lib/numberToWords";
 import { AT_DEFAULT_MARKUP_PERCENTAGE, AT_COMMISSION_LBS_DIVISOR, calcAtCustomerLine } from "@/lib/atCommission";
 
 function fmt(n: number) {
-  return n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 function formatMeasurement(b: any) {
@@ -117,7 +117,7 @@ export default async function InvoicePrintCustomerPage({ params }: { params: Pro
               <td className="py-2">{item.finished_goods?.product_name}</td>
               <td className="py-2 text-gray-600 text-xs">{formatMeasurement(item.bookings)}</td>
               <td className="text-right py-2">{item.quantity_pcs}</td>
-              <td className="text-right py-2">{item.customerUnitPrice.toFixed(2)}</td>
+              <td className="text-right py-2">{fmt(item.customerUnitPrice)}</td>
               <td className="text-right py-2">{fmt(item.customerAmount)}</td>
             </tr>
           ))}

@@ -6,6 +6,7 @@ import { formatDate } from "@/lib/formatDate";
 import { todayLocal } from "@/lib/payroll";
 import { postPayrollPayment, reversePayrollJv } from "@/lib/payrollJv";
 import GuardedAction from "@/app/dashboard/GuardedAction";
+import { money } from "@/lib/format";
 
 const festivalLabel: Record<string, string> = {
   eid_ul_fitr: "Eid-ul-Fitr",
@@ -57,9 +58,9 @@ export default function BonusRow({ row, cashBankAccounts }: { row: any; cashBank
         {formatDate(row.bonus_date)}
         {row.creator?.full_name && <div className="text-[11px] text-gray-400">by {row.creator.full_name}</div>}
       </td>
-      <td className="px-4 py-2 text-right">{row.basic?.toFixed(2)}</td>
+      <td className="px-4 py-2 text-right">{money(row.basic)}</td>
       <td className="px-4 py-2 text-right">{row.tenure_months?.toFixed(1)}</td>
-      <td className="px-4 py-2 text-right font-medium">{row.bonus_amount?.toFixed(2)}</td>
+      <td className="px-4 py-2 text-right font-medium">{money(row.bonus_amount)}</td>
       <td className="px-4 py-2">
         {row.paid
           ? <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs text-green-700">Paid</span>

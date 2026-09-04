@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { notFound } from "next/navigation";
+import { money } from "@/lib/format";
 
 const LBS_PER_BAG = 55;
 
@@ -56,9 +57,9 @@ export default async function MaterialStatementPage({
 
       <h1 className="text-2xl font-semibold mt-2 mb-1">{material.material_name} — Stock Statement</h1>
       <p className="text-sm text-gray-500 mb-4">
-        বর্তমান ব্যালেন্স: {runningBalance.toFixed(2)} Lbs
-        {" "}≈ {(runningBalance * 0.453592).toFixed(2)} Kg
-        {" "}≈ {(runningBalance / LBS_PER_BAG).toFixed(2)} Bags
+        বর্তমান ব্যালেন্স: {money(runningBalance)} Lbs
+        {" "}≈ {money((runningBalance * 0.453592))} Kg
+        {" "}≈ {money((runningBalance / LBS_PER_BAG))} Bags
       </p>
 
       <div className="overflow-hidden rounded-xl border bg-white shadow-sm">
@@ -82,12 +83,12 @@ export default async function MaterialStatementPage({
                   {referenceLabels[e.reference_type] ?? e.reference_type ?? "-"}
                 </td>
                 <td className="px-4 py-2 text-right">
-                  {e.txn_type === "in" ? e.quantity.toFixed(2) : ""}
+                  {e.txn_type === "in" ? money(e.quantity) : ""}
                 </td>
                 <td className="px-4 py-2 text-right">
-                  {e.txn_type === "out" ? e.quantity.toFixed(2) : ""}
+                  {e.txn_type === "out" ? money(e.quantity) : ""}
                 </td>
-                <td className="px-4 py-2 text-right font-medium">{e.runningBalance.toFixed(2)}</td>
+                <td className="px-4 py-2 text-right font-medium">{money(e.runningBalance)}</td>
               </tr>
             ))}
             {rows.length === 0 && (
@@ -101,9 +102,9 @@ export default async function MaterialStatementPage({
           <tfoot className="border-t-2 font-semibold bg-gray-50">
             <tr>
               <td colSpan={3} className="px-4 py-3 text-right">Total</td>
-              <td className="px-4 py-3 text-right">{totalIn.toFixed(2)}</td>
-              <td className="px-4 py-3 text-right">{totalOut.toFixed(2)}</td>
-              <td className="px-4 py-3 text-right">{runningBalance.toFixed(2)}</td>
+              <td className="px-4 py-3 text-right">{money(totalIn)}</td>
+              <td className="px-4 py-3 text-right">{money(totalOut)}</td>
+              <td className="px-4 py-3 text-right">{money(runningBalance)}</td>
             </tr>
           </tfoot>
         </table>

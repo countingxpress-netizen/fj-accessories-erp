@@ -2,6 +2,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import AdvanceForm from "./AdvanceForm";
 import AdvanceRow from "./AdvanceRow";
+import { money } from "@/lib/format";
 
 export default async function AdvancesPage() {
   const supabase = await createClient();
@@ -63,9 +64,9 @@ export default async function AdvancesPage() {
               {outstanding.map((e: any) => (
                 <tr key={e.id} className="border-t">
                   <td className="px-4 py-2">{e.employee_code} — {e.name}</td>
-                  <td className="px-4 py-2 text-right">{e.given.toFixed(2)}</td>
-                  <td className="px-4 py-2 text-right">{e.recovered.toFixed(2)}</td>
-                  <td className="px-4 py-2 text-right font-medium">{e.due.toFixed(2)}</td>
+                  <td className="px-4 py-2 text-right">{money(e.given)}</td>
+                  <td className="px-4 py-2 text-right">{money(e.recovered)}</td>
+                  <td className="px-4 py-2 text-right font-medium">{money(e.due)}</td>
                 </tr>
               ))}
             </tbody>

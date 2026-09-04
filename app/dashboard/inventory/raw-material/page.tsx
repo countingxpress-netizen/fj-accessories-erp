@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import StockAdjustmentForm from "./StockAdjustmentForm";
 import AddRawMaterialForm from "./AddRawMaterialForm";
 import RawMaterialRow from "./RawMaterialRow";
+import { money } from "@/lib/format";
 
 const LBS_PER_BAG = 55;
 
@@ -104,9 +105,9 @@ export default async function RawMaterialStockPage() {
                   {data.name}
                 </Link>
                 <div className="text-sm text-gray-600 space-x-4">
-                  <span className="font-medium">{data.total.toFixed(2)} Lbs</span>
-                  <span>≈ {totalKg.toFixed(2)} Kg</span>
-                  <span>≈ {totalBags.toFixed(2)} Bags</span>
+                  <span className="font-medium">{money(data.total)} Lbs</span>
+                  <span>≈ {money(totalKg)} Kg</span>
+                  <span>≈ {money(totalBags)} Bags</span>
                 </div>
               </div>
               <table className="w-full text-sm">
@@ -122,9 +123,9 @@ export default async function RawMaterialStockPage() {
                   {data.rows.map((r) => (
                     <tr key={r.id} className="border-t">
                       <td className="px-4 py-2">{r.warehouses?.name ?? "-"}</td>
-                      <td className="px-4 py-2 text-right">{r.quantity_lbs.toFixed(2)}</td>
-                      <td className="px-4 py-2 text-right">{(r.quantity_lbs * 0.453592).toFixed(2)}</td>
-                      <td className="px-4 py-2 text-right">{(r.quantity_lbs / LBS_PER_BAG).toFixed(2)}</td>
+                      <td className="px-4 py-2 text-right">{money(r.quantity_lbs)}</td>
+                      <td className="px-4 py-2 text-right">{money((r.quantity_lbs * 0.453592))}</td>
+                      <td className="px-4 py-2 text-right">{money((r.quantity_lbs / LBS_PER_BAG))}</td>
                     </tr>
                   ))}
                   {data.rows.length === 0 && (

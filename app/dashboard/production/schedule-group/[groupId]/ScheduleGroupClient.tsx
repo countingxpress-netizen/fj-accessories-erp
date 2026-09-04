@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { money } from "@/lib/format";
 
 function formatMeasurement(b: any, forStage: "blowing" | "other") {
   const unit = b.measurement_unit;
@@ -182,9 +183,9 @@ export default function ScheduleGroupClient({
                   <td className="border border-gray-800 text-center py-2">{b.production_thickness_mm} mm</td>
                 )}
                 {scheduleType === "blowing" ? (
-                  <td className="border border-gray-800 text-center py-2">{b.required_lbs?.toFixed(2)} Lbs</td>
+                  <td className="border border-gray-800 text-center py-2">{money(b.required_lbs)} Lbs</td>
                 ) : (
-                  <td className="border border-gray-800 text-center py-2">{b.quantity_pcs?.toLocaleString()}.00 Pcs</td>
+                  <td className="border border-gray-800 text-center py-2">{money(b.quantity_pcs ?? 0)} Pcs</td>
                 )}
                 <td className="border border-gray-800 text-center py-2">{remarks[scheduleType][b.id]}</td>
               </tr>
@@ -192,11 +193,11 @@ export default function ScheduleGroupClient({
             <tr className="font-semibold">
               <td className="border border-gray-800 text-center py-2" colSpan={scheduleType === "blowing" ? 2 : 1}>টোটাল =</td>
               {scheduleType === "blowing" ? (
-                <td className="border border-gray-800 text-center py-2">{totalLbs.toFixed(2)} Lbs</td>
+                <td className="border border-gray-800 text-center py-2">{money(totalLbs)} Lbs</td>
               ) : (
                 <>
                   <td className="border border-gray-800 text-center py-2"></td>
-                  <td className="border border-gray-800 text-center py-2">{totalQty.toLocaleString()}.00 Pcs</td>
+                  <td className="border border-gray-800 text-center py-2">{money(totalQty)} Pcs</td>
                 </>
               )}
               <td className="border border-gray-800"></td>

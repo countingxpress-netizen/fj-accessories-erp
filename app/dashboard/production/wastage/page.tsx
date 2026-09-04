@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { formatDate } from "@/lib/formatDate";
 import WastageForm from "./WastageForm";
 import WastageRow from "./WastageRow";
+import { money } from "@/lib/format";
 
 const stageLabels: Record<string, string> = { blowing: "Blowing", printing: "Printing", cutting: "Cutting" };
 
@@ -39,20 +40,20 @@ export default async function WastagePage() {
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
         <div className="rounded-xl border bg-white p-4 shadow-sm">
           <p className="text-xs text-gray-500">Blowing</p>
-          <p className="text-lg font-semibold">{totalByStage.blowing.toFixed(2)} Lbs</p>
+          <p className="text-lg font-semibold">{money(totalByStage.blowing)} Lbs</p>
         </div>
         <div className="rounded-xl border bg-white p-4 shadow-sm">
           <p className="text-xs text-gray-500">Printing</p>
-          <p className="text-lg font-semibold">{totalByStage.printing.toFixed(2)} Lbs</p>
+          <p className="text-lg font-semibold">{money(totalByStage.printing)} Lbs</p>
         </div>
         <div className="rounded-xl border bg-white p-4 shadow-sm">
           <p className="text-xs text-gray-500">Cutting</p>
-          <p className="text-lg font-semibold">{totalByStage.cutting.toFixed(2)} Lbs</p>
+          <p className="text-lg font-semibold">{money(totalByStage.cutting)} Lbs</p>
         </div>
         <div className="rounded-xl border bg-white p-4 shadow-sm">
           <p className="text-xs text-gray-500">Total Wastage</p>
-          <p className="text-lg font-semibold">{grandTotal.toFixed(2)} Lbs</p>
-          <p className="text-xs text-green-600">{totalRecycled.toFixed(2)} Lbs রিসাইকেল হয়েছে</p>
+          <p className="text-lg font-semibold">{money(grandTotal)} Lbs</p>
+          <p className="text-xs text-green-600">{money(totalRecycled)} Lbs রিসাইকেল হয়েছে</p>
         </div>
       </div>
 

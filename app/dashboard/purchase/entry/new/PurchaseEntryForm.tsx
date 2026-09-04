@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { generateNextDocNo } from "@/lib/docNumber";
 import { recomputeRawAvgCost } from "@/lib/inventoryCost";
 import { getCurrentUserId } from "@/lib/currentUser";
+import { money } from "@/lib/format";
 
 const LBS_PER_BAG = 55;
 
@@ -360,7 +361,7 @@ export default function PurchaseEntryForm({
                   <input type="number" step="0.01" value={l.rate} onChange={(e) => updateLine(i, "rate", e.target.value)} className="w-full rounded border px-2 py-1 text-sm" />
                 </td>
                 <td className="px-3 py-2 text-right">
-                  {(lineQuantityLbs(l) * (parseFloat(l.rate) || 0)).toFixed(2)}
+                  {money((lineQuantityLbs(l) * (parseFloat(l.rate) || 0)))}
                 </td>
                 <td className="px-3 py-2 text-right">
                   {lines.length > 1 && (
@@ -373,7 +374,7 @@ export default function PurchaseEntryForm({
           <tfoot className="bg-gray-50 border-t font-medium">
             <tr>
               <td colSpan={4} className="px-3 py-2 text-right">Total</td>
-              <td className="px-3 py-2 text-right">{totalAmount.toFixed(2)}</td>
+              <td className="px-3 py-2 text-right">{money(totalAmount)}</td>
               <td></td>
             </tr>
           </tfoot>

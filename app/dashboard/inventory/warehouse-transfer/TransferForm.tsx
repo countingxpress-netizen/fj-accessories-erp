@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { generateNextDocNo } from "@/lib/docNumber";
 import { getCurrentUserId } from "@/lib/currentUser";
+import { money } from "@/lib/format";
 
 const LBS_PER_BAG = 55;
 
@@ -176,7 +177,7 @@ export default function TransferForm({
           </select>
         </div>
         {quantity && (
-          <p className="text-sm text-gray-500 pb-2">= {quantityLbs.toFixed(2)} Lbs</p>
+          <p className="text-sm text-gray-500 pb-2">= {money(quantityLbs)} Lbs</p>
         )}
       </div>
 
