@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/client";
 import { useBulkSelect } from "@/hooks/useBulkSelect";
 import { BulkActionBar } from "@/components/BulkActionBar";
 import { deleteSimpleRow } from "@/lib/simpleDelete";
+import { syncCustomerOpeningJv } from "@/lib/customerOpeningJv";
 import { useBulkDeletePermission } from "@/app/dashboard/PermissionProvider";
 import CustomerRow from "./CustomerRow";
 
@@ -26,6 +27,7 @@ export default function CustomersTable({ customers }: { customers: any[] }) {
     }
     if (blocked.length > 0) errors.push(`${blocked.length}টা Customer-এ Delete অনুমতি নেই — নিজের Delete বাটন থেকে Request পাঠান।`);
     await markFulfilled(allowed);
+    if (allowed.length > 0) await syncCustomerOpeningJv(supabase);
     clear();
     router.refresh();
     if (errors.length > 0) {

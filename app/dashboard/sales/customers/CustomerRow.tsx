@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { deleteSimpleRow } from "@/lib/simpleDelete";
+import { syncCustomerOpeningJv } from "@/lib/customerOpeningJv";
 import GuardedAction from "@/app/dashboard/GuardedAction";
 import RateHistoryPanel from "@/app/dashboard/sales/RateHistoryPanel";
 
@@ -45,8 +46,9 @@ export default function CustomerRow({
         opening_balance: parseFloat(openingBalance) || 0,
       })
       .eq("id", customer.id);
+    if (error) { setLoading(false); setError(error.message); return; }
+    await syncCustomerOpeningJv(supabase);
     setLoading(false);
-    if (error) { setError(error.message); return; }
     setEditing(false);
     router.refresh();
   }
@@ -55,8 +57,9 @@ export default function CustomerRow({
     if (!window.confirm(`"${customer.name}" মুছে ফেলতে চান?`)) return;
     setLoading(true);
     const result = await deleteSimpleRow(supabase, "customers", customer.id);
+    if (!result.ok) { setLoading(false); alert(result.error); return; }
+    await syncCustomerOpeningJv(supabase);
     setLoading(false);
-    if (!result.ok) { alert(result.error); return; }
     router.refresh();
   }
 

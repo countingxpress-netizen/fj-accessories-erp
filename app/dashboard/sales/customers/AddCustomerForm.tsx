@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { deriveCustomerCode } from "@/lib/docNumber";
 import { getCurrentUserId } from "@/lib/currentUser";
+import { syncCustomerOpeningJv } from "@/lib/customerOpeningJv";
 
 export default function AddCustomerForm() {
   const [name, setName] = useState("");
@@ -56,6 +57,8 @@ export default function AddCustomerForm() {
         created_by: createdBy,
       });
     }
+    // opening balance দিলে consolidated Customer opening JV আপডেট হবে
+    await syncCustomerOpeningJv(supabase);
     setLoading(false);
     setName(""); setCode(""); setCodeTouched(false); setAddress(""); setPhone(""); setEmail(""); setPricePerLbs("");
     setPriceEffectiveFrom(new Date().toISOString().slice(0, 10));
