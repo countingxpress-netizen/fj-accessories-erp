@@ -48,6 +48,34 @@ export default function ProductionStageRow({ row, isAdmin }: { row: StageRow; is
       [completedColumn(row.stageType)]: nowCompleted ? new Date().toISOString() : null,
     }).eq("id", row.productionOrderId);
 
+    // পরের স্টেজ (Printing/Cutting) শেষ মানে আগের স্টেজ(গুলো) — Blowing, এবং Cutting-এর
+    // ক্ষেত্রে Printing-ও (যদি Print থাকে) — নিশ্চিতভাবেই হয়ে গেছে, আলাদা এন্ট্রি লেখা না
+    // থাকলেও। তাই খালি (completed_at নেই) থাকা আগের স্টেজ(গুলো) এখানে auto-complete করে
+    // দেওয়া হচ্ছে — নাহলে Booking View-তে ভুলভাবে "Create Blowing Schedule" লিংক থেকে যায়।
+    if ((row.stageType === "printing" || row.stageType === "cutting") && nowCompleted && !wasCompleted) {
+      const { data: po } = await supabase
+        .from("production_orders")
+        .select("required_lbs, quantity_pcs, blowing_completed_at, blowing_produced_lbs, printing_completed_at, printing_produced_pcs, bookings(has_print)")
+        .eq("id", row.productionOrderId)
+        .single();
+
+      if (po) {
+        const backfill: Record<string, any> = {};
+        const now = new Date().toISOString();
+        if (!po.blowing_completed_at) {
+          backfill.blowing_completed_at = now;
+          backfill.blowing_produced_lbs = Math.max(po.blowing_produced_lbs || 0, po.required_lbs || 0);
+        }
+        if (row.stageType === "cutting" && (po as any).bookings?.has_print && !po.printing_completed_at) {
+          backfill.printing_completed_at = now;
+          backfill.printing_produced_pcs = Math.max(po.printing_produced_pcs || 0, po.quantity_pcs || 0);
+        }
+        if (Object.keys(backfill).length > 0) {
+          await supabase.from("production_orders").update(backfill).eq("id", row.productionOrderId);
+        }
+      }
+    }
+
     if (row.stageType === "cutting" && nowCompleted && !wasCompleted) {
       await supabase.from("production_orders").update({ stage: "finished" }).eq("id", row.productionOrderId);
 
