@@ -6,9 +6,11 @@ import { generateNextDocNo } from "@/lib/docNumber";
 import { toInches } from "@/lib/calcTubeCutting";
 import { postBookingConsumptionJv } from "@/lib/inventoryCost";
 import { getCurrentUserId } from "@/lib/currentUser";
+import { resolveRate, type RateHistoryRow } from "@/lib/rateHistory";
 import { money, qty as qtyFmt } from "@/lib/format";
 
-type Customer = { id: string; name: string; default_print_rate: number | null; default_adhesive_rate: number | null };
+type Customer = { id: string; name: string; default_print_rate: number | null; default_adhesive_rate: number | null; price_per_lbs: number | null };
+type PriceHistoryRow = RateHistoryRow & { customer_id: string };
 type Warehouse = { id: string; name: string };
 type Material = { id: string; material_name: string };
 type CustomLine = { material_id: string; percentage: string };
@@ -43,6 +45,8 @@ type PendingItem = {
   materialsNeeded: { name: string; qty: number }[];
   lengthCm: number;
   widthCm: number;
+  unitPrice: number;
+  amount: number;
 };
 
 const LBS_PER_BAG = 55;
@@ -158,10 +162,10 @@ function parseBulkPasteLine(line: string, defaultProductDetails: string): BulkPa
 }
 
 export default function BookingForm({
-  customers, warehouses, materials, buyersMaster, garmentsMaster,
+  customers, warehouses, materials, buyersMaster, garmentsMaster, priceHistory,
 }: {
   customers: Customer[]; warehouses: Warehouse[]; materials: Material[];
-  buyersMaster: BuyerMaster[]; garmentsMaster: GarmentMaster[];
+  buyersMaster: BuyerMaster[]; garmentsMaster: GarmentMaster[]; priceHistory: PriceHistoryRow[];
 }) {
   // পুরো বুকিং-এর জন্য কমন (একবার দিলেই সব স্টাইলে থাকবে)
   const [customerId, setCustomerId] = useState("");
@@ -193,6 +197,7 @@ export default function BookingForm({
     { material_id: "", percentage: "" },
   ]);
   const [warehouseId, setWarehouseId] = useState("");
+  const [priceOverride, setPriceOverride] = useState("");
 
   // এই স্টাইলের Measurement Row-গুলো (একাধিক সাইজ)
   const [rows, setRows] = useState<MeasurementRow[]>([makeEmptyRow({ productDetails: "", measurementType: "simple" })]);
@@ -218,6 +223,13 @@ export default function BookingForm({
     setCustomLines((prev) => prev.filter((_, idx) => idx !== i));
   }
   const customTotalPercent = customLines.reduce((s, l) => s + (parseFloat(l.percentage) || 0), 0);
+
+  // Price/Pc হিসাব — Sales Invoice ঠিক যেভাবে করে সেভাবেই (customer price_per_lbs + rate_history,
+  // booking_date ধরে effective rate বের করে)। priceOverride দিলে সেটাই প্রাধান্য পাবে।
+  const selectedCustomer = customers.find((c) => c.id === customerId);
+  const historyForCustomer = priceHistory.filter((h) => h.customer_id === customerId);
+  const resolvedPricePerLbs = resolveRate(historyForCustomer, bookingDate, selectedCustomer?.price_per_lbs ?? 0);
+  const pricePerLbs = parseFloat(priceOverride) || resolvedPricePerLbs;
 
   function updateRow(rowId: string, field: keyof MeasurementRow, value: string) {
     setRows((prev) => prev.map((r) => (r.rowId === rowId ? { ...r, [field]: value } : r)));
@@ -290,11 +302,23 @@ export default function BookingForm({
         .map((l) => ({ material_id: l.material_id, qty: (finalLbs * parseFloat(l.percentage)) / 100 }));
     }
 
+    // Price/Pc — Sales Invoice-এর ঠিক একই ফর্মুলা: Order Thickness (T) ব্যবহার করে
+    // (Production Thickness নয়), + Print charge + Adhesive charge। ২ দশমিকে রাউন্ড।
+    let unitPrice = 0;
+    if (pricePerLbs && T) {
+      const baseUnitPrice = (pricePerLbs * tubeInch * cuttingInch * T) / 75000;
+      const printCharge = hasPrint ? (parseInt(printColors) || 0) * (parseFloat(ratePerColor) || 0.20) : 0;
+      const adhesiveCharge = row.measurementType === "adhesive" ? cuttingInch * (parseFloat(ratePerInch) || 0.02) : 0;
+      unitPrice = Math.round((baseUnitPrice + printCharge + adhesiveCharge) * 100) / 100;
+    }
+    const amount = Math.floor(qtyN * unitPrice);
+
     return {
       tube, cutting, qty: qtyN, baseLbs, finalLbs,
       kg: finalLbs * 0.453592,
       bags: finalLbs / LBS_PER_BAG,
       lldpe, ldpe, pp, rld, customSplit,
+      unitPrice, amount,
     };
   }
 
@@ -340,6 +364,7 @@ export default function BookingForm({
       materialsNeeded, lengthCm, widthCm, hasPrint, printColors: parseInt(printColors) || 0,
       ratePerColor: parseFloat(ratePerColor) || 0.20,
       ratePerInch: parseFloat(ratePerInch) || 0.02,
+      unitPrice: calc.unitPrice, amount: calc.amount,
     };
   }
 
@@ -493,6 +518,7 @@ export default function BookingForm({
     setMaterialType("pe_standard");
     setCustomLines([{ material_id: "", percentage: "" }, { material_id: "", percentage: "" }]);
     setWarehouseId("");
+    setPriceOverride("");
     setRows([makeEmptyRow({ productDetails: "", measurementType: "simple" })]);
     setBulkPasteText("");
     setBulkPasteErrors([]);
@@ -623,6 +649,7 @@ export default function BookingForm({
           delivery_point: deliveryPoint, print_layout_note: printLayoutNote,
           has_print: item.hasPrint, print_colors: item.printColors,
           rate_per_color: item.ratePerColor, rate_per_inch: item.ratePerInch,
+          quoted_unit_price: item.unitPrice || null, quoted_amount: item.amount || null,
           garments_name: resolvedGarmentsName ?? null,
           garments_id: resolvedGarmentsId || null, booking_group_id: groupId,
           customer_booking_ref: item.customerBookingRef || null,
@@ -712,6 +739,7 @@ export default function BookingForm({
   const styleTotalLdpe = validRowCalcs.reduce((s, c) => s + c.ldpe, 0);
   const styleTotalPp = validRowCalcs.reduce((s, c) => s + c.pp, 0);
   const styleTotalRld = validRowCalcs.reduce((s, c) => s + c.rld, 0);
+  const styleTotalAmount = validRowCalcs.reduce((s, c) => s + c.amount, 0);
   const currentStyleItemCount = rows.filter((r) => (parseFloat(r.quantity) || 0) > 0).length;
   const finalSubmitCount = pendingItems.length + validRowCalcs.length;
 
@@ -839,6 +867,15 @@ export default function BookingForm({
               {warehouses.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
             </select>
           </div>
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Price/Lbs (৳, Estimate-এর জন্য)</label>
+            <input
+              type="number" step="0.01" value={priceOverride} onChange={(e) => setPriceOverride(e.target.value)}
+              placeholder={resolvedPricePerLbs ? String(resolvedPricePerLbs) : "0"}
+              className="rounded-lg border px-3 py-2 text-sm w-28"
+            />
+            <p className="text-[11px] text-gray-400 mt-0.5">Customer Default: {money(resolvedPricePerLbs)}</p>
+          </div>
         </div>
 
         {materialType === "custom" && (
@@ -908,6 +945,8 @@ export default function BookingForm({
                 <th className="px-2 py-1.5 text-right">Tube</th>
                 <th className="px-2 py-1.5 text-right">Cutting</th>
                 <th className="px-2 py-1.5 text-right">Req. Lbs</th>
+                <th className="px-2 py-1.5 text-right">Price/Pc</th>
+                <th className="px-2 py-1.5 text-right">Total Amt</th>
                 <th className="px-2 py-1.5 w-8"></th>
               </tr>
             </thead>
@@ -951,13 +990,15 @@ export default function BookingForm({
                   <td className="px-2 py-1 text-right text-xs text-gray-600">{calc ? `${money(calc.tube)} ${unit}` : "-"}</td>
                   <td className="px-2 py-1 text-right text-xs text-gray-600">{calc ? `${money(calc.cutting)} ${unit}` : "-"}</td>
                   <td className="px-2 py-1 text-right text-xs font-medium text-blue-700">{calc ? money(calc.finalLbs) : "-"}</td>
+                  <td className="px-2 py-1 text-right text-xs text-gray-600">{calc && calc.unitPrice > 0 ? money(calc.unitPrice) : "-"}</td>
+                  <td className="px-2 py-1 text-right text-xs font-medium text-green-700">{calc && calc.amount > 0 ? money(calc.amount) : "-"}</td>
                   <td className="px-2 py-1 text-right">
                     <button type="button" onClick={() => removeRow(row.rowId)} className="text-red-600 text-xs hover:underline">✕</button>
                   </td>
                 </tr>
               ))}
               {rows.length === 0 && (
-                <tr><td colSpan={10} className="px-2 py-3 text-center text-xs text-gray-400">কোনো Row নেই — নিচের বাটনে Row যোগ করুন</td></tr>
+                <tr><td colSpan={12} className="px-2 py-3 text-center text-xs text-gray-400">কোনো Row নেই — নিচের বাটনে Row যোগ করুন</td></tr>
               )}
             </tbody>
           </table>
@@ -972,6 +1013,9 @@ export default function BookingForm({
             <p className="text-sm font-medium text-blue-900">
               এই স্টাইলের মোট Qty: <strong>{qtyFmt(styleTotalQty)}</strong> Pcs | মোট Required: <strong>{money(styleTotalLbs)} Lbs</strong> ≈ {money(styleTotalLbs * 0.453592)} Kg ≈ {money(styleTotalLbs / LBS_PER_BAG)} Bags
             </p>
+            {styleTotalAmount > 0 && (
+              <p className="text-sm font-medium text-blue-900">মোট Amount (Estimate): <strong>{money(styleTotalAmount)}</strong></p>
+            )}
             {materialType === "pe_standard" && (
               <p className="text-sm text-blue-800">LLDPE: {money(styleTotalLldpe)} Lbs | LDPE: {money(styleTotalLdpe)} Lbs</p>
             )}

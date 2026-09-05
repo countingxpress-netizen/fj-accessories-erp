@@ -11,6 +11,10 @@ export default async function NewBookingPage() {
     .select("id, customer_id, name, booking_thickness_mm, production_thickness_mm, pi_thickness_mm, print_colors_default, adhesive_rate_per_inch")
     .order("name");
   const { data: garmentsMaster } = await supabase.from("garments").select("id, customer_id, name, address").order("name");
+  const { data: priceHistory } = await supabase
+    .from("rate_history")
+    .select("customer_id, effective_from, rate")
+    .not("customer_id", "is", null);
 
   return (
     <div>
@@ -18,6 +22,7 @@ export default async function NewBookingPage() {
       <BookingForm
         customers={customers ?? []} warehouses={warehouses ?? []} materials={materials ?? []}
         buyersMaster={buyersMaster ?? []} garmentsMaster={garmentsMaster ?? []}
+        priceHistory={(priceHistory ?? []) as any}
       />
     </div>
   );
