@@ -42,9 +42,14 @@ export default function ExpenseRow({
       <td className="px-4 py-2 text-gray-600">{expense.description || "-"}</td>
       <td className="px-4 py-2 text-right">{money(expense.amount)}</td>
       <td className="px-4 py-2 text-right">
-        <GuardedAction table="expenses" recordId={expense.id} recordLabel={expense.description ?? formatDate(expense.expense_date)} action="delete"
-          onAllowed={handleDelete}
-          className="rounded bg-red-50 px-2 py-1 text-xs text-red-700 hover:bg-red-100">Delete</GuardedAction>
+        <div className="flex justify-end gap-2">
+          <GuardedAction table="expenses" recordId={expense.id} recordLabel={expense.description ?? formatDate(expense.expense_date)} action="edit"
+            onAllowed={() => router.push(`/dashboard/purchase/expenses/${expense.id}/edit`)}
+            className="rounded bg-gray-100 px-2 py-1 text-xs text-gray-700 hover:bg-gray-200">Edit</GuardedAction>
+          <GuardedAction table="expenses" recordId={expense.id} recordLabel={expense.description ?? formatDate(expense.expense_date)} action="delete"
+            onAllowed={handleDelete}
+            className="rounded bg-red-50 px-2 py-1 text-xs text-red-700 hover:bg-red-100">Delete</GuardedAction>
+        </div>
       </td>
     </tr>
   );
