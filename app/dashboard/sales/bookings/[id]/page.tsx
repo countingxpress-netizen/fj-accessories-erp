@@ -5,7 +5,7 @@ import { getBookingStatusLabel } from "@/lib/bookingStatus";
 import { calcTubeCutting, calcRequiredLbs } from "@/lib/calcTubeCutting";
 import { notFound } from "next/navigation";
 import PrintButton from "@/app/dashboard/PrintButton";
-import GuardedAction from "@/app/dashboard/GuardedAction";
+import BookingViewActions from "./BookingViewActions";
 import { money } from "@/lib/format";
 
 export default async function BookingViewPage({ params }: { params: Promise<{ id: string }> }) {
@@ -22,7 +22,7 @@ export default async function BookingViewPage({ params }: { params: Promise<{ id
     .select("*, customers(name, address), buyers(name), merchants(name), garments:garments_id(name, address), finished_goods(product_name), production_orders(id, blowing_completed_at, printing_completed_at, cutting_completed_at)");
 
   const { data: bookings } = currentBooking.booking_group_id
-    ? await query.eq("booking_group_id", groupId)
+    ? await query.eq("booking_group_id", groupId).order("created_at", { ascending: true })
     : await query.eq("id", id);
 
   if (!bookings || bookings.length === 0) return notFound();
@@ -118,6 +118,23 @@ export default async function BookingViewPage({ params }: { params: Promise<{ id
   let totalOrderLbs = 0;
   let totalProductionLbs = 0;
 
+  // একই Style + Customer Booking Ref-এর টানা (consecutive) row-গুলো merge করার জন্য গ্রুপ করা
+  // (এক Booking Group-এ একাধিক Style থাকতে পারে — শুধু একটা Style-এর একাধিক Measurement নয়)
+  const styleRunSizeByStart: Record<number, number> = {};
+  {
+    let runStart = 0;
+    for (let i = 1; i <= bookings.length; i++) {
+      const sameAsRunStart =
+        i < bookings.length &&
+        (bookings[i].style ?? "") === (bookings[runStart].style ?? "") &&
+        (bookings[i].customer_booking_ref ?? "") === (bookings[runStart].customer_booking_ref ?? "");
+      if (!sameAsRunStart) {
+        styleRunSizeByStart[runStart] = i - runStart;
+        runStart = i;
+      }
+    }
+  }
+
   return (
     <div>
       <div className="flex items-center justify-between print:hidden">
@@ -173,6 +190,7 @@ export default async function BookingViewPage({ params }: { params: Promise<{ id
             <tr className="bg-gray-50">
               <th className="border border-gray-800 px-2 py-2">Sl No</th>
               <th className="border border-gray-800 px-2 py-2">Style No</th>
+              <th className="border border-gray-800 px-2 py-2">Customer Booking Ref</th>
               <th className="border border-gray-800 px-2 py-2">Product Details</th>
               <th className="border border-gray-800 px-2 py-2">Measurement</th>
               <th className="border border-gray-800 px-2 py-2">Quantity</th>
@@ -200,6 +218,7 @@ export default async function BookingViewPage({ params }: { params: Promise<{ id
               const orderLbs = calcRequiredLbs(b, b.thickness_mm);
               const price = priceByBooking[b.id];
               const statusLabel = getBookingStatusLabel(b, deliveredMap[b.id] ?? 0, Array.from(challanNosByBooking[b.id] ?? [])).label;
+              const styleRunSize = styleRunSizeByStart[i]; // undefined হলে এই row আগের Style-এর continuation
 
               totalQuantity += b.quantity_pcs || 0;
               totalAmountSum += price?.totalAmount || 0;
@@ -209,7 +228,12 @@ export default async function BookingViewPage({ params }: { params: Promise<{ id
               return (
                 <tr key={b.id}>
                   <td className="border border-gray-800 px-2 py-2 text-center">{i + 1}</td>
-                  <td className="border border-gray-800 px-2 py-2 text-center">{b.style || "-"}</td>
+                  {styleRunSize && (
+                    <>
+                      <td className="border border-gray-800 px-2 py-2 text-center align-top" rowSpan={styleRunSize}>{b.style || "-"}</td>
+                      <td className="border border-gray-800 px-2 py-2 text-center align-top" rowSpan={styleRunSize}>{b.customer_booking_ref || "-"}</td>
+                    </>
+                  )}
                   <td className="border border-gray-800 px-2 py-2">{b.product_details || b.finished_goods?.product_name || "-"}</td>
                   <td className="border border-gray-800 px-2 py-2">{measurement}</td>
                   <td className="border border-gray-800 px-2 py-2 text-right">{b.quantity_pcs}</td>
@@ -227,7 +251,7 @@ export default async function BookingViewPage({ params }: { params: Promise<{ id
               );
             })}
             <tr className="font-semibold bg-gray-50">
-              <td className="border border-gray-800 px-2 py-2 text-right" colSpan={4}>Total</td>
+              <td className="border border-gray-800 px-2 py-2 text-right" colSpan={5}>Total</td>
               <td className="border border-gray-800 px-2 py-2 text-right">{totalQuantity.toLocaleString("en-IN")}</td>
               <td className="border border-gray-800 px-2 py-2"></td>
               <td className="border border-gray-800 px-2 py-2 text-right">{money(totalAmountSum)}</td>
@@ -291,9 +315,7 @@ export default async function BookingViewPage({ params }: { params: Promise<{ id
       </div>
 
       <div className="flex justify-end gap-2 mt-4 print:hidden">
-        <GuardedAction table="bookings" recordId={first.id} recordLabel={first.booking_no} action="edit"
-          onAllowed={() => { window.location.href = `/dashboard/sales/bookings/${first.id}/edit`; }}
-          className="rounded-lg bg-gray-900 px-4 py-2 text-sm text-white">Edit</GuardedAction>
+        <BookingViewActions bookingId={first.id} bookingNo={first.booking_no} />
       </div>
     </div>
   );

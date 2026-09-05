@@ -9,11 +9,12 @@ import { useBulkDeletePermission } from "@/app/dashboard/PermissionProvider";
 import BookingRow from "./BookingRow";
 
 export default function BookingsTable({
-  groups, deliveredMap, challanNosByBooking,
+  groups, deliveredMap, challanNosByBooking, piNoByBooking,
 }: {
   groups: { groupId: string; items: any[] }[];
   deliveredMap: Record<string, number>;
   challanNosByBooking: Record<string, string[]>;
+  piNoByBooking: Record<string, string>;
 }) {
   const router = useRouter();
   const supabase = createClient();
@@ -74,23 +75,30 @@ export default function BookingsTable({
             </tr>
           </thead>
           <tbody>
-            {groups.map((group, gi) => (
-              <React.Fragment key={group.groupId}>
-                {group.items.map((b: any, i: number) => (
-                  <BookingRow
-                    key={b.id}
-                    booking={b}
-                    serial={i === 0 ? gi + 1 : undefined}
-                    isGroupStart={i === 0}
-                    groupSize={group.items.length}
-                    deliveredQty={deliveredMap[b.id] ?? 0}
-                    challanNos={challanNosByBooking[b.id] ?? []}
-                    selected={isSelected(b.id)}
-                    onToggleSelect={() => toggle(b.id)}
-                  />
-                ))}
-              </React.Fragment>
-            ))}
+            {groups.map((group, gi) => {
+              const groupPiNos = Array.from(
+                new Set(group.items.map((b: any) => piNoByBooking[b.id]).filter(Boolean))
+              );
+              const groupPiNo = groupPiNos.join(", ");
+              return (
+                <React.Fragment key={group.groupId}>
+                  {group.items.map((b: any, i: number) => (
+                    <BookingRow
+                      key={b.id}
+                      booking={b}
+                      serial={i === 0 ? gi + 1 : undefined}
+                      isGroupStart={i === 0}
+                      groupSize={group.items.length}
+                      groupPiNo={groupPiNo}
+                      deliveredQty={deliveredMap[b.id] ?? 0}
+                      challanNos={challanNosByBooking[b.id] ?? []}
+                      selected={isSelected(b.id)}
+                      onToggleSelect={() => toggle(b.id)}
+                    />
+                  ))}
+                </React.Fragment>
+              );
+            })}
             {groups.length === 0 && (
               <tr><td colSpan={13} className="px-4 py-3 text-gray-400 italic">এখনো কোনো Booking নেই</td></tr>
             )}

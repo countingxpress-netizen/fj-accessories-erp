@@ -4,7 +4,7 @@ import { formatDate } from "@/lib/formatDate";
 import { notFound } from "next/navigation";
 import { currencySymbol } from "@/lib/numberToWords";
 import NewRevisionButton from "./NewRevisionButton";
-import GuardedAction from "@/app/dashboard/GuardedAction";
+import ProformaViewActions from "./ProformaViewActions";
 import { money } from "@/lib/format";
 
 export default async function ProformaViewPage({ params }: { params: Promise<{ id: string }> }) {
@@ -29,9 +29,7 @@ export default async function ProformaViewPage({ params }: { params: Promise<{ i
       <div className="flex items-center justify-between mt-2 mb-4">
         <h1 className="text-2xl font-semibold">{pi.pi_no} {pi.revision > 0 && `(Rev-${pi.revision})`}</h1>
         <div className="flex gap-2">
-          <GuardedAction table="proforma_invoices" recordId={id} recordLabel={pi.pi_no} action="edit"
-            onAllowed={() => { window.location.href = `/dashboard/lc-export/proforma/${id}/edit`; }}
-            className="rounded-lg bg-gray-900 px-4 py-2 text-sm text-white">Edit</GuardedAction>
+          <ProformaViewActions piId={id} piNo={pi.pi_no} />
           <NewRevisionButton piId={id} />
         </div>
       </div>

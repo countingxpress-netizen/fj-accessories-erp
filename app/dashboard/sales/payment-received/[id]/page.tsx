@@ -3,7 +3,6 @@ import { createClient } from "@/lib/supabase/server";
 import { formatDate } from "@/lib/formatDate";
 import { notFound } from "next/navigation";
 import PaymentActions from "./PaymentActions";
-import GuardedAction from "@/app/dashboard/GuardedAction";
 import { money } from "@/lib/format";
 
 export default async function PaymentViewPage({ params }: { params: Promise<{ id: string }> }) {
@@ -33,9 +32,6 @@ export default async function PaymentViewPage({ params }: { params: Promise<{ id
       <div className="flex items-center justify-between mt-2 mb-4">
         <h1 className="text-2xl font-semibold">Payment — {payment.customers?.name}</h1>
         <div className="flex gap-2">
-          <GuardedAction table="customer_payments" recordId={id} recordLabel={`${payment.customers?.name ?? ""} ${formatDate(payment.payment_date)}`} action="edit"
-            onAllowed={() => { window.location.href = `/dashboard/sales/payment-received/${id}/edit`; }}
-            className="rounded-lg bg-gray-900 px-4 py-2 text-sm text-white">Edit</GuardedAction>
           <PaymentActions paymentId={id} voucherId={payment.voucher_id} recordLabel={`${payment.customers?.name ?? ""} ${formatDate(payment.payment_date)}`} />
         </div>
       </div>

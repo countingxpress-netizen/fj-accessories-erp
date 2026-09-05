@@ -20,9 +20,10 @@ function formatMeasurement(b: any) {
 }
 
 export default function BookingRow({
-  booking, serial, isGroupStart, groupSize, deliveredQty, challanNos, selected, onToggleSelect,
+  booking, serial, isGroupStart, groupSize, groupPiNo, deliveredQty, challanNos, selected, onToggleSelect,
 }: {
-  booking: any; serial?: number; isGroupStart?: boolean; groupSize?: number; deliveredQty: number; challanNos: string[];
+  booking: any; serial?: number; isGroupStart: boolean; groupSize: number; groupPiNo: string;
+  deliveredQty: number; challanNos: string[];
   selected?: boolean; onToggleSelect?: () => void;
 }) {
   const router = useRouter();
@@ -39,13 +40,11 @@ export default function BookingRow({
     router.refresh();
   }
 
-  const groupBg = groupSize && groupSize > 1 ? "bg-blue-50/40" : "";
-    const status = getBookingStatusLabel(booking, deliveredQty, challanNos);
-
-  const piNo = booking.pi_bookings?.[0]?.proforma_invoices?.pi_no ?? null;
+  const groupBg = groupSize > 1 ? "bg-blue-50/40" : "";
+  const status = getBookingStatusLabel(booking, deliveredQty, challanNos);
 
   return (
-    <tr className={`border-t ${groupBg} ${isGroupStart && groupSize && groupSize > 1 ? "border-t-2 border-t-blue-200" : ""}`}>
+    <tr className={`border-t ${groupBg} ${isGroupStart && groupSize > 1 ? "border-t-2 border-t-blue-200" : ""}`}>
       <td className="px-4 py-2">
         <input
           type="checkbox"
@@ -54,33 +53,39 @@ export default function BookingRow({
           aria-label={`Select booking ${booking.booking_no}`}
         />
       </td>
-      <td className="px-4 py-2 text-gray-500">{serial ?? ""}</td>
-      <td className="px-4 py-2 font-medium">
-        {booking.booking_no}
-        {groupSize && groupSize > 1 && (
-          <span className="ml-1 text-xs text-blue-600">({groupSize}টি প্রোডাক্ট)</span>
-        )}
-      </td>
-      <td className="px-4 py-2 text-gray-500">
-        {formatDate(booking.booking_date)}
-        {booking.creator?.full_name && <div className="text-[11px] text-gray-400">by {booking.creator.full_name}</div>}
-      </td>
-      <td className="px-4 py-2">{booking.customers?.name ?? "-"}</td>
-      <td className="px-4 py-2 text-gray-500">{booking.buyers?.name ?? "-"}</td>
-      <td className="px-4 py-2 text-gray-500">{booking.garments_name ?? "-"}</td>
+      {isGroupStart && (
+        <>
+          <td className="px-4 py-2 text-gray-500 align-top" rowSpan={groupSize}>{serial ?? ""}</td>
+          <td className="px-4 py-2 font-medium align-top" rowSpan={groupSize}>
+            {booking.booking_no}
+            {groupSize > 1 && (
+              <span className="ml-1 text-xs text-blue-600">({groupSize}টি প্রোডাক্ট)</span>
+            )}
+          </td>
+          <td className="px-4 py-2 text-gray-500 align-top" rowSpan={groupSize}>
+            {formatDate(booking.booking_date)}
+            {booking.creator?.full_name && <div className="text-[11px] text-gray-400">by {booking.creator.full_name}</div>}
+          </td>
+          <td className="px-4 py-2 align-top" rowSpan={groupSize}>{booking.customers?.name ?? "-"}</td>
+          <td className="px-4 py-2 text-gray-500 align-top" rowSpan={groupSize}>{booking.buyers?.name ?? "-"}</td>
+          <td className="px-4 py-2 text-gray-500 align-top" rowSpan={groupSize}>{booking.garments_name ?? "-"}</td>
+        </>
+      )}
       <td className="px-4 py-2 text-sm">{formatMeasurement(booking)}</td>
       <td className="px-4 py-2 text-right">{booking.quantity_pcs?.toLocaleString("en-IN")}</td>
       <td className="px-4 py-2 text-right">{money(booking.required_lbs)}</td>
       <td className="px-4 py-2">
         <span className={`rounded-full px-2 py-0.5 text-xs ${status.color}`}>{status.label}</span>
       </td>
-      <td className="px-4 py-2 font-medium text-xs">
-        {piNo ? (
-          <span className="text-blue-700">{piNo}</span>
-        ) : (
-          <span className="text-gray-400">-</span>
-        )}
-      </td>
+      {isGroupStart && (
+        <td className="px-4 py-2 font-medium text-xs align-top" rowSpan={groupSize}>
+          {groupPiNo ? (
+            <span className="text-blue-700">{groupPiNo}</span>
+          ) : (
+            <span className="text-gray-400">-</span>
+          )}
+        </td>
+      )}
       <td className="px-4 py-2 text-right">
         <details className="relative inline-block text-left">
           <summary className="cursor-pointer list-none rounded bg-gray-100 px-3 py-1 text-xs text-gray-700 hover:bg-gray-200 select-none">

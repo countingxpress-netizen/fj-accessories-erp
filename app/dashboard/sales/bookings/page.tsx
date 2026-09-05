@@ -13,6 +13,18 @@ export default async function BookingsListPage() {
     .from("delivery_challan_items")
     .select("quantity_pcs, delivery_challans(booking_id, challan_no)");
 
+  // PI No — pi_items দিয়ে (pi_bookings টেবিল কোথাও populate হয় না, তাই সেটা ব্যবহার করা যাবে না)
+  const { data: piItemRows } = await supabase
+    .from("pi_items")
+    .select("booking_id, proforma_invoices(pi_no)");
+
+  const piNoByBooking: Record<string, string> = {};
+  (piItemRows ?? []).forEach((item: any) => {
+    if (item.booking_id && item.proforma_invoices?.pi_no) {
+      piNoByBooking[item.booking_id] = item.proforma_invoices.pi_no;
+    }
+  });
+
   const deliveredMap: Record<string, number> = {};
   const challanNosByBookingSet: Record<string, Set<string>> = {};
   (allChallanItems ?? []).forEach((item: any) => {
@@ -48,7 +60,7 @@ export default async function BookingsListPage() {
         </Link>
       </div>
 
-      <BookingsTable groups={groups} deliveredMap={deliveredMap} challanNosByBooking={challanNosByBooking} />
+      <BookingsTable groups={groups} deliveredMap={deliveredMap} challanNosByBooking={challanNosByBooking} piNoByBooking={piNoByBooking} />
     </div>
   );
 }
