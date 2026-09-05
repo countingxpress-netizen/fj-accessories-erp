@@ -13,6 +13,7 @@ type Supplier = { id: string; name: string };
 type Warehouse = { id: string; name: string };
 type Material = { id: string; material_name: string; inventory_account_code: string | null };
 type Unit = "lbs" | "bags";
+type PaymentSource = "cash" | "md_jafor" | "credit";
 type Line = { material_id: string; quantity: string; unit: Unit; rate: string };
 
 // পুরনো materials-এর inventory_account_code না থাকলে নাম থেকে ফলব্যাক
@@ -43,25 +44,66 @@ function lineAmount(l: Line): number {
 
 const rateUnitLabel = (u: Unit) => (u === "bags" ? "Bag" : "Lbs");
 
+function creditAccountCode(source: PaymentSource): string {
+  return source === "cash" ? "1000" : source === "md_jafor" ? "3000" : "2000";
+}
+function creditAccountLabel(source: PaymentSource): string {
+  return source === "cash" ? "Cash (কোড 1000)" : source === "md_jafor" ? "Md Abu Jafor (কোড 3000)" : "Accounts Payable (কোড 2000)";
+}
+function paymentNarrationLabel(source: PaymentSource): string {
+  return source === "cash" ? "Cash" : source === "md_jafor" ? "Md Abu Jafor" : "Credit";
+}
+function creditLineMemo(source: PaymentSource, supplierName: string): string {
+  if (source === "cash") return `Cash paid to ${supplierName}`;
+  if (source === "md_jafor") return `Md Abu Jafor থেকে টাকা নিয়ে ${supplierName}-কে পরিশোধ`;
+  return `Payable to ${supplierName}`;
+}
+
 export default function PurchaseEntryForm({
   suppliers,
   warehouses,
   materials,
+  mode = "create",
+  entryId,
+  initialVoucherId,
+  initialSupplierId,
+  initialWarehouseId,
+  initialEntryDate,
+  initialInvoiceNo,
+  initialPaymentSource,
+  initialPurchaseSource,
+  initialLcNo,
+  initialLcDate,
+  initialBillOfEntryNo,
+  initialLines,
 }: {
   suppliers: Supplier[];
   warehouses: Warehouse[];
   materials: Material[];
+  mode?: "create" | "edit";
+  entryId?: string;
+  initialVoucherId?: string | null;
+  initialSupplierId?: string;
+  initialWarehouseId?: string;
+  initialEntryDate?: string;
+  initialInvoiceNo?: string;
+  initialPaymentSource?: PaymentSource;
+  initialPurchaseSource?: "local" | "import";
+  initialLcNo?: string;
+  initialLcDate?: string;
+  initialBillOfEntryNo?: string;
+  initialLines?: Line[];
 }) {
-  const [supplierId, setSupplierId] = useState("");
-  const [warehouseId, setWarehouseId] = useState("");
-  const [entryDate, setEntryDate] = useState(new Date().toISOString().slice(0, 10));
-  const [invoiceNo, setInvoiceNo] = useState("");
-  const [isCash, setIsCash] = useState(false);
-  const [purchaseSource, setPurchaseSource] = useState<"local" | "import">("local");
-  const [lcNo, setLcNo] = useState("");
-  const [lcDate, setLcDate] = useState("");
-  const [billOfEntryNo, setBillOfEntryNo] = useState("");
-  const [lines, setLines] = useState<Line[]>([{ material_id: "", quantity: "", unit: "lbs", rate: "" }]);
+  const [supplierId, setSupplierId] = useState(initialSupplierId ?? "");
+  const [warehouseId, setWarehouseId] = useState(initialWarehouseId ?? "");
+  const [entryDate, setEntryDate] = useState(initialEntryDate ?? new Date().toISOString().slice(0, 10));
+  const [invoiceNo, setInvoiceNo] = useState(initialInvoiceNo ?? "");
+  const [paymentSource, setPaymentSource] = useState<PaymentSource>(initialPaymentSource ?? "credit");
+  const [purchaseSource, setPurchaseSource] = useState<"local" | "import">(initialPurchaseSource ?? "local");
+  const [lcNo, setLcNo] = useState(initialLcNo ?? "");
+  const [lcDate, setLcDate] = useState(initialLcDate ?? "");
+  const [billOfEntryNo, setBillOfEntryNo] = useState(initialBillOfEntryNo ?? "");
+  const [lines, setLines] = useState<Line[]>(initialLines ?? [{ material_id: "", quantity: "", unit: "lbs", rate: "" }]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const router = useRouter();
@@ -95,6 +137,182 @@ export default function PurchaseEntryForm({
 
     setLoading(true);
 
+    if (mode === "edit" && entryId) {
+      // ১. পুরনো stock প্রভাব বাতিল করুন (delete cascade-এর মতোই)
+      const { data: oldLedger } = await supabase
+        .from("stock_ledger")
+        .select("*")
+        .eq("reference_type", "purchase")
+        .eq("reference_id", entryId);
+
+      const touchedMaterialIds = new Set<string>();
+      for (const led of oldLedger ?? []) {
+        touchedMaterialIds.add(led.item_id);
+        const { data: stock } = await supabase
+          .from("raw_material_stock").select("*")
+          .eq("material_id", led.item_id).eq("warehouse_id", led.warehouse_id).maybeSingle();
+        if (stock) {
+          await supabase
+            .from("raw_material_stock")
+            .update({ quantity_lbs: stock.quantity_lbs - led.quantity, updated_at: new Date().toISOString() })
+            .eq("id", stock.id);
+        }
+      }
+      await supabase.from("stock_ledger").delete().eq("reference_type", "purchase").eq("reference_id", entryId);
+      await supabase.from("purchase_entry_items").delete().eq("entry_id", entryId);
+
+      // ২. purchase_entries-এর মূল ফিল্ড আপডেট করুন (entry_no অপরিবর্তিত থাকে)
+      const { error: updateError } = await supabase
+        .from("purchase_entries")
+        .update({
+          supplier_id: supplierId,
+          entry_date: entryDate,
+          invoice_no: invoiceNo,
+          payment_type: paymentSource === "cash" ? "cash" : "credit",
+          purchase_source: purchaseSource,
+          lc_no: purchaseSource === "import" ? lcNo || null : null,
+          lc_date: purchaseSource === "import" ? lcDate || null : null,
+          bill_of_entry_no: purchaseSource === "import" ? billOfEntryNo || null : null,
+        })
+        .eq("id", entryId);
+
+      if (updateError) {
+        setLoading(false);
+        setError(updateError.message);
+        return;
+      }
+
+      // ৩. নতুন purchase_entry_items তৈরি
+      const itemsToInsert = validLines.map((l) => ({
+        entry_id: entryId,
+        material_id: l.material_id,
+        quantity_lbs: lineQuantityLbs(l),
+        unit: l.unit,
+        entered_quantity: parseFloat(l.quantity),
+        rate_per_lbs: lineRatePerLbs(l),
+      }));
+      const { error: itemsError } = await supabase.from("purchase_entry_items").insert(itemsToInsert);
+      if (itemsError) {
+        setLoading(false);
+        setError(itemsError.message);
+        return;
+      }
+
+      // ৪. নতুন stock প্রভাব প্রয়োগ করুন
+      for (const l of validLines) {
+        touchedMaterialIds.add(l.material_id);
+        const qty = lineQuantityLbs(l);
+
+        const { data: existingStock } = await supabase
+          .from("raw_material_stock")
+          .select("*")
+          .eq("material_id", l.material_id)
+          .eq("warehouse_id", warehouseId)
+          .maybeSingle();
+
+        if (existingStock) {
+          await supabase
+            .from("raw_material_stock")
+            .update({ quantity_lbs: existingStock.quantity_lbs + qty, updated_at: new Date().toISOString() })
+            .eq("id", existingStock.id);
+        } else {
+          await supabase
+            .from("raw_material_stock")
+            .insert({ material_id: l.material_id, warehouse_id: warehouseId, quantity_lbs: qty });
+        }
+
+        await supabase.from("stock_ledger").insert({
+          item_type: "raw_material",
+          item_id: l.material_id,
+          warehouse_id: warehouseId,
+          txn_type: "in",
+          quantity: qty,
+          reference_type: "purchase",
+          reference_id: entryId,
+          txn_date: entryDate,
+        });
+      }
+
+      // ৫. পুরনো + নতুন — দুই দিকেই থাকা সব material-এর avg cost আবার হিসাব করুন
+      for (const mid of touchedMaterialIds) {
+        await recomputeRawAvgCost(supabase, mid);
+      }
+
+      // ৬. Journal Voucher পুনর্গঠন করুন
+      const code = creditAccountCode(paymentSource);
+      const { data: creditAccount } = await supabase
+        .from("chart_of_accounts")
+        .select("id")
+        .eq("account_code", code)
+        .single();
+
+      if (!creditAccount) {
+        setLoading(false);
+        setError(`${creditAccountLabel(paymentSource)} অ্যাকাউন্ট খুঁজে পাওয়া যায়নি।`);
+        router.push("/dashboard/purchase/entry");
+        router.refresh();
+        return;
+      }
+
+      const debitLines: { account_id: string; amount: string; memo: string }[] = [];
+      for (const l of validLines) {
+        const material = materials.find((m) => m.id === l.material_id);
+        const acctCode = materialAccount(material);
+        if (!acctCode) continue;
+        const { data: acc } = await supabase.from("chart_of_accounts").select("id").eq("account_code", acctCode).single();
+        if (acc) {
+          debitLines.push({
+            account_id: acc.id,
+            amount: lineAmount(l).toFixed(2),
+            memo: `${material?.material_name} - ${l.quantity} ${l.unit === "bags" ? "Bags" : "Lbs"} @ ${l.rate}/${rateUnitLabel(l.unit)}`,
+          });
+        }
+      }
+
+      const supplierName = suppliers.find((s) => s.id === supplierId)?.name ?? "";
+      const narration = `Purchase from ${supplierName}${invoiceNo ? ", Invoice " + invoiceNo : ""} (${paymentNarrationLabel(paymentSource)})`;
+
+      let voucherId = initialVoucherId ?? null;
+
+      if (voucherId) {
+        await supabase.from("journal_vouchers").update({ voucher_date: entryDate, narration }).eq("id", voucherId);
+        await supabase.from("journal_entry_lines").delete().eq("voucher_id", voucherId);
+      } else if (debitLines.length > 0) {
+        const voucherNo = await generateNextDocNo(supabase, "journal_vouchers", "voucher_no", "JV", "voucher_date", entryDate);
+        const createdBy = await getCurrentUserId(supabase);
+        const { data: newVoucher } = await supabase
+          .from("journal_vouchers")
+          .insert({ voucher_no: voucherNo, voucher_date: entryDate, narration, created_by: createdBy })
+          .select()
+          .single();
+        if (newVoucher) {
+          voucherId = newVoucher.id;
+          await supabase.from("purchase_entries").update({ voucher_id: voucherId }).eq("id", entryId);
+        }
+      }
+
+      if (voucherId && debitLines.length > 0) {
+        const jvLines = [
+          ...debitLines.map((d) => ({ voucher_id: voucherId, account_id: d.account_id, debit: parseFloat(d.amount), credit: 0, memo: d.memo })),
+          { voucher_id: voucherId, account_id: creditAccount.id, debit: 0, credit: totalAmount, memo: creditLineMemo(paymentSource, supplierName) },
+        ];
+        const { error: jvLinesError } = await supabase.from("journal_entry_lines").insert(jvLines);
+        setLoading(false);
+        if (jvLinesError) {
+          setError("Journal Voucher লাইন সেভ ব্যর্থ হয়েছে: " + jvLinesError.message);
+          return;
+        }
+      } else {
+        setLoading(false);
+      }
+
+      router.push("/dashboard/purchase/entry");
+      router.refresh();
+      return;
+    }
+
+    // ---- CREATE MODE ----
+
     // ১. purchase_entries তৈরি (অটো entry number সহ)
     const entryNo = await generateNextDocNo(supabase, "purchase_entries", "entry_no", "PE", "entry_date", entryDate);
     const createdBy = await getCurrentUserId(supabase);
@@ -105,7 +323,7 @@ export default function PurchaseEntryForm({
         supplier_id: supplierId,
         entry_date: entryDate,
         invoice_no: invoiceNo,
-        payment_type: isCash ? "cash" : "credit",
+        payment_type: paymentSource === "cash" ? "cash" : "credit",
         purchase_source: purchaseSource,
         lc_no: purchaseSource === "import" ? lcNo || null : null,
         lc_date: purchaseSource === "import" ? lcDate || null : null,
@@ -174,18 +392,17 @@ export default function PurchaseEntryForm({
       await recomputeRawAvgCost(supabase, l.material_id);
     }
 
-    // ৪. Cash হলে Cash (1000), না হলে Accounts Payable (2000) অ্যাকাউন্ট খুঁজুন
-    const creditAccountCode = isCash ? "1000" : "2000";
-    const creditAccountLabel = isCash ? "Cash (কোড 1000)" : "Accounts Payable (কোড 2000)";
+    // ৪. Cash হলে Cash (1000), Md Abu Jafor থেকে হলে 3000, না হলে Accounts Payable (2000) অ্যাকাউন্ট খুঁজুন
+    const code = creditAccountCode(paymentSource);
     const { data: creditAccount } = await supabase
       .from("chart_of_accounts")
       .select("id")
-      .eq("account_code", creditAccountCode)
+      .eq("account_code", code)
       .single();
 
     if (!creditAccount) {
       setLoading(false);
-      setError(`${creditAccountLabel} অ্যাকাউন্ট খুঁজে পাওয়া যায়নি।`);
+      setError(`${creditAccountLabel(paymentSource)} অ্যাকাউন্ট খুঁজে পাওয়া যায়নি।`);
       return;
     }
 
@@ -193,9 +410,9 @@ export default function PurchaseEntryForm({
     const debitLines: { account_id: string; amount: string; memo: string }[] = [];
     for (const l of validLines) {
       const material = materials.find((m) => m.id === l.material_id);
-      const code = materialAccount(material);
-      if (!code) continue;
-      const { data: acc } = await supabase.from("chart_of_accounts").select("id").eq("account_code", code).single();
+      const acctCode = materialAccount(material);
+      if (!acctCode) continue;
+      const { data: acc } = await supabase.from("chart_of_accounts").select("id").eq("account_code", acctCode).single();
       if (acc) {
         debitLines.push({
           account_id: acc.id,
@@ -222,7 +439,7 @@ export default function PurchaseEntryForm({
       .insert({
         voucher_no: voucherNo,
         voucher_date: entryDate,
-        narration: `Purchase from ${supplierName}${invoiceNo ? ", Invoice " + invoiceNo : ""} (${isCash ? "Cash" : "Credit"})`,
+        narration: `Purchase from ${supplierName}${invoiceNo ? ", Invoice " + invoiceNo : ""} (${paymentNarrationLabel(paymentSource)})`,
         created_by: createdBy,
       })
       .select()
@@ -249,7 +466,7 @@ export default function PurchaseEntryForm({
         account_id: creditAccount.id,
         debit: 0,
         credit: totalAmount,
-        memo: isCash ? `Cash paid to ${supplierName}` : `Payable to ${supplierName}`,
+        memo: creditLineMemo(paymentSource, supplierName),
       },
     ];
 
@@ -299,10 +516,20 @@ export default function PurchaseEntryForm({
       <div className="flex flex-wrap items-end gap-4 rounded-lg border bg-gray-50 p-3">
         <div>
           <span className="block text-sm text-gray-600 mb-1">Payment</span>
-          <label className="flex items-center gap-2 text-sm">
-            <input type="checkbox" checked={isCash} onChange={(e) => setIsCash(e.target.checked)} />
-            নগদে ক্রয় (Cash) — টিক না থাকলে বাকিতে (Credit)
-          </label>
+          <div className="flex flex-col gap-1 text-sm">
+            <label className="flex items-center gap-2">
+              <input type="radio" name="paymentSource" checked={paymentSource === "cash"} onChange={() => setPaymentSource("cash")} />
+              নগদে ক্রয় (Cash In Hand)
+            </label>
+            <label className="flex items-center gap-2">
+              <input type="radio" name="paymentSource" checked={paymentSource === "md_jafor"} onChange={() => setPaymentSource("md_jafor")} />
+              Md Abu Jafor থেকে টাকা নিয়ে
+            </label>
+            <label className="flex items-center gap-2">
+              <input type="radio" name="paymentSource" checked={paymentSource === "credit"} onChange={() => setPaymentSource("credit")} />
+              বাকিতে ক্রয় (Credit)
+            </label>
+          </div>
         </div>
         <div>
           <span className="block text-sm text-gray-600 mb-1">Purchase Source</span>
@@ -399,7 +626,7 @@ export default function PurchaseEntryForm({
       {error && <p className="text-sm text-red-600">{error}</p>}
 
       <button type="submit" disabled={loading} className="rounded-lg bg-gray-900 px-5 py-2 text-sm text-white disabled:opacity-40">
-        {loading ? "সেভ হচ্ছে..." : "Purchase Entry সেভ করুন"}
+        {loading ? "সেভ হচ্ছে..." : mode === "edit" ? "পরিবর্তন সেভ করুন" : "Purchase Entry সেভ করুন"}
       </button>
     </form>
   );

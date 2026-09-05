@@ -9,6 +9,25 @@ export default async function PurchaseEntryListPage() {
     .select("*, suppliers(name), purchase_entry_items(quantity_lbs, rate_per_lbs), creator:app_users!purchase_entries_created_by_fkey(full_name)")
     .order("entry_date", { ascending: false });
 
+  // প্রতিটা entry-র Journal Voucher থেকে payment (credit) লাইনটা বের করে লেবেল বসানো —
+  // পেমেন্ট সোর্স হার্ডকোড না করে সরাসরি অ্যাকাউন্টের নাম দেখানো হয় (Cash / Accounts Payable / Md Abu Jafor / ...)
+  const voucherIds = (entries ?? []).map((e: any) => e.voucher_id).filter(Boolean);
+  const paymentByVoucher: Record<string, string> = {};
+  if (voucherIds.length > 0) {
+    const { data: creditLines } = await supabase
+      .from("journal_entry_lines")
+      .select("voucher_id, credit, chart_of_accounts(account_name)")
+      .in("voucher_id", voucherIds)
+      .gt("credit", 0);
+    (creditLines ?? []).forEach((l: any) => {
+      paymentByVoucher[l.voucher_id] = l.chart_of_accounts?.account_name ?? "-";
+    });
+  }
+  const entriesWithPayment = (entries ?? []).map((e: any) => ({
+    ...e,
+    paymentLabel: e.voucher_id ? (paymentByVoucher[e.voucher_id] ?? "-") : "-",
+  }));
+
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
@@ -18,7 +37,7 @@ export default async function PurchaseEntryListPage() {
         </Link>
       </div>
 
-      <PurchaseEntriesTable entries={entries ?? []} />
+      <PurchaseEntriesTable entries={entriesWithPayment} />
     </div>
   );
 }

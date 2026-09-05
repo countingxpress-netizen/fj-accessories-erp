@@ -53,6 +53,7 @@ export default function PurchaseEntriesTable({ entries }: { entries: any[] }) {
               <th className="px-4 py-2">Date</th>
               <th className="px-4 py-2">Supplier</th>
               <th className="px-4 py-2">Invoice No</th>
+              <th className="px-4 py-2">Payment</th>
               <th className="px-4 py-2 text-right">Total Amount</th>
               <th className="px-4 py-2 text-right">Action</th>
             </tr>
@@ -62,7 +63,7 @@ export default function PurchaseEntriesTable({ entries }: { entries: any[] }) {
               <PurchaseEntryRow key={e.id} entry={e} selected={isSelected(e.id)} onToggleSelect={() => toggle(e.id)} />
             ))}
             {entries.length === 0 && (
-              <tr><td colSpan={7} className="px-4 py-3 text-gray-400 italic">এখনো কোনো Purchase Entry নেই</td></tr>
+              <tr><td colSpan={8} className="px-4 py-3 text-gray-400 italic">এখনো কোনো Purchase Entry নেই</td></tr>
             )}
           </tbody>
         </table>
