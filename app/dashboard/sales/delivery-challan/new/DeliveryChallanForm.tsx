@@ -32,6 +32,7 @@ export default function DeliveryChallanForm({
   const [garmentsFilter, setGarmentsFilter] = useState("");
   const [challanDate, setChallanDate] = useState(new Date().toISOString().slice(0, 10));
   const [selectedQty, setSelectedQty] = useState<Record<string, string>>({});
+  const [selectedPackets, setSelectedPackets] = useState<Record<string, string>>({});
   const [lineWarehouse, setLineWarehouse] = useState<Record<string, string>>({});
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -96,9 +97,16 @@ export default function DeliveryChallanForm({
     setSelectedQty((prev) => ({ ...prev, [id]: value }));
   }
 
+  function updatePackets(id: string, value: string) {
+    setSelectedPackets((prev) => ({ ...prev, [id]: value }));
+  }
+
   const lineItems = customerBookings
-    .map((b) => ({ booking: b, qty: parseFloat(selectedQty[b.id] || "0") }))
+    .map((b) => ({ booking: b, qty: parseFloat(selectedQty[b.id] || "0"), packets: parseInt(selectedPackets[b.id] || "0", 10) || 0 }))
     .filter((li) => li.qty > 0);
+
+  const totalQty = lineItems.reduce((s, li) => s + li.qty, 0);
+  const totalPackets = lineItems.reduce((s, li) => s + li.packets, 0);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -150,6 +158,7 @@ export default function DeliveryChallanForm({
 
       await supabase.from("delivery_challan_items").insert({
         challan_id: challan.id, product_id: li.booking.product_id, quantity_pcs: li.qty,
+        packets: li.packets || null,
       });
 
       const { data: stock } = await supabase
@@ -193,7 +202,7 @@ export default function DeliveryChallanForm({
       <div className="flex flex-wrap gap-4 items-end">
         <div className="flex-1 max-w-xs">
           <label className="block text-sm text-gray-600 mb-1">Customer</label>
-          <select value={customerId} onChange={(e) => { setCustomerId(e.target.value); setSelectedQty({}); setLineWarehouse({}); setBuyerFilter(""); setMerchantFilter(""); setStyleFilter(""); setGarmentsFilter(""); }} className="w-full rounded-lg border px-3 py-2 text-sm" required>
+          <select value={customerId} onChange={(e) => { setCustomerId(e.target.value); setSelectedQty({}); setSelectedPackets({}); setLineWarehouse({}); setBuyerFilter(""); setMerchantFilter(""); setStyleFilter(""); setGarmentsFilter(""); }} className="w-full rounded-lg border px-3 py-2 text-sm" required>
             <option value="">-- বাছুন --</option>
             {customers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
@@ -248,6 +257,7 @@ export default function DeliveryChallanForm({
                 <th className="px-3 py-2">Product</th>
                 <th className="px-3 py-2 text-right">Remaining</th>
                 <th className="px-3 py-2 w-28">Qty</th>
+                <th className="px-3 py-2 w-24">Packets</th>
                 <th className="px-3 py-2 w-56">Warehouse (স্টক থেকে কাটবে)</th>
               </tr>
             </thead>
@@ -267,6 +277,9 @@ export default function DeliveryChallanForm({
                     <td className="px-3 py-2 text-right">{b.remaining}</td>
                     <td className="px-3 py-2">
                       <input type="number" step="1" min="0" max={b.remaining} value={selectedQty[b.id] || ""} onChange={(e) => updateQty(b.id, e.target.value)} className="w-full rounded border px-2 py-1 text-sm" />
+                    </td>
+                    <td className="px-3 py-2">
+                      <input type="number" step="1" min="0" value={selectedPackets[b.id] || ""} onChange={(e) => updatePackets(b.id, e.target.value)} className="w-full rounded border px-2 py-1 text-sm" />
                     </td>
                     <td className="px-3 py-2">
                       <select
@@ -289,9 +302,19 @@ export default function DeliveryChallanForm({
                 );
               })}
               {customerBookings.length === 0 && (
-                <tr><td colSpan={7} className="px-3 py-3 text-gray-400 italic">এই ফিল্টারে কোনো বুকিং নেই</td></tr>
+                <tr><td colSpan={8} className="px-3 py-3 text-gray-400 italic">এই ফিল্টারে কোনো বুকিং নেই</td></tr>
               )}
             </tbody>
+            {customerBookings.length > 0 && (
+              <tfoot className="bg-gray-50 border-t font-semibold">
+                <tr>
+                  <td className="px-3 py-2 text-right" colSpan={5}>Total</td>
+                  <td className="px-3 py-2">{totalQty}</td>
+                  <td className="px-3 py-2">{totalPackets}</td>
+                  <td className="px-3 py-2"></td>
+                </tr>
+              </tfoot>
+            )}
           </table>
         </div>
       )}

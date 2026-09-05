@@ -40,6 +40,7 @@ export default async function ChallanPrintPage({ params }: { params: Promise<{ i
       delivery_challan_items(
         product_id,
         quantity_pcs,
+        packets,
         finished_goods(product_name, length_cm, width_cm, thickness)
       )
     `)
@@ -66,6 +67,11 @@ export default async function ChallanPrintPage({ params }: { params: Promise<{ i
 
   const { data: company } = await supabase.from("company_profile").select("*").single();
   const signatureUrl = challan.creator?.signature_url || company?.signature_url;
+
+  const items = challan.delivery_challan_items ?? [];
+  const totalQty = items.reduce((s: number, i: any) => s + Number(i.quantity_pcs || 0), 0);
+  const totalPackets = items.reduce((s: number, i: any) => s + Number(i.packets || 0), 0);
+  const hasPackets = items.some((i: any) => i.packets != null);
 
   return (
     <div className="min-h-[297mm] flex flex-col max-w-3xl mx-auto p-8 bg-white text-gray-900 print:p-0">
@@ -107,20 +113,29 @@ export default async function ChallanPrintPage({ params }: { params: Promise<{ i
               <th className="text-left py-2">Product</th>
               <th className="text-left py-2">Measurement</th>
               <th className="text-right py-2">Quantity (Pcs)</th>
+              {hasPackets && <th className="text-right py-2">Packets</th>}
             </tr>
           </thead>
           <tbody>
-            {(challan.delivery_challan_items ?? []).map((item: any, i: number) => {
+            {items.map((item: any, i: number) => {
               const bookingData = bookingByProduct[item.product_id];
               return (
                 <tr key={i} className="border-b">
                   <td className="py-2">{item.finished_goods?.product_name || "-"}</td>
                   <td className="py-2">{formatMeasurement(bookingData, item.finished_goods)}</td>
                   <td className="text-right py-2">{item.quantity_pcs}</td>
+                  {hasPackets && <td className="text-right py-2">{item.packets ?? "-"}</td>}
                 </tr>
               );
             })}
           </tbody>
+          <tfoot>
+            <tr className="border-t-2 border-gray-800 font-semibold">
+              <td className="text-right py-2" colSpan={2}>Total</td>
+              <td className="text-right py-2">{totalQty}</td>
+              {hasPackets && <td className="text-right py-2">{totalPackets}</td>}
+            </tr>
+          </tfoot>
         </table>
       </div>
 

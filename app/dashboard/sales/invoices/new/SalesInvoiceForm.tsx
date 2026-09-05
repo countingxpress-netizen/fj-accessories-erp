@@ -48,6 +48,7 @@ export default function SalesInvoiceForm({
   const [paymentReceived, setPaymentReceived] = useState(false);
   const [selectedBookings, setSelectedBookings] = useState<Record<string, boolean>>({});
   const [priceOverride, setPriceOverride] = useState<Record<string, string>>({});
+  const [otherCharges, setOtherCharges] = useState<Record<string, string>>({});
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const router = useRouter();
@@ -116,7 +117,8 @@ export default function SalesInvoiceForm({
 
     const baseUnitPrice = (pricePerLbs * tubeInch * cuttingInch * b.thickness_mm) / 75000;
     const { printCharge, adhesiveCharge } = getSurcharge(b, cuttingInch);
-    return baseUnitPrice + printCharge + adhesiveCharge;
+    const other = parseFloat(otherCharges[b.id] || "0") || 0;
+    return baseUnitPrice + printCharge + adhesiveCharge + other;
   }
 
   const lineItems = customerBookings
@@ -219,7 +221,7 @@ export default function SalesInvoiceForm({
       <div className="flex flex-wrap gap-4 items-end">
         <div className="flex-1 max-w-xs">
           <label className="block text-sm text-gray-600 mb-1">Customer</label>
-          <select value={customerId} onChange={(e) => { setCustomerId(e.target.value); setSelectedBookings({}); setPriceOverride({}); setBuyerFilter(""); setMerchantFilter(""); setStyleFilter(""); setGarmentsFilter(""); }} className="w-full rounded-lg border px-3 py-2 text-sm" required>
+          <select value={customerId} onChange={(e) => { setCustomerId(e.target.value); setSelectedBookings({}); setPriceOverride({}); setOtherCharges({}); setBuyerFilter(""); setMerchantFilter(""); setStyleFilter(""); setGarmentsFilter(""); }} className="w-full rounded-lg border px-3 py-2 text-sm" required>
             <option value="">-- বাছুন --</option>
             {customers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
@@ -280,6 +282,7 @@ export default function SalesInvoiceForm({
                 <th className="px-3 py-2 text-right">Order Thickness</th>
                 <th className="px-3 py-2 text-right">Qty</th>
                 <th className="px-3 py-2 w-32">Price/Lbs</th>
+                <th className="px-3 py-2 w-28">Other Charges</th>
                 <th className="px-3 py-2 text-right">Unit Price</th>
                 <th className="px-3 py-2 text-right">Amount</th>
               </tr>
@@ -306,17 +309,21 @@ export default function SalesInvoiceForm({
                         Booking {b.booking_date ?? "?"} → {bookingPricePerLbs(b) || "—"}
                       </span>
                     </td>
+                    <td className="px-3 py-2">
+                      <input type="number" step="0.01" min="0" placeholder="0" value={otherCharges[b.id] || ""} onChange={(e) => setOtherCharges((prev) => ({ ...prev, [b.id]: e.target.value }))} className="w-full rounded border px-2 py-1 text-sm" />
+                      <span className="block text-[11px] text-gray-400">প্রতি পিসে যোগ</span>
+                    </td>
                     <td className="px-3 py-2 text-right">{money((Math.round(unitPrice * 100) / 100))}</td>
                     <td className="px-3 py-2 text-right">{checked ? money(getLineAmount(b.remaining, unitPrice)) : "-"}</td>
                   </tr>
                 );
               })}
               {customerBookings.length === 0 && (
-                <tr><td colSpan={10} className="px-3 py-3 text-gray-400 italic">এই ফিল্টারে কোনো বুকিং নেই</td></tr>
+                <tr><td colSpan={11} className="px-3 py-3 text-gray-400 italic">এই ফিল্টারে কোনো বুকিং নেই</td></tr>
               )}
             </tbody>
             <tfoot className="bg-gray-50 border-t font-semibold">
-              <tr><td colSpan={9} className="px-3 py-2 text-right">Total</td><td className="px-3 py-2 text-right">{money(totalAmount)}</td></tr>
+              <tr><td colSpan={10} className="px-3 py-2 text-right">Total</td><td className="px-3 py-2 text-right">{money(totalAmount)}</td></tr>
             </tfoot>
           </table>
         </div>
