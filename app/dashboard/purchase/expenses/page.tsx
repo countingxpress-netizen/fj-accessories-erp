@@ -20,6 +20,12 @@ export default async function ExpensesPage({
     .or("account_name.ilike.%cash%,account_name.ilike.%bank%")
     .order("account_code");
 
+  // Md Abu Jafor (3000) থেকে টাকা নিয়ে খরচ করা হলেও "Paid Via"-তে বাছা যায়
+  const { data: mdJaforAccount } = await supabase
+    .from("chart_of_accounts").select("id, account_code, account_name")
+    .eq("account_code", "3000").maybeSingle();
+  const paidViaAccounts = mdJaforAccount ? [...(cashBankAccounts ?? []), mdJaforAccount] : (cashBankAccounts ?? []);
+
   let query = supabase
     .from("expenses")
     .select("*, chart_of_accounts!expenses_account_id_fkey(account_name), creator:app_users!expenses_created_by_fkey(full_name)")
@@ -39,7 +45,7 @@ export default async function ExpensesPage({
         <Link href="/dashboard/purchase" className="text-sm text-gray-500 hover:underline">← Purchase-এ ফিরুন</Link>
       </div>
 
-      <ExpenseForm expenseAccounts={expenseAccounts ?? []} cashBankAccounts={cashBankAccounts ?? []} />
+      <ExpenseForm expenseAccounts={expenseAccounts ?? []} cashBankAccounts={paidViaAccounts} />
 
       <form className="mt-6 mb-4 flex items-end gap-3">
         <div>

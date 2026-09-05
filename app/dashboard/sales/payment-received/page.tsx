@@ -13,6 +13,12 @@ export default async function PaymentReceivedPage() {
     .or("account_name.ilike.%cash%,account_name.ilike.%bank%")
     .order("account_code");
 
+  // Md Abu Jafor (3000) সরাসরি কালেক্ট করলেও "Deposit To"-তে বাছা যায়
+  const { data: mdJaforAccount } = await supabase
+    .from("chart_of_accounts").select("id, account_code, account_name")
+    .eq("account_code", "3000").maybeSingle();
+  const depositAccounts = mdJaforAccount ? [...(cashBankAccounts ?? []), mdJaforAccount] : (cashBankAccounts ?? []);
+
   const { data: allInvoices } = await supabase
     .from("sales_invoices")
     .select("id, invoice_no, invoice_date, customer_id, sales_invoice_items(amount)");
@@ -48,7 +54,7 @@ export default async function PaymentReceivedPage() {
         <Link href="/dashboard/sales" className="text-sm text-gray-500 hover:underline">← Sales-এ ফিরুন</Link>
       </div>
 
-      <PaymentForm customers={customers ?? []} cashBankAccounts={cashBankAccounts ?? []} invoicesByCustomer={invoicesByCustomer} />
+      <PaymentForm customers={customers ?? []} cashBankAccounts={depositAccounts} invoicesByCustomer={invoicesByCustomer} />
 
       <PaymentReceivedTable payments={payments ?? []} />
     </div>

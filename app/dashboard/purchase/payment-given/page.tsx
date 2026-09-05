@@ -13,6 +13,12 @@ export default async function PaymentGivenPage() {
     .or("account_name.ilike.%cash%,account_name.ilike.%bank%")
     .order("account_code");
 
+  // Md Abu Jafor (3000) থেকে টাকা দিয়ে সাপ্লায়ার পরিশোধ করলেও বাছা যায়
+  const { data: mdJaforAccount } = await supabase
+    .from("chart_of_accounts").select("id, account_code, account_name")
+    .eq("account_code", "3000").maybeSingle();
+  const paidFromAccounts = mdJaforAccount ? [...(cashBankAccounts ?? []), mdJaforAccount] : (cashBankAccounts ?? []);
+
   const { data: payments } = await supabase
     .from("supplier_payments")
     .select("*, suppliers(name), creator:app_users!supplier_payments_created_by_fkey(full_name)")
@@ -25,7 +31,7 @@ export default async function PaymentGivenPage() {
         <Link href="/dashboard/purchase" className="text-sm text-gray-500 hover:underline">← Purchase-এ ফিরুন</Link>
       </div>
 
-      <PaymentGivenForm suppliers={suppliers ?? []} cashBankAccounts={cashBankAccounts ?? []} />
+      <PaymentGivenForm suppliers={suppliers ?? []} cashBankAccounts={paidFromAccounts} />
 
       <PaymentGivenTable payments={payments ?? []} />
     </div>

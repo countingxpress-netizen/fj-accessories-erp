@@ -12,6 +12,12 @@ export default async function EditPaymentPage({ params }: { params: Promise<{ id
     .from("chart_of_accounts").select("id, account_code, account_name")
     .eq("account_type", "asset").or("account_name.ilike.%cash%,account_name.ilike.%bank%").order("account_code");
 
+  // Md Abu Jafor (3000) সরাসরি কালেক্ট করলেও "Deposit To"-তে বাছা যায় (আগে এভাবে সেভ করা payment এডিটেও দরকার)
+  const { data: mdJaforAccount } = await supabase
+    .from("chart_of_accounts").select("id, account_code, account_name")
+    .eq("account_code", "3000").maybeSingle();
+  const depositAccounts = mdJaforAccount ? [...(cashBankAccounts ?? []), mdJaforAccount] : (cashBankAccounts ?? []);
+
   // এই কাস্টমারের সব Invoice, এবং এই payment ছাড়া বাকি payment-গুলোর allocation বাদ দিয়ে "available due" বের করুন
   const { data: allInvoices } = await supabase
     .from("sales_invoices")
@@ -47,7 +53,7 @@ export default async function EditPaymentPage({ params }: { params: Promise<{ id
       <h1 className="text-2xl font-semibold mb-4">Payment এডিট করুন — {payment.customers?.name}</h1>
       <EditPaymentForm
         payment={payment}
-        cashBankAccounts={cashBankAccounts ?? []}
+        cashBankAccounts={depositAccounts}
         invoices={invoices}
         currentAllocationMap={currentAllocationMap}
       />
