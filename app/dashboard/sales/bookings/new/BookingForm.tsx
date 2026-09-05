@@ -21,6 +21,7 @@ type MaterialTypeVal = "pe_standard" | "pe_rld" | "pp" | "custom";
 type PendingItem = {
   style: string;
   customerBookingRef: string;
+  poNo: string;
   productDetails: string;
   measurementType: MeasurementType;
   unit: Unit;
@@ -52,6 +53,12 @@ type PendingItem = {
 const LBS_PER_BAG = 55;
 const CM_PER_INCH = 2.54;
 
+const BASELINE_ROW_SEED: RowDefaults = {
+  productDetails: "", measurementType: "simple", unit: "cm",
+  thicknessMm: "", productionThicknessMm: "", piThicknessMm: "",
+  hasPrint: false, printColors: "", ratePerColor: "0.20", ratePerInch: "0.02",
+};
+
 type BuyerMaster = {
   id: string;
   customer_id: string;
@@ -64,34 +71,66 @@ type BuyerMaster = {
 };
 type GarmentMaster = { id: string; customer_id: string; name: string; address: string | null };
 
-// একই স্টাইলে একাধিক মাপ (measurement) — কাস্টমারের বুকিং শীটে যেমন একটা স্টাইলে
-// অনেকগুলো Size/Qty থাকে, তেমন একটা row।
+// একই স্টাইলে একাধিক মাপ (measurement) — কাস্টমারের বুকিং শীটে যেমন একটা স্টাইলে অনেকগুলো
+// Size/Qty থাকে, তেমন একটা row। Thickness/Unit/Print/Adhesive প্রতিটা Row-এ আলাদা হতে
+// পারে (একই স্টাইলের ভেতরেও ভিন্ন সাইজে ভিন্ন গজ/প্রিন্ট/এডহিসিভ চার্জ লাগতে পারে) — তাই এগুলো
+// Style-level নয়, Row-level ফিল্ড। নতুন Row (+ Row / Bulk Paste) শুরু হয় শেষ Row-এর এই
+// মানগুলো কপি করে (দেখুন nextRowSeed) — এরপর প্রতিটা Row-এ আলাদাভাবে বদলানো যায়।
 type MeasurementRow = {
   rowId: string;
   productDetails: string;
   measurementType: MeasurementType;
+  unit: Unit;
   lengthVal: string;
   widthVal: string;
   flapVal: string;
   gussetVal: string;
   quantity: string;
+  thicknessMm: string;
+  productionThicknessMm: string;
+  piThicknessMm: string;
+  hasPrint: boolean;
+  printColors: string;
+  ratePerColor: string;
+  ratePerInch: string;
 };
 
-function makeEmptyRow(defaults: { productDetails: string; measurementType: MeasurementType }): MeasurementRow {
+type RowDefaults = {
+  productDetails: string;
+  measurementType: MeasurementType;
+  unit: Unit;
+  thicknessMm: string;
+  productionThicknessMm: string;
+  piThicknessMm: string;
+  hasPrint: boolean;
+  printColors: string;
+  ratePerColor: string;
+  ratePerInch: string;
+};
+
+function makeEmptyRow(defaults: RowDefaults): MeasurementRow {
   return {
     rowId: crypto.randomUUID(),
     productDetails: defaults.productDetails,
     measurementType: defaults.measurementType,
+    unit: defaults.unit,
     lengthVal: "",
     widthVal: "",
     flapVal: "",
     gussetVal: "",
     quantity: "",
+    thicknessMm: defaults.thicknessMm,
+    productionThicknessMm: defaults.productionThicknessMm,
+    piThicknessMm: defaults.piThicknessMm,
+    hasPrint: defaults.hasPrint,
+    printColors: defaults.printColors,
+    ratePerColor: defaults.ratePerColor,
+    ratePerInch: defaults.ratePerInch,
   };
 }
 
 // Bulk Paste পার্সিং — কাস্টমারের শীটে যেমন থাকে (Description | Size | Qty) সেভাবে
-// একাধিক লাইন পেস্ট করলে সব measurement row একসাথে বানিয়ে দেয়।
+// একাধিক লাইন পেস্ট করলে সব measurement row একসাথে বানিয়ে দেয় (বাকি ফিল্ড শেষ Row থেকে কপি হয়)।
 //   "105x68"      → Simple:   L=105, W=68
 //   "58+6x34"     → Adhesive: L=58, Flap=6, W=34
 //   "105x68x8"    → Gusset:   L=105, W=68, Gusset=8
@@ -118,12 +157,12 @@ function parseSizeToken(raw: string): ParsedSize | null {
 
 type BulkParseResult = { ok: true; row: MeasurementRow } | { ok: false; error: string };
 
-function parseBulkPasteLine(line: string, defaultProductDetails: string): BulkParseResult {
+function parseBulkPasteLine(line: string, defaults: RowDefaults): BulkParseResult {
   const parts = line.includes("\t")
     ? line.split("\t").map((p) => p.trim()).filter((p) => p !== "")
     : line.split("|").map((p) => p.trim()).filter((p) => p !== "");
 
-  let desc = defaultProductDetails;
+  let desc = defaults.productDetails;
   let sizeStr: string;
   let qtyStr: string;
   if (parts.length >= 3) {
@@ -149,7 +188,7 @@ function parseBulkPasteLine(line: string, defaultProductDetails: string): BulkPa
   return {
     ok: true,
     row: {
-      rowId: crypto.randomUUID(),
+      ...makeEmptyRow(defaults),
       productDetails: desc,
       measurementType: parsedSize.measurementType,
       lengthVal: String(parsedSize.lengthVal),
@@ -169,6 +208,7 @@ export default function BookingForm({
 }) {
   // পুরো বুকিং-এর জন্য কমন (একবার দিলেই সব স্টাইলে থাকবে)
   const [customerId, setCustomerId] = useState("");
+  const [customerNameInput, setCustomerNameInput] = useState("");
   const [buyerId, setBuyerId] = useState("");
   const [buyerNameInput, setBuyerNameInput] = useState("");
   const [merchantName, setMerchantName] = useState("");
@@ -176,21 +216,13 @@ export default function BookingForm({
   const [garmentsNameInput, setGarmentsNameInput] = useState("");
   const [bookingDate, setBookingDate] = useState(new Date().toISOString().slice(0, 10));
   const [deliveryPoint, setDeliveryPoint] = useState("");
-  const [hasPrint, setHasPrint] = useState(false);
-  const [printColors, setPrintColors] = useState("");
-  const [ratePerColor, setRatePerColor] = useState("0.20");
-  const [ratePerInch, setRatePerInch] = useState("0.02");
   const [printLayoutNote, setPrintLayoutNote] = useState("");
 
   // Style Info — এক স্টাইলের সব মাপের জন্য কমন। "এই স্টাইল বুকিং-এ যোগ করুন" চাপলে রিসেট হবে।
   const [style, setStyle] = useState("");
   const [customerBookingRef, setCustomerBookingRef] = useState("");
+  const [poNo, setPoNo] = useState("");
   const [defaultProductDetails, setDefaultProductDetails] = useState("");
-  const [defaultMeasurementType, setDefaultMeasurementType] = useState<MeasurementType>("simple");
-  const [unit, setUnit] = useState<Unit>("cm");
-  const [thicknessMm, setThicknessMm] = useState("");
-  const [productionThicknessMm, setProductionThicknessMm] = useState("");
-  const [piThicknessMm, setPiThicknessMm] = useState("");
   const [materialType, setMaterialType] = useState<MaterialTypeVal>("pe_standard");
   const [customLines, setCustomLines] = useState<CustomLine[]>([
     { material_id: "", percentage: "" },
@@ -199,12 +231,34 @@ export default function BookingForm({
   const [warehouseId, setWarehouseId] = useState("");
   const [priceOverride, setPriceOverride] = useState("");
 
-  // এই স্টাইলের Measurement Row-গুলো (একাধিক সাইজ)
-  const [rows, setRows] = useState<MeasurementRow[]>([makeEmptyRow({ productDetails: "", measurementType: "simple" })]);
+  // এই স্টাইলের Measurement Row-গুলো (একাধিক সাইজ)। আলাদা "Row Defaults" প্যানেল নেই —
+  // নতুন Row (+ Row / Bulk Paste) সবসময় শেষ Row-এর Type/Unit/Thickness/Print/Adhesive
+  // কপি করে শুরু হয় (Description বাদে, সেটা Style Info-র Default Product Details থেকে
+  // আসে) — তাই একই থিকনেস/প্রিন্ট পরপর কয়েকটা সাইজে লাগলে আবার টাইপ করতে হয় না, কিন্তু যেকোনো
+  // Row-এই আলাদা করে বদলানো যায়।
+  function nextRowSeed(currentRows: MeasurementRow[]): RowDefaults {
+    const last = currentRows[currentRows.length - 1];
+    if (!last) return { ...BASELINE_ROW_SEED, productDetails: defaultProductDetails };
+    return {
+      productDetails: defaultProductDetails,
+      measurementType: last.measurementType,
+      unit: last.unit,
+      thicknessMm: last.thicknessMm,
+      productionThicknessMm: last.productionThicknessMm,
+      piThicknessMm: last.piThicknessMm,
+      hasPrint: last.hasPrint,
+      printColors: last.printColors,
+      ratePerColor: last.ratePerColor,
+      ratePerInch: last.ratePerInch,
+    };
+  }
+
+  const [rows, setRows] = useState<MeasurementRow[]>([makeEmptyRow(BASELINE_ROW_SEED)]);
   const [bulkPasteText, setBulkPasteText] = useState("");
   const [bulkPasteErrors, setBulkPasteErrors] = useState<string[]>([]);
 
   const [pendingItems, setPendingItems] = useState<PendingItem[]>([]);
+  const [customersList, setCustomersList] = useState(customers);
   const [buyersList, setBuyersList] = useState(buyersMaster);
   const [garmentsList, setGarmentsList] = useState(garmentsMaster);
   const [warning, setWarning] = useState("");
@@ -226,16 +280,16 @@ export default function BookingForm({
 
   // Price/Pc হিসাব — Sales Invoice ঠিক যেভাবে করে সেভাবেই (customer price_per_lbs + rate_history,
   // booking_date ধরে effective rate বের করে)। priceOverride দিলে সেটাই প্রাধান্য পাবে।
-  const selectedCustomer = customers.find((c) => c.id === customerId);
+  const selectedCustomer = customersList.find((c) => c.id === customerId);
   const historyForCustomer = priceHistory.filter((h) => h.customer_id === customerId);
   const resolvedPricePerLbs = resolveRate(historyForCustomer, bookingDate, selectedCustomer?.price_per_lbs ?? 0);
   const pricePerLbs = parseFloat(priceOverride) || resolvedPricePerLbs;
 
-  function updateRow(rowId: string, field: keyof MeasurementRow, value: string) {
+  function updateRow(rowId: string, field: keyof MeasurementRow, value: string | boolean) {
     setRows((prev) => prev.map((r) => (r.rowId === rowId ? { ...r, [field]: value } : r)));
   }
   function addEmptyRow() {
-    setRows((prev) => [...prev, makeEmptyRow({ productDetails: defaultProductDetails, measurementType: defaultMeasurementType })]);
+    setRows((prev) => [...prev, makeEmptyRow(nextRowSeed(prev))]);
   }
   function removeRow(rowId: string) {
     setRows((prev) => prev.filter((r) => r.rowId !== rowId));
@@ -245,10 +299,11 @@ export default function BookingForm({
     const lines = bulkPasteText.split("\n").map((l) => l.trim()).filter((l) => l !== "");
     if (lines.length === 0) return;
 
+    const defaults = nextRowSeed(rows);
     const newRows: MeasurementRow[] = [];
     const errors: string[] = [];
     lines.forEach((line, idx) => {
-      const result = parseBulkPasteLine(line, defaultProductDetails);
+      const result = parseBulkPasteLine(line, defaults);
       if (result.ok) newRows.push(result.row);
       else errors.push(`লাইন ${idx + 1}: ${result.error}`);
     });
@@ -263,15 +318,15 @@ export default function BookingForm({
     setBulkPasteErrors(errors);
   }
 
-  // একটা row-এর Tube/Cutting/Required Lbs/Material split হিসাব
+  // একটা row-এর Tube/Cutting/Required Lbs/Price/Material split হিসাব — সব ইনপুট এই row থেকেই আসে
   function computeRowCalc(row: MeasurementRow) {
     const L = parseFloat(row.lengthVal) || 0;
     const W = parseFloat(row.widthVal) || 0;
     const F = parseFloat(row.flapVal) || 0;
     const G = parseFloat(row.gussetVal) || 0;
     const qtyN = parseFloat(row.quantity) || 0;
-    const T = parseFloat(thicknessMm) || 0;
-    const PT = parseFloat(productionThicknessMm) || 0;
+    const T = parseFloat(row.thicknessMm) || 0;
+    const PT = parseFloat(row.productionThicknessMm) || 0;
 
     let tube = 0, cutting = 0;
     if (row.measurementType === "simple") { tube = W; cutting = L; }
@@ -280,7 +335,7 @@ export default function BookingForm({
 
     if (!qtyN || !tube || !cutting || !T || !PT) return null;
 
-    const { tubeInch, cuttingInch } = toInches(tube, cutting, unit, materialType, hasPrint);
+    const { tubeInch, cuttingInch } = toInches(tube, cutting, row.unit, materialType, row.hasPrint);
     const baseLbs = (qtyN * tubeInch * cuttingInch * PT) / 75000;
     const finalLbs = Math.ceil(baseLbs);
 
@@ -303,12 +358,13 @@ export default function BookingForm({
     }
 
     // Price/Pc — Sales Invoice-এর ঠিক একই ফর্মুলা: Order Thickness (T) ব্যবহার করে
-    // (Production Thickness নয়), + Print charge + Adhesive charge। ২ দশমিকে রাউন্ড।
+    // (Production Thickness নয়), + এই Row-এর নিজস্ব Print charge + Adhesive charge। ২ দশমিকে রাউন্ড।
+    const rowPricePerLbs = pricePerLbs;
     let unitPrice = 0;
-    if (pricePerLbs && T) {
-      const baseUnitPrice = (pricePerLbs * tubeInch * cuttingInch * T) / 75000;
-      const printCharge = hasPrint ? (parseInt(printColors) || 0) * (parseFloat(ratePerColor) || 0.20) : 0;
-      const adhesiveCharge = row.measurementType === "adhesive" ? cuttingInch * (parseFloat(ratePerInch) || 0.02) : 0;
+    if (rowPricePerLbs && T) {
+      const baseUnitPrice = (rowPricePerLbs * tubeInch * cuttingInch * T) / 75000;
+      const printCharge = row.hasPrint ? (parseInt(row.printColors) || 0) * (parseFloat(row.ratePerColor) || 0.20) : 0;
+      const adhesiveCharge = row.measurementType === "adhesive" ? cuttingInch * (parseFloat(row.ratePerInch) || 0.02) : 0;
       unitPrice = Math.round((baseUnitPrice + printCharge + adhesiveCharge) * 100) / 100;
     }
     const amount = Math.floor(qtyN * unitPrice);
@@ -347,23 +403,23 @@ export default function BookingForm({
     const W = parseFloat(row.widthVal) || 0;
     const F = parseFloat(row.flapVal) || 0;
     const G = parseFloat(row.gussetVal) || 0;
-    const T = parseFloat(thicknessMm) || 0;
-    const PT = parseFloat(productionThicknessMm) || 0;
+    const T = parseFloat(row.thicknessMm) || 0;
+    const PT = parseFloat(row.productionThicknessMm) || 0;
 
-    const lengthCm = unit === "cm" ? calc.cutting : calc.cutting * CM_PER_INCH;
-    const widthCm = unit === "cm" ? calc.tube : calc.tube * CM_PER_INCH;
+    const lengthCm = row.unit === "cm" ? calc.cutting : calc.cutting * CM_PER_INCH;
+    const widthCm = row.unit === "cm" ? calc.tube : calc.tube * CM_PER_INCH;
     const warehouseName = warehouses.find((w) => w.id === warehouseId)?.name ?? "-";
 
     return {
-      style, customerBookingRef, productDetails: row.productDetails,
-      measurementType: row.measurementType, unit, lengthVal: L, widthVal: W, flapVal: F, gussetVal: G, thicknessMm: T,
+      style, customerBookingRef, poNo, productDetails: row.productDetails,
+      measurementType: row.measurementType, unit: row.unit, lengthVal: L, widthVal: W, flapVal: F, gussetVal: G, thicknessMm: T,
       productionThicknessMm: PT,
-      piThicknessMm: parseFloat(piThicknessMm) || 0,
+      piThicknessMm: parseFloat(row.piThicknessMm) || 0,
       materialType, quantity: calc.qty, warehouseId, warehouseName,
       finalLbs: calc.finalLbs, kg: calc.kg, bags: calc.bags,
-      materialsNeeded, lengthCm, widthCm, hasPrint, printColors: parseInt(printColors) || 0,
-      ratePerColor: parseFloat(ratePerColor) || 0.20,
-      ratePerInch: parseFloat(ratePerInch) || 0.02,
+      materialsNeeded, lengthCm, widthCm, hasPrint: row.hasPrint, printColors: parseInt(row.printColors) || 0,
+      ratePerColor: parseFloat(row.ratePerColor) || 0.20,
+      ratePerInch: parseFloat(row.ratePerInch) || 0.02,
       unitPrice: calc.unitPrice, amount: calc.amount,
     };
   }
@@ -386,32 +442,62 @@ export default function BookingForm({
     if (g?.address) setDeliveryPoint(g.address);
   }
 
+  // Buyer বাছলে তার ডিফল্ট Thickness/Rate — এখনো কোনো মাপ/Qty না দেওয়া (অস্পর্শিত) Row-গুলোতেই
+  // সরাসরি বসিয়ে দেওয়া হয় (আলাদা কোনো "Default" প্যানেল নেই, Row কার্ডেই সাথে সাথে দেখা যাবে)।
   function applyBuyerDefaults(selectedBuyerId: string) {
     if (!selectedBuyerId) return;
 
     const selectedBuyer = buyersList.find((b) => b.id === selectedBuyerId);
     if (!selectedBuyer) return;
 
-    if (selectedBuyer.booking_thickness_mm != null) {
-      setThicknessMm(String(selectedBuyer.booking_thickness_mm));
-    }
-    if (selectedBuyer.production_thickness_mm != null) {
-      setProductionThicknessMm(String(selectedBuyer.production_thickness_mm));
-    }
-    if (selectedBuyer.pi_thickness_mm != null) {
-      setPiThicknessMm(String(selectedBuyer.pi_thickness_mm));
-    }
-    if (selectedBuyer.print_colors_default != null) {
-      setRatePerColor(String(selectedBuyer.print_colors_default));
-    }
-    if (selectedBuyer.adhesive_rate_per_inch != null) {
-      setRatePerInch(String(selectedBuyer.adhesive_rate_per_inch));
-    }
+    setRows((prev) => prev.map((r) => {
+      const isUntouched = !r.lengthVal && !r.widthVal && !r.quantity;
+      if (!isUntouched) return r;
+      return {
+        ...r,
+        thicknessMm: selectedBuyer.booking_thickness_mm != null ? String(selectedBuyer.booking_thickness_mm) : r.thicknessMm,
+        productionThicknessMm: selectedBuyer.production_thickness_mm != null ? String(selectedBuyer.production_thickness_mm) : r.productionThicknessMm,
+        piThicknessMm: selectedBuyer.pi_thickness_mm != null ? String(selectedBuyer.pi_thickness_mm) : r.piThicknessMm,
+        ratePerColor: selectedBuyer.print_colors_default != null ? String(selectedBuyer.print_colors_default) : r.ratePerColor,
+        ratePerInch: selectedBuyer.adhesive_rate_per_inch != null ? String(selectedBuyer.adhesive_rate_per_inch) : r.ratePerInch,
+      };
+    }));
   }
 
-  async function ensureBuyerForCurrentCustomer() {
+  async function ensureCustomer() {
+    const trimmedName = customerNameInput.trim();
+    if (customerId) {
+      const selected = customersList.find((c) => c.id === customerId);
+      return { customerId, customerName: selected?.name ?? null };
+    }
+    if (!trimmedName) return { customerId: null as string | null, customerName: null as string | null };
+
+    const existingCustomer = customersList.find((c) => c.name.toLowerCase() === trimmedName.toLowerCase());
+    if (existingCustomer) {
+      setCustomerId(existingCustomer.id);
+      setCustomerNameInput(existingCustomer.name);
+      return { customerId: existingCustomer.id, customerName: existingCustomer.name };
+    }
+
+    const { data, error } = await supabase
+      .from("customers")
+      .insert({ name: trimmedName })
+      .select("id, name, price_per_lbs")
+      .single();
+
+    if (error) throw error;
+    if (data) {
+      setCustomersList((prev) => [...prev, { id: data.id, name: data.name, default_print_rate: null, default_adhesive_rate: null, price_per_lbs: data.price_per_lbs ?? null }]);
+      setCustomerId(data.id);
+      setCustomerNameInput(data.name);
+      return { customerId: data.id, customerName: data.name };
+    }
+    return { customerId: null, customerName: trimmedName };
+  }
+
+  async function ensureBuyerForCurrentCustomer(resolvedCustomerId: string | null) {
     const trimmedName = buyerNameInput.trim();
-    if (!customerId) return { buyerId: null as string | null, buyerName: null as string | null };
+    if (!resolvedCustomerId) return { buyerId: null as string | null, buyerName: null as string | null };
 
     if (buyerId) {
       const selectedBuyer = buyersList.find((b) => b.id === buyerId);
@@ -421,7 +507,7 @@ export default function BookingForm({
     if (!trimmedName) return { buyerId: null, buyerName: null };
 
     const existingBuyer = buyersList.find(
-      (b) => b.customer_id === customerId && b.name.toLowerCase() === trimmedName.toLowerCase()
+      (b) => b.customer_id === resolvedCustomerId && b.name.toLowerCase() === trimmedName.toLowerCase()
     );
     if (existingBuyer) {
       setBuyerId(existingBuyer.id);
@@ -432,7 +518,7 @@ export default function BookingForm({
     const { data, error } = await supabase
       .from("buyers")
       .insert({
-        customer_id: customerId,
+        customer_id: resolvedCustomerId,
         name: trimmedName,
         pricing_rule: "manual",
         percentage_value: 0,
@@ -447,7 +533,7 @@ export default function BookingForm({
         ...prev,
         {
           id: data.id,
-          customer_id: customerId,
+          customer_id: resolvedCustomerId,
           name: data.name,
           booking_thickness_mm: null,
           production_thickness_mm: null,
@@ -464,9 +550,9 @@ export default function BookingForm({
     return { buyerId: null, buyerName: trimmedName };
   }
 
-  async function ensureGarmentsForCurrentCustomer() {
+  async function ensureGarmentsForCurrentCustomer(resolvedCustomerId: string | null) {
     const trimmedName = garmentsNameInput.trim();
-    if (!customerId) return { garmentsId: null as string | null, garmentsName: null as string | null };
+    if (!resolvedCustomerId) return { garmentsId: null as string | null, garmentsName: null as string | null };
 
     if (garmentsId) {
       const selectedGarment = garmentsList.find((g) => g.id === garmentsId);
@@ -476,7 +562,7 @@ export default function BookingForm({
     if (!trimmedName) return { garmentsId: null, garmentsName: null };
 
     const existingGarment = garmentsList.find(
-      (g) => g.customer_id === customerId && g.name.toLowerCase() === trimmedName.toLowerCase()
+      (g) => g.customer_id === resolvedCustomerId && g.name.toLowerCase() === trimmedName.toLowerCase()
     );
     if (existingGarment) {
       setGarmentsId(existingGarment.id);
@@ -487,7 +573,7 @@ export default function BookingForm({
     const { data, error } = await supabase
       .from("garments")
       .insert({
-        customer_id: customerId,
+        customer_id: resolvedCustomerId,
         name: trimmedName,
         address: deliveryPoint.trim() || null,
       })
@@ -496,7 +582,7 @@ export default function BookingForm({
 
     if (error) throw error;
     if (data) {
-      setGarmentsList((prev) => [...prev, { id: data.id, customer_id: customerId, name: data.name, address: data.address ?? null }]);
+      setGarmentsList((prev) => [...prev, { id: data.id, customer_id: resolvedCustomerId, name: data.name, address: data.address ?? null }]);
       setGarmentsId(data.id);
       setGarmentsNameInput(data.name);
       if (data.address) setDeliveryPoint(data.address);
@@ -509,20 +595,16 @@ export default function BookingForm({
   function resetStyleFields() {
     setStyle("");
     setCustomerBookingRef("");
+    setPoNo("");
     setDefaultProductDetails("");
-    setDefaultMeasurementType("simple");
-    setUnit("cm");
-    setThicknessMm("");
-    setProductionThicknessMm("");
-    setPiThicknessMm("");
     setMaterialType("pe_standard");
     setCustomLines([{ material_id: "", percentage: "" }, { material_id: "", percentage: "" }]);
     setWarehouseId("");
     setPriceOverride("");
-    setRows([makeEmptyRow({ productDetails: "", measurementType: "simple" })]);
     setBulkPasteText("");
     setBulkPasteErrors([]);
     setWarning("");
+    setRows([makeEmptyRow(BASELINE_ROW_SEED)]);
     if (buyerId) applyBuyerDefaults(buyerId);
   }
 
@@ -584,7 +666,7 @@ export default function BookingForm({
 
     const allItems = currentRowItems.length > 0 ? [...pendingItems, ...currentRowItems] : pendingItems;
 
-    if (!customerId || allItems.length === 0) {
+    if ((!customerId && !customerNameInput.trim()) || allItems.length === 0) {
       setError("Customer বাছুন এবং অন্তত একটা প্রোডাক্ট (Measurement + Quantity + Warehouse) যোগ করুন।");
       return;
     }
@@ -608,8 +690,23 @@ export default function BookingForm({
     const materialMap: Record<string, string> = {};
     (allMaterials ?? []).forEach((m) => (materialMap[m.material_name] = m.id));
 
-    const { buyerId: resolvedBuyerId } = await ensureBuyerForCurrentCustomer();
-    const { garmentsId: resolvedGarmentsId, garmentsName: resolvedGarmentsName } = await ensureGarmentsForCurrentCustomer();
+    let resolvedCustomerId: string | null = null;
+    try {
+      const result = await ensureCustomer();
+      resolvedCustomerId = result.customerId;
+    } catch (err: any) {
+      setLoading(false);
+      setError(`Customer সেভ করতে ব্যর্থ হয়েছে: ${err?.message ?? "অজানা কারণ"}`);
+      return;
+    }
+    if (!resolvedCustomerId) {
+      setLoading(false);
+      setError("Customer বাছুন অথবা নতুন Customer-এর নাম লিখুন।");
+      return;
+    }
+
+    const { buyerId: resolvedBuyerId } = await ensureBuyerForCurrentCustomer(resolvedCustomerId);
+    const { garmentsId: resolvedGarmentsId, garmentsName: resolvedGarmentsName } = await ensureGarmentsForCurrentCustomer(resolvedCustomerId);
 
     for (const item of allItems) {
       // Finished Goods খুঁজুন/তৈরি করুন
@@ -634,7 +731,7 @@ export default function BookingForm({
       const { data: booking, error: bookingError } = await supabase
         .from("bookings")
         .insert({
-          booking_no: sharedBookingNo, customer_id: customerId, buyer_id: resolvedBuyerId, merchant_id: merchantId,
+          booking_no: sharedBookingNo, customer_id: resolvedCustomerId, buyer_id: resolvedBuyerId, merchant_id: merchantId,
           style: item.style, product_details: item.productDetails, product_id: productId,
           measurement_type: item.measurementType, measurement_unit: item.unit,
           length_val: item.lengthVal, width_val: item.widthVal,
@@ -653,6 +750,7 @@ export default function BookingForm({
           garments_name: resolvedGarmentsName ?? null,
           garments_id: resolvedGarmentsId || null, booking_group_id: groupId,
           customer_booking_ref: item.customerBookingRef || null,
+          po_no: item.poNo || null,
           warehouse_id: item.warehouseId, status: "in_production",
           created_by: createdBy,
         })
@@ -752,6 +850,8 @@ export default function BookingForm({
             value={customerId}
             onChange={(e) => {
               setCustomerId(e.target.value);
+              const selected = customersList.find((c) => c.id === e.target.value);
+              setCustomerNameInput(selected?.name ?? "");
               setWarning("");
               setBuyerId("");
               setBuyerNameInput("");
@@ -760,11 +860,17 @@ export default function BookingForm({
               setDeliveryPoint("");
             }}
             className="w-full rounded-lg border px-3 py-2 text-sm"
-            required
           >
             <option value="">-- বাছুন --</option>
-            {customers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+            {customersList.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
+          <input
+            value={customerNameInput}
+            onChange={(e) => { setCustomerNameInput(e.target.value); if (!e.target.value.trim()) setCustomerId(""); }}
+            className="mt-2 w-full rounded-lg border px-3 py-2 text-sm"
+            placeholder="নতুন Customer লিখুন"
+          />
+          <p className="mt-1 text-xs text-gray-500">নতুন Customer লিখলে সাবমিটের সময় অটোমেটিক যোগ হবে</p>
         </div>
         <div className="flex-1 min-w-[180px]">
           <label className="block text-sm text-gray-600 mb-1">Buyer</label>
@@ -817,6 +923,10 @@ export default function BookingForm({
             <label className="block text-xs text-gray-500 mb-1">Customer Booking Ref</label>
             <input value={customerBookingRef} onChange={(e) => setCustomerBookingRef(e.target.value)} className="w-full rounded-lg border px-3 py-2 text-sm" placeholder="কাস্টমারের নিজস্ব বুকিং নম্বর" />
           </div>
+          <div className="flex-1 min-w-[140px]">
+            <label className="block text-xs text-gray-500 mb-1">PO No</label>
+            <input value={poNo} onChange={(e) => setPoNo(e.target.value)} className="w-full rounded-lg border px-3 py-2 text-sm" placeholder="কাস্টমারের PO নম্বর" />
+          </div>
           <div className="flex-1 min-w-[200px]">
             <label className="block text-xs text-gray-500 mb-1">Default Product Details (প্রতি Row-এ বদলানো যাবে)</label>
             <input value={defaultProductDetails} onChange={(e) => setDefaultProductDetails(e.target.value)} className="w-full rounded-lg border px-3 py-2 text-sm" placeholder="PE 02 Color Poly Bags 10 mm" />
@@ -824,33 +934,6 @@ export default function BookingForm({
         </div>
 
         <div className="flex flex-wrap gap-4 items-end">
-          <div>
-            <label className="block text-xs text-gray-500 mb-1">Default Type (নতুন Row-এর জন্য)</label>
-            <select value={defaultMeasurementType} onChange={(e) => setDefaultMeasurementType(e.target.value as MeasurementType)} className="rounded-lg border px-3 py-2 text-sm">
-              <option value="simple">Simple (L x W)</option>
-              <option value="adhesive">Adhesive (L + Flap x W)</option>
-              <option value="gusset">Gusset (L x W + G + G)</option>
-            </select>
-          </div>
-          <div>
-            <label className="block text-xs text-gray-500 mb-1">Unit</label>
-            <select value={unit} onChange={(e) => setUnit(e.target.value as Unit)} className="rounded-lg border px-3 py-2 text-sm">
-              <option value="cm">cm</option>
-              <option value="inch">inch</option>
-            </select>
-          </div>
-          <div>
-            <label className="block text-xs text-gray-500 mb-1">Order Thickness (mm, 0-30)</label>
-            <input type="number" step="0.001" min="0" max="30" value={thicknessMm} onChange={(e) => setThicknessMm(e.target.value)} className="rounded-lg border px-3 py-2 text-sm w-28" />
-          </div>
-          <div>
-            <label className="block text-xs text-gray-500 mb-1">Production Thickness (mm)</label>
-            <input type="number" step="0.001" min="0" max="30" value={productionThicknessMm} onChange={(e) => setProductionThicknessMm(e.target.value)} className="rounded-lg border px-3 py-2 text-sm w-28" />
-          </div>
-          <div>
-            <label className="block text-xs text-gray-500 mb-1">PI Thickness (mm)</label>
-            <input type="number" step="0.001" min="0" max="30" value={piThicknessMm} onChange={(e) => setPiThicknessMm(e.target.value)} className="rounded-lg border px-3 py-2 text-sm w-28" />
-          </div>
           <div>
             <label className="block text-xs text-gray-500 mb-1">Material Type</label>
             <select value={materialType} onChange={(e) => setMaterialType(e.target.value as MaterialTypeVal)} className="rounded-lg border px-3 py-2 text-sm">
@@ -902,106 +985,114 @@ export default function BookingForm({
           </div>
         )}
 
-        <div className="flex items-center gap-3 flex-wrap">
-          <label className="flex items-center gap-2 text-sm">
-            <input type="checkbox" checked={hasPrint} onChange={(e) => setHasPrint(e.target.checked)} />
-            Print আছে?
-          </label>
-          {hasPrint && (
-            <>
-              <div>
-                <label className="block text-xs text-gray-500 mb-1">কয় Color</label>
-                <input type="number" min="0" value={printColors} onChange={(e) => setPrintColors(e.target.value)} className="w-24 rounded-lg border px-3 py-2 text-sm" />
-              </div>
-              <div>
-                <label className="block text-xs text-gray-500 mb-1">Rate/Color/Pc</label>
-                <input type="number" step="0.01" value={ratePerColor} onChange={(e) => setRatePerColor(e.target.value)} className="w-28 rounded-lg border px-3 py-2 text-sm" />
-              </div>
-            </>
-          )}
-          {(defaultMeasurementType === "adhesive" || rows.some((r) => r.measurementType === "adhesive")) && (
-            <div>
-              <label className="block text-xs text-gray-500 mb-1">Rate/Inch (Adhesive)</label>
-              <input type="number" step="0.001" value={ratePerInch} onChange={(e) => setRatePerInch(e.target.value)} className="w-28 rounded-lg border px-3 py-2 text-sm" />
-            </div>
-          )}
-        </div>
       </div>
 
-      {/* ===== Measurement Rows: এই স্টাইলের প্রতিটা Size একেকটা row ===== */}
+      {/* ===== Measurement Rows: এই স্টাইলের প্রতিটা Size একেকটা Card — Thickness/Print/Adhesive প্রতিটাতে আলাদা হতে পারে ===== */}
       <div className="rounded-lg border p-4 space-y-3 bg-white">
-        <p className="text-sm font-semibold text-gray-700">Measurement Rows (এই স্টাইলের সব Size)</p>
+        <p className="text-sm font-semibold text-gray-700">Measurement Rows (এই স্টাইলের সব Size — প্রতিটার থিকনেস/প্রিন্ট/এডহিসিভ আলাদা হতে পারে)</p>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm border-collapse min-w-[820px]">
-            <thead className="bg-gray-100 text-left text-gray-600">
-              <tr>
-                <th className="px-2 py-1.5">Type</th>
-                <th className="px-2 py-1.5">Description</th>
-                <th className="px-2 py-1.5">L</th>
-                <th className="px-2 py-1.5">Flap/Gusset</th>
-                <th className="px-2 py-1.5">W</th>
-                <th className="px-2 py-1.5">Qty (Pcs)</th>
-                <th className="px-2 py-1.5 text-right">Tube</th>
-                <th className="px-2 py-1.5 text-right">Cutting</th>
-                <th className="px-2 py-1.5 text-right">Req. Lbs</th>
-                <th className="px-2 py-1.5 text-right">Price/Pc</th>
-                <th className="px-2 py-1.5 text-right">Total Amt</th>
-                <th className="px-2 py-1.5 w-8"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {rowCalcs.map(({ row, calc }) => (
-                <tr key={row.rowId} className="border-t">
-                  <td className="px-2 py-1">
-                    <select
-                      value={row.measurementType}
-                      onChange={(e) => updateRow(row.rowId, "measurementType", e.target.value)}
-                      className="rounded border px-1.5 py-1 text-xs"
-                    >
-                      <option value="simple">Simple</option>
-                      <option value="adhesive">Adhesive</option>
-                      <option value="gusset">Gusset</option>
-                    </select>
-                  </td>
-                  <td className="px-2 py-1">
-                    <input value={row.productDetails} onChange={(e) => updateRow(row.rowId, "productDetails", e.target.value)} className="w-40 rounded border px-2 py-1 text-xs" placeholder="Description" />
-                  </td>
-                  <td className="px-2 py-1">
-                    <input type="number" step="0.01" value={row.lengthVal} onChange={(e) => updateRow(row.rowId, "lengthVal", e.target.value)} className="w-20 rounded border px-2 py-1 text-xs" />
-                  </td>
-                  <td className="px-2 py-1">
-                    {row.measurementType !== "simple" ? (
-                      <input
-                        type="number" step="0.01"
-                        value={row.measurementType === "adhesive" ? row.flapVal : row.gussetVal}
-                        onChange={(e) => updateRow(row.rowId, row.measurementType === "adhesive" ? "flapVal" : "gussetVal", e.target.value)}
-                        className="w-20 rounded border px-2 py-1 text-xs"
-                        placeholder={row.measurementType === "adhesive" ? "Flap" : "Gusset"}
-                      />
-                    ) : <span className="text-gray-400 text-xs">-</span>}
-                  </td>
-                  <td className="px-2 py-1">
-                    <input type="number" step="0.01" value={row.widthVal} onChange={(e) => updateRow(row.rowId, "widthVal", e.target.value)} className="w-20 rounded border px-2 py-1 text-xs" />
-                  </td>
-                  <td className="px-2 py-1">
-                    <input type="number" step="1" value={row.quantity} onChange={(e) => updateRow(row.rowId, "quantity", e.target.value)} className="w-24 rounded border px-2 py-1 text-xs" />
-                  </td>
-                  <td className="px-2 py-1 text-right text-xs text-gray-600">{calc ? `${money(calc.tube)} ${unit}` : "-"}</td>
-                  <td className="px-2 py-1 text-right text-xs text-gray-600">{calc ? `${money(calc.cutting)} ${unit}` : "-"}</td>
-                  <td className="px-2 py-1 text-right text-xs font-medium text-blue-700">{calc ? money(calc.finalLbs) : "-"}</td>
-                  <td className="px-2 py-1 text-right text-xs text-gray-600">{calc && calc.unitPrice > 0 ? money(calc.unitPrice) : "-"}</td>
-                  <td className="px-2 py-1 text-right text-xs font-medium text-green-700">{calc && calc.amount > 0 ? money(calc.amount) : "-"}</td>
-                  <td className="px-2 py-1 text-right">
-                    <button type="button" onClick={() => removeRow(row.rowId)} className="text-red-600 text-xs hover:underline">✕</button>
-                  </td>
-                </tr>
-              ))}
-              {rows.length === 0 && (
-                <tr><td colSpan={12} className="px-2 py-3 text-center text-xs text-gray-400">কোনো Row নেই — নিচের বাটনে Row যোগ করুন</td></tr>
-              )}
-            </tbody>
-          </table>
+        <div className="space-y-3">
+          {rowCalcs.map(({ row, calc }) => (
+            <div key={row.rowId} className="rounded-lg border p-3 bg-gray-50 space-y-2">
+              <div className="flex flex-wrap gap-3 items-end">
+                <div>
+                  <label className="block text-[11px] text-gray-500 mb-1">Type</label>
+                  <select
+                    value={row.measurementType}
+                    onChange={(e) => updateRow(row.rowId, "measurementType", e.target.value)}
+                    className="rounded border px-2 py-1.5 text-xs"
+                  >
+                    <option value="simple">Simple</option>
+                    <option value="adhesive">Adhesive</option>
+                    <option value="gusset">Gusset</option>
+                  </select>
+                </div>
+                <div className="flex-1 min-w-[140px]">
+                  <label className="block text-[11px] text-gray-500 mb-1">Description</label>
+                  <input value={row.productDetails} onChange={(e) => updateRow(row.rowId, "productDetails", e.target.value)} className="w-full rounded border px-2 py-1.5 text-xs" placeholder="Description" />
+                </div>
+                <div>
+                  <label className="block text-[11px] text-gray-500 mb-1">Unit</label>
+                  <select value={row.unit} onChange={(e) => updateRow(row.rowId, "unit", e.target.value)} className="rounded border px-2 py-1.5 text-xs">
+                    <option value="cm">cm</option>
+                    <option value="inch">inch</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[11px] text-gray-500 mb-1">L</label>
+                  <input type="number" step="0.01" value={row.lengthVal} onChange={(e) => updateRow(row.rowId, "lengthVal", e.target.value)} className="w-20 rounded border px-2 py-1.5 text-xs" />
+                </div>
+                {row.measurementType !== "simple" && (
+                  <div>
+                    <label className="block text-[11px] text-gray-500 mb-1">{row.measurementType === "adhesive" ? "Flap" : "Gusset"}</label>
+                    <input
+                      type="number" step="0.01"
+                      value={row.measurementType === "adhesive" ? row.flapVal : row.gussetVal}
+                      onChange={(e) => updateRow(row.rowId, row.measurementType === "adhesive" ? "flapVal" : "gussetVal", e.target.value)}
+                      className="w-20 rounded border px-2 py-1.5 text-xs"
+                    />
+                  </div>
+                )}
+                <div>
+                  <label className="block text-[11px] text-gray-500 mb-1">W</label>
+                  <input type="number" step="0.01" value={row.widthVal} onChange={(e) => updateRow(row.rowId, "widthVal", e.target.value)} className="w-20 rounded border px-2 py-1.5 text-xs" />
+                </div>
+                <div>
+                  <label className="block text-[11px] text-gray-500 mb-1">Qty (Pcs)</label>
+                  <input type="number" step="1" value={row.quantity} onChange={(e) => updateRow(row.rowId, "quantity", e.target.value)} className="w-24 rounded border px-2 py-1.5 text-xs" />
+                </div>
+                <button type="button" onClick={() => removeRow(row.rowId)} className="text-red-600 text-xs hover:underline ml-auto">✕ সরান</button>
+              </div>
+
+              <div className="flex flex-wrap gap-3 items-end pt-1 border-t border-dashed">
+                <div>
+                  <label className="block text-[11px] text-gray-500 mb-1">Order Thickness (mm)</label>
+                  <input type="number" step="0.001" min="0" max="30" value={row.thicknessMm} onChange={(e) => updateRow(row.rowId, "thicknessMm", e.target.value)} className="w-24 rounded border px-2 py-1.5 text-xs" />
+                </div>
+                <div>
+                  <label className="block text-[11px] text-gray-500 mb-1">Production Thickness (mm)</label>
+                  <input type="number" step="0.001" min="0" max="30" value={row.productionThicknessMm} onChange={(e) => updateRow(row.rowId, "productionThicknessMm", e.target.value)} className="w-24 rounded border px-2 py-1.5 text-xs" />
+                </div>
+                <div>
+                  <label className="block text-[11px] text-gray-500 mb-1">PI Thickness (mm)</label>
+                  <input type="number" step="0.001" min="0" max="30" value={row.piThicknessMm} onChange={(e) => updateRow(row.rowId, "piThicknessMm", e.target.value)} className="w-24 rounded border px-2 py-1.5 text-xs" />
+                </div>
+                <label className="flex items-center gap-1.5 text-xs text-gray-700">
+                  <input type="checkbox" checked={row.hasPrint} onChange={(e) => updateRow(row.rowId, "hasPrint", e.target.checked)} />
+                  Print আছে?
+                </label>
+                {row.hasPrint && (
+                  <>
+                    <div>
+                      <label className="block text-[11px] text-gray-500 mb-1">কয় Color</label>
+                      <input type="number" min="0" value={row.printColors} onChange={(e) => updateRow(row.rowId, "printColors", e.target.value)} className="w-20 rounded border px-2 py-1.5 text-xs" />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] text-gray-500 mb-1">Rate/Color/Pc</label>
+                      <input type="number" step="0.01" value={row.ratePerColor} onChange={(e) => updateRow(row.rowId, "ratePerColor", e.target.value)} className="w-24 rounded border px-2 py-1.5 text-xs" />
+                    </div>
+                  </>
+                )}
+                {row.measurementType === "adhesive" && (
+                  <div>
+                    <label className="block text-[11px] text-gray-500 mb-1">Rate/Inch (Adhesive)</label>
+                    <input type="number" step="0.001" value={row.ratePerInch} onChange={(e) => updateRow(row.rowId, "ratePerInch", e.target.value)} className="w-24 rounded border px-2 py-1.5 text-xs" />
+                  </div>
+                )}
+              </div>
+
+              <div className="flex flex-wrap gap-x-5 gap-y-1 text-xs pt-1 border-t">
+                <span className="text-gray-500">Tube: <strong className="text-gray-700">{calc ? `${money(calc.tube)} ${row.unit}` : "-"}</strong></span>
+                <span className="text-gray-500">Cutting: <strong className="text-gray-700">{calc ? `${money(calc.cutting)} ${row.unit}` : "-"}</strong></span>
+                <span className="text-blue-700">Req. Lbs: <strong>{calc ? money(calc.finalLbs) : "-"}</strong></span>
+                <span className="text-gray-600">Price/Pc: <strong>{calc && calc.unitPrice > 0 ? money(calc.unitPrice) : "-"}</strong></span>
+                <span className="text-green-700">Total Amt: <strong>{calc && calc.amount > 0 ? money(calc.amount) : "-"}</strong></span>
+              </div>
+            </div>
+          ))}
+          {rows.length === 0 && (
+            <p className="text-center text-xs text-gray-400 py-3">কোনো Row নেই — নিচের বাটনে Row যোগ করুন</p>
+          )}
         </div>
 
         <button type="button" onClick={addEmptyRow} className="text-xs text-gray-600 border border-dashed rounded px-3 py-1.5 hover:bg-gray-100">
@@ -1035,7 +1126,7 @@ export default function BookingForm({
             প্রতি লাইনে: <code className="bg-white border rounded px-1">Description | Size | Qty</code> — Size:{" "}
             <code className="bg-white border rounded px-1">105x68</code> = Simple (LxW),{" "}
             <code className="bg-white border rounded px-1">58+6x34</code> = Adhesive (L+Flap x W),{" "}
-            <code className="bg-white border rounded px-1">105x68x8</code> = Gusset (LxWxG)
+            <code className="bg-white border rounded px-1">105x68x8</code> = Gusset (LxWxG) — বাকি (Unit/Thickness/Print) শেষ Row থেকে কপি হবে
           </p>
           <textarea
             value={bulkPasteText}
@@ -1074,6 +1165,7 @@ export default function BookingForm({
                 <tr>
                   <th className="px-3 py-2">Style</th>
                   <th className="px-3 py-2">Ref</th>
+                  <th className="px-3 py-2">PO No</th>
                   <th className="px-3 py-2">Product</th>
                   <th className="px-3 py-2 text-right">Qty</th>
                   <th className="px-3 py-2 text-right">Required Lbs</th>
@@ -1086,6 +1178,7 @@ export default function BookingForm({
                   <tr key={i} className="border-t">
                     <td className="px-3 py-2">{item.style || "-"}</td>
                     <td className="px-3 py-2">{item.customerBookingRef || "-"}</td>
+                    <td className="px-3 py-2">{item.poNo || "-"}</td>
                     <td className="px-3 py-2">{item.productDetails || "-"}</td>
                     <td className="px-3 py-2 text-right">{item.quantity}</td>
                     <td className="px-3 py-2 text-right">{money(item.finalLbs)}</td>
