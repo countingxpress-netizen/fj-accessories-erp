@@ -7,6 +7,7 @@ import { BulkActionBar } from "@/components/BulkActionBar";
 import { deleteBookingCascade } from "@/lib/bookingDelete";
 import { useBulkDeletePermission } from "@/app/dashboard/PermissionProvider";
 import BookingRow from "./BookingRow";
+import BookingGroupSummaryRow from "./BookingGroupSummaryRow";
 
 export default function BookingsTable({
   groups, deliveredMap, challanNosByBooking, piNoByBooking,
@@ -22,8 +23,12 @@ export default function BookingsTable({
   const allBookings = useMemo(() => groups.flatMap((g) => g.items), [groups]);
   const { partition, markFulfilled } = useBulkDeletePermission("bookings");
   const {
-    selectedIds, selectedCount, isSelected, toggle, toggleAll, isAllSelected, isSomeSelected, clear,
+    selectedIds, selectedCount, isSelected, toggle, toggleMany, toggleAll, isAllSelected, isSomeSelected, clear,
   } = useBulkSelect(allBookings, (b: any) => b.id);
+  const [expandedGroups, setExpandedGroups] = React.useState<Record<string, boolean>>({});
+  function toggleExpand(groupId: string) {
+    setExpandedGroups((prev) => ({ ...prev, [groupId]: !prev[groupId] }));
+  }
 
   async function handleBulkDelete() {
     const { allowed, blocked } = partition(selectedIds);
@@ -80,20 +85,54 @@ export default function BookingsTable({
                 new Set(group.items.map((b: any) => piNoByBooking[b.id]).filter(Boolean))
               );
               const groupPiNo = groupPiNos.join(", ");
+              const groupIds = group.items.map((b: any) => b.id);
+
+              // একটাই Measurement থাকা Booking-এ Summary/Detail আলাদা করার দরকার নেই —
+              // আগের মতোই একটা মাত্র সম্পূর্ণ row দেখাবে।
+              if (group.items.length === 1) {
+                const b = group.items[0];
+                return (
+                  <BookingRow
+                    key={b.id}
+                    booking={b}
+                    serial={gi + 1}
+                    groupPiNo={groupPiNo}
+                    deliveredQty={deliveredMap[b.id] ?? 0}
+                    challanNos={challanNosByBooking[b.id] ?? []}
+                    selected={isSelected(b.id)}
+                    onToggleSelect={() => toggle(b.id)}
+                  />
+                );
+              }
+
+              const expanded = !!expandedGroups[group.groupId];
+              const allSelected = groupIds.every((id) => isSelected(id));
+              const someSelected = groupIds.some((id) => isSelected(id));
+
               return (
                 <React.Fragment key={group.groupId}>
-                  {group.items.map((b: any, i: number) => (
+                  <BookingGroupSummaryRow
+                    items={group.items}
+                    serial={gi + 1}
+                    groupPiNo={groupPiNo}
+                    deliveredMap={deliveredMap}
+                    challanNosByBooking={challanNosByBooking}
+                    expanded={expanded}
+                    onToggleExpand={() => toggleExpand(group.groupId)}
+                    allSelected={allSelected}
+                    someSelected={someSelected}
+                    onToggleSelectGroup={() => toggleMany(groupIds)}
+                  />
+                  {expanded && group.items.map((b: any) => (
                     <BookingRow
                       key={b.id}
                       booking={b}
-                      serial={i === 0 ? gi + 1 : undefined}
-                      isGroupStart={i === 0}
-                      groupSize={group.items.length}
                       groupPiNo={groupPiNo}
                       deliveredQty={deliveredMap[b.id] ?? 0}
                       challanNos={challanNosByBooking[b.id] ?? []}
                       selected={isSelected(b.id)}
                       onToggleSelect={() => toggle(b.id)}
+                      variant="detail"
                     />
                   ))}
                 </React.Fragment>
