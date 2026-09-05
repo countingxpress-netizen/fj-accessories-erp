@@ -58,7 +58,7 @@ export default function EditPaymentForm({
     await supabase.from("payment_allocations").delete().eq("payment_id", payment.id);
     await supabase.from("payment_allocations").insert(
       validAllocations.map(([invoiceId, amount]) => ({
-        payment_id: payment.id, invoice_id: invoiceId, amount: parseFloat(amount),
+        payment_id: payment.id, invoice_id: invoiceId === "opening" ? null : invoiceId, amount: parseFloat(amount),
       }))
     );
 

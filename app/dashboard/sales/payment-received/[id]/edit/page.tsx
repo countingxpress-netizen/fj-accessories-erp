@@ -5,7 +5,7 @@ import { notFound } from "next/navigation";
 export default async function EditPaymentPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const supabase = await createClient();
-  const { data: payment } = await supabase.from("customer_payments").select("*, customers(name)").eq("id", id).single();
+  const { data: payment } = await supabase.from("customer_payments").select("*, customers(name, opening_balance, opening_balance_date)").eq("id", id).single();
   if (!payment) return notFound();
 
   const { data: cashBankAccounts } = await supabase
@@ -37,7 +37,17 @@ export default async function EditPaymentPage({ params }: { params: Promise<{ id
   const { data: thisPaymentAllocations } = await supabase
     .from("payment_allocations").select("invoice_id, amount").eq("payment_id", id);
   const currentAllocationMap: Record<string, number> = {};
-  (thisPaymentAllocations ?? []).forEach((a: any) => { currentAllocationMap[a.invoice_id] = a.amount; });
+  (thisPaymentAllocations ?? []).forEach((a: any) => { currentAllocationMap[a.invoice_id ?? "opening"] = a.amount; });
+
+  // এই payment বাদে বাকি সব payment-এর Opening Balance-এর বিপরীতে allocation যোগ করে
+  // "এই payment ফিরিয়ে দিলে Opening Balance-এ কত বাকি থাকবে" বের করা হচ্ছে।
+  const { data: otherOpeningAllocations } = await supabase
+    .from("payment_allocations")
+    .select("amount, payment_id, customer_payments!inner(customer_id)")
+    .is("invoice_id", null)
+    .eq("customer_payments.customer_id", payment.customer_id)
+    .neq("payment_id", id);
+  const openingPaidByOthers = (otherOpeningAllocations ?? []).reduce((s: number, a: any) => s + a.amount, 0);
 
   const invoices = (allInvoices ?? [])
     .map((inv: any) => {
@@ -45,8 +55,21 @@ export default async function EditPaymentPage({ params }: { params: Promise<{ id
       const due = total - (allocatedByOthers[inv.id] ?? 0); // এই payment-এর নিজস্ব allocation বাদ দিয়ে যা বাকি আছে + এই payment ফিরিয়ে দিলে যা যোগ হবে
       return { id: inv.id, invoice_no: inv.invoice_no, invoice_date: inv.invoice_date, total, due };
     })
-    .filter((inv: any) => inv.due > 0.009 || currentAllocationMap[inv.id] > 0)
-    .sort((a: any, b: any) => a.invoice_date.localeCompare(b.invoice_date));
+    .filter((inv: any) => inv.due > 0.009 || currentAllocationMap[inv.id] > 0);
+
+  const openingDue = (payment.customers?.opening_balance ?? 0) - openingPaidByOthers;
+  if (openingDue > 0.009 || currentAllocationMap["opening"] > 0) {
+    invoices.unshift({
+      id: "opening", invoice_no: "Opening Balance (পূর্বের বাকি)",
+      invoice_date: payment.customers?.opening_balance_date ?? "2000-01-01",
+      total: payment.customers?.opening_balance ?? 0, due: openingDue,
+    });
+  }
+  invoices.sort((a: any, b: any) => {
+    if (a.id === "opening") return -1;
+    if (b.id === "opening") return 1;
+    return a.invoice_date.localeCompare(b.invoice_date);
+  });
 
   return (
     <div>

@@ -9,7 +9,7 @@ import { money } from "@/lib/format";
 
 type Customer = { id: string; name: string };
 type Account = { id: string; account_code: string; account_name: string };
-type UnpaidInvoice = { id: string; invoice_no: string; invoice_date: string; total: number; due: number };
+type UnpaidInvoice = { id: string; invoice_no: string; invoice_date: string; total: number; due: number; isOpening?: boolean };
 
 const initialState = {
   customerId: "", depositAccountId: "", paymentMode: "cash",
@@ -161,7 +161,7 @@ export default function PaymentForm({
 
     await supabase.from("payment_allocations").insert(
       validAllocations.map(([invoiceId, amount]) => ({
-        payment_id: payment.id, invoice_id: invoiceId, amount: parseFloat(amount),
+        payment_id: payment.id, invoice_id: invoiceId === "opening" ? null : invoiceId, amount: parseFloat(amount),
       }))
     );
 
@@ -215,7 +215,7 @@ export default function PaymentForm({
               </thead>
               <tbody>
                 {unpaidInvoices.map((inv) => (
-                  <tr key={inv.id} className="border-t">
+                  <tr key={inv.id} className={`border-t ${inv.isOpening ? "bg-amber-50" : ""}`}>
                     <td className="px-3 py-2 font-medium">{inv.invoice_no}</td>
                     <td className="px-3 py-2 text-gray-500">{formatDate(inv.invoice_date)}</td>
                     <td className="px-3 py-2 text-right">{money(inv.total)}</td>
