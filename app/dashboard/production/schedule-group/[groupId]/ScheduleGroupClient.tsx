@@ -163,12 +163,9 @@ export default function ScheduleGroupClient({
             <tr className="bg-blue-500 text-white">
               <th className="border border-gray-800 py-2">স্টাইল</th>
               <th className="border border-gray-800 py-2">টিউব</th>
+              <th className="border border-gray-800 py-2">Quantity</th>
               {scheduleType === "blowing" && <th className="border border-gray-800 py-2">থিকনেস</th>}
-              {scheduleType === "blowing" ? (
-                <th className="border border-gray-800 py-2">এলবিএস</th>
-              ) : (
-                <th className="border border-gray-800 py-2">Quantity</th>
-              )}
+              {scheduleType === "blowing" && <th className="border border-gray-800 py-2">এলবিএস</th>}
               <th className="border border-gray-800 py-2">মন্তব্য</th>
             </tr>
           </thead>
@@ -179,26 +176,22 @@ export default function ScheduleGroupClient({
                 <td className="border border-gray-800 text-center py-2">
                   {formatMeasurement(b, scheduleType === "blowing" ? "blowing" : "other")}
                 </td>
+                <td className="border border-gray-800 text-center py-2">{money(b.quantity_pcs ?? 0)} Pcs</td>
                 {scheduleType === "blowing" && (
                   <td className="border border-gray-800 text-center py-2">{b.production_thickness_mm} mm</td>
                 )}
-                {scheduleType === "blowing" ? (
+                {scheduleType === "blowing" && (
                   <td className="border border-gray-800 text-center py-2">{money(b.required_lbs)} Lbs</td>
-                ) : (
-                  <td className="border border-gray-800 text-center py-2">{money(b.quantity_pcs ?? 0)} Pcs</td>
                 )}
                 <td className="border border-gray-800 text-center py-2">{remarks[scheduleType][b.id]}</td>
               </tr>
             ))}
             <tr className="font-semibold">
-              <td className="border border-gray-800 text-center py-2" colSpan={scheduleType === "blowing" ? 2 : 1}>টোটাল =</td>
-              {scheduleType === "blowing" ? (
+              <td className="border border-gray-800 text-center py-2" colSpan={2}>টোটাল =</td>
+              <td className="border border-gray-800 text-center py-2">{money(totalQty)} Pcs</td>
+              {scheduleType === "blowing" && <td className="border border-gray-800 text-center py-2"></td>}
+              {scheduleType === "blowing" && (
                 <td className="border border-gray-800 text-center py-2">{money(totalLbs)} Lbs</td>
-              ) : (
-                <>
-                  <td className="border border-gray-800 text-center py-2"></td>
-                  <td className="border border-gray-800 text-center py-2">{money(totalQty)} Pcs</td>
-                </>
               )}
               <td className="border border-gray-800"></td>
             </tr>
