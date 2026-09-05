@@ -7,11 +7,13 @@ function formatMeasurement(booking: any, finishedGood: any) {
   // ১. বুকিং ডাটা থাকলে সেটা দেখাবে
   if (booking) {
     const unit = booking.measurement_unit || "cm";
-    const L = booking.length_val, W = booking.width_val, F = booking.flap_val, G = booking.gusset_val;
+    const L = booking.length_val, W = booking.width_val, F = booking.flap_val, G = booking.gusset_val, P = booking.pillow_val;
 
     if (booking.measurement_type === "simple") return `L-${L} x W-${W} ${unit}`;
     if (booking.measurement_type === "gusset") return `L-${L} x W-${W} + G-${G} ${unit}`;
     if (booking.measurement_type === "adhesive") return `L-${L} + F-${F} x W-${W} ${unit}`;
+    if (booking.measurement_type === "flap_gusset") return `L-${L} + F-${F} + G-${G} x W-${W} ${unit}`;
+    if (booking.measurement_type === "pillow") return `L-${L} + P-${P} x W-${W} ${unit}`;
   }
 
   // ২. বুকিং ডাটা না থাকলে finished_goods টেবিলের ডাটা (Fallback) দেখাবে
@@ -52,7 +54,7 @@ export default async function ChallanPrintPage({ params }: { params: Promise<{ i
   if (challan.booking_id) {
     const { data: relatedBookings } = await supabase
       .from("bookings")
-      .select("product_id, measurement_type, length_val, width_val, flap_val, gusset_val, measurement_unit")
+      .select("product_id, measurement_type, length_val, width_val, flap_val, gusset_val, pillow_val, measurement_unit")
       .eq("id", challan.booking_id);
 
     (relatedBookings ?? []).forEach((b: any) => { 

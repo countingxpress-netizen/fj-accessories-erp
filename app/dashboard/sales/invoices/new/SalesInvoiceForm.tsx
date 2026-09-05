@@ -3,7 +3,7 @@ import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { generateNextDocNo } from "@/lib/docNumber";
-import { calcTubeCutting, toInches } from "@/lib/calcTubeCutting";
+import { calcTubeCutting, toInches, hasAdhesiveCharge } from "@/lib/calcTubeCutting";
 import { getCurrentUserId } from "@/lib/currentUser";
 import { resolveRate } from "@/lib/rateHistory";
 import { money } from "@/lib/format";
@@ -14,7 +14,7 @@ type Booking = {
   delivery_point: string | null; customer_booking_ref: string | null;
   has_print: boolean; print_colors: number; rate_per_color: number; rate_per_inch: number;
   measurement_type: string; measurement_unit: string;
-  length_val: number; width_val: number; flap_val: number | null; gusset_val: number | null; thickness_mm: number;
+  length_val: number; width_val: number; flap_val: number | null; gusset_val: number | null; pillow_val: number | null; thickness_mm: number;
   material_type: string;
   finished_goods: { product_name: string; length_cm: number; width_cm: number; thickness: number } | null;
 };
@@ -23,10 +23,12 @@ type PriceHistoryRow = { customer_id: string; effective_from: string; rate: numb
 
 function formatMeasurement(b: Booking) {
   const unit = b.measurement_unit;
-  const L = b.length_val, W = b.width_val, F = b.flap_val, G = b.gusset_val;
+  const L = b.length_val, W = b.width_val, F = b.flap_val, G = b.gusset_val, P = b.pillow_val;
   if (b.measurement_type === "simple") return `L-${L} x W-${W} ${unit}`;
   if (b.measurement_type === "gusset") return `L-${L} x W-${W} + G-${G} ${unit}`;
   if (b.measurement_type === "adhesive") return `L-${L} + F-${F} x W-${W} ${unit}`;
+  if (b.measurement_type === "flap_gusset") return `L-${L} + F-${F} + G-${G} x W-${W} ${unit}`;
+  if (b.measurement_type === "pillow") return `L-${L} + P-${P} x W-${W} ${unit}`;
   return "-";
 }
 
@@ -99,8 +101,8 @@ export default function SalesInvoiceForm({
   function getSurcharge(b: Booking, cuttingInch: number) {
     let printCharge = 0, adhesiveCharge = 0;
     if (b.has_print) printCharge = (b.print_colors || 0) * (b.rate_per_color || 0.20);
-    // Adhesive-এ width_val-ই cutting, তাই একই cuttingInch (CM to Inch টেবিল-সহ) ব্যবহার হবে
-    if (b.measurement_type === "adhesive") adhesiveCharge = cuttingInch * (b.rate_per_inch || 0.02);
+    // Adhesive/Flap Gusset-এ width_val-ই cutting, তাই একই cuttingInch (CM to Inch টেবিল-সহ) ব্যবহার হবে
+    if (hasAdhesiveCharge(b.measurement_type)) adhesiveCharge = cuttingInch * (b.rate_per_inch || 0.02);
     return { printCharge, adhesiveCharge };
   }
 

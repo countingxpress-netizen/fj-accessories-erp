@@ -10,10 +10,18 @@ export function calcTubeCutting(booking: any) {
   const W = booking.width_val ?? 0;
   const F = booking.flap_val ?? 0;
   const G = booking.gusset_val ?? 0;
+  const P = booking.pillow_val ?? 0;
 
   if (booking.measurement_type === "simple") return { tube: W, cutting: L };
   if (booking.measurement_type === "adhesive") return { tube: L + F / 2, cutting: W };
+  if (booking.measurement_type === "flap_gusset") return { tube: L + F / 2 + G, cutting: W };
+  if (booking.measurement_type === "pillow") return { tube: L + P, cutting: W };
   return { tube: W + G + G, cutting: L }; // gusset
+}
+
+// Adhesive Rate/Inch চার্জ Adhesive আর Flap Gusset — দুই টাইপেই লাগে, দুটোতেই Flap/আঠা থাকে
+export function hasAdhesiveCharge(measurementType: string) {
+  return measurementType === "adhesive" || measurementType === "flap_gusset";
 }
 
 // cm → inch রূপান্তর: PE-এর ক্ষেত্রে শুধু cutting টেবিল (die/print সাইজ) অনুযায়ী,
@@ -83,7 +91,7 @@ export function calcPiUnitPriceWithMarkup(
 
   const baseBdt = (pricePerLbs * tubeInch * cuttingInch * thickness) / 75000;
 
-  const adhesiveCharge = booking.measurement_type === "adhesive"
+  const adhesiveCharge = hasAdhesiveCharge(booking.measurement_type)
     ? cuttingInch * (adhesiveRatePerInch || 0)
     : 0;
 

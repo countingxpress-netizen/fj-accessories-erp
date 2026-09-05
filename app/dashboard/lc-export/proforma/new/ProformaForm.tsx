@@ -14,7 +14,7 @@ type Booking = {
   style: string | null; customer_booking_ref: string | null; garments_name: string | null; buyer_id: string | null;
   buyers: { name: string } | null; merchants: { name: string } | null;
   measurement_type: string; measurement_unit: string; length_val: number; width_val: number;
-  flap_val: number | null; gusset_val: number | null; pi_thickness_mm: number | null;
+  flap_val: number | null; gusset_val: number | null; pillow_val: number | null; pi_thickness_mm: number | null;
   material_type: string; has_print: boolean; print_colors: number | null; rate_per_color: number | null;
   finished_goods: { product_name: string; length_cm: number; width_cm: number; thickness: number } | null;
 };
@@ -43,10 +43,12 @@ function addMonthsISO(iso: string, months: number): string {
 
 function formatMeasurement(b: Booking) {
   const unit = b.measurement_unit;
-  const L = b.length_val, W = b.width_val, F = b.flap_val, G = b.gusset_val;
+  const L = b.length_val, W = b.width_val, F = b.flap_val, G = b.gusset_val, P = b.pillow_val;
   if (b.measurement_type === "simple") return `L-${L} x W-${W}${unit}`;
   if (b.measurement_type === "gusset") return `L-${L} x W-${W} + G-${G}${unit}`;
   if (b.measurement_type === "adhesive") return `L-${L} + F-${F} x W-${W}${unit}`;
+  if (b.measurement_type === "flap_gusset") return `L-${L} + F-${F} + G-${G} x W-${W}${unit}`;
+  if (b.measurement_type === "pillow") return `L-${L} + P-${P} x W-${W}${unit}`;
   return "-";
 }
 

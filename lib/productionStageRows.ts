@@ -102,7 +102,7 @@ export const PRODUCTION_ORDER_SELECT = `
   blowing_produced_lbs, printing_produced_pcs, cutting_produced_pcs,
   bookings (
     booking_no, booking_group_id, has_print, warehouse_id, measurement_type, measurement_unit,
-    length_val, width_val, flap_val, gusset_val,
+    length_val, width_val, flap_val, gusset_val, pillow_val,
     customers (name), finished_goods (product_name)
   )
 `;

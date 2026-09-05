@@ -39,7 +39,7 @@ export default function EditBookingForm({ booking }: { booking: any }) {
       <div className="rounded-lg border bg-gray-50 p-4 space-y-1 text-sm">
         <p className="font-semibold text-gray-700 mb-2">সম্পূর্ণ বুকিং তথ্য (শুধু পড়ার জন্য)</p>
         <p><span className="text-gray-500">Quantity:</span> {booking.quantity_pcs} pcs</p>
-        <p><span className="text-gray-500">Measurement:</span> {booking.measurement_type} — L:{booking.length_val} W:{booking.width_val} {booking.flap_val ? `Flap:${booking.flap_val}` : ""} {booking.gusset_val ? `Gusset:${booking.gusset_val}` : ""} ({booking.measurement_unit})</p>
+        <p><span className="text-gray-500">Measurement:</span> {booking.measurement_type} — L:{booking.length_val} W:{booking.width_val} {booking.flap_val ? `Flap:${booking.flap_val}` : ""} {booking.gusset_val ? `Gusset:${booking.gusset_val}` : ""} {booking.pillow_val ? `Pillow:${booking.pillow_val}` : ""} ({booking.measurement_unit})</p>
         <p><span className="text-gray-500">Order Thickness:</span> {booking.thickness_mm} mm | <span className="text-gray-500">Production Thickness:</span> {booking.production_thickness_mm} mm</p>
         <p><span className="text-gray-500">Material Type:</span> {booking.material_type}</p>
         <p><span className="text-gray-500">Required:</span> {money(booking.required_lbs)} Lbs</p>

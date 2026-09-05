@@ -6,7 +6,7 @@ import { money } from "@/lib/format";
 
 function formatMeasurement(b: any, forStage: "blowing" | "other") {
   const unit = b.measurement_unit;
-  const L = b.length_val, W = b.width_val, F = b.flap_val, G = b.gusset_val;
+  const L = b.length_val, W = b.width_val, F = b.flap_val, G = b.gusset_val, P = b.pillow_val;
   if (forStage === "blowing") {
     if (b.measurement_type === "simple") return `W-${W} ${unit}`;
     if (b.measurement_type === "gusset") return `W-${W} + G-${G} ${unit}`;
@@ -14,10 +14,20 @@ function formatMeasurement(b: any, forStage: "blowing" | "other") {
       const tube = L + F / 2;
       return `(L-${L} + F-${F}) = ${tube} ${unit}`;
     }
+    if (b.measurement_type === "flap_gusset") {
+      const tube = L + F / 2 + G;
+      return `(L-${L} + F-${F} + G-${G}) = ${tube} ${unit}`;
+    }
+    if (b.measurement_type === "pillow") {
+      const tube = L + P;
+      return `(L-${L} + P-${P}) = ${tube} ${unit}`;
+    }
   } else {
     if (b.measurement_type === "simple") return `L-${L} x W-${W} ${unit}`;
     if (b.measurement_type === "gusset") return `L-${L} x W-${W} + G-${G} ${unit}`;
     if (b.measurement_type === "adhesive") return `L-${L} + F-${F} x W-${W} ${unit}`;
+    if (b.measurement_type === "flap_gusset") return `L-${L} + F-${F} + G-${G} x W-${W} ${unit}`;
+    if (b.measurement_type === "pillow") return `L-${L} + P-${P} x W-${W} ${unit}`;
   }
   return "-";
 }

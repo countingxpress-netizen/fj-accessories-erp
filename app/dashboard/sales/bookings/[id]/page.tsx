@@ -209,11 +209,13 @@ export default async function BookingViewPage({ params }: { params: Promise<{ id
           <tbody>
             {bookings.map((b: any, i: number) => {
               const unit = b.measurement_unit;
-              const L = b.length_val, W = b.width_val, F = b.flap_val, G = b.gusset_val;
+              const L = b.length_val, W = b.width_val, F = b.flap_val, G = b.gusset_val, P = b.pillow_val;
               const measurement =
                 b.measurement_type === "simple" ? `L-${L} x W-${W}${unit}` :
                 b.measurement_type === "gusset" ? `L-${L} x W-${W} + G-${G}${unit}` :
-                b.measurement_type === "adhesive" ? `L-${L} + F-${F} x W-${W}${unit}` : "-";
+                b.measurement_type === "adhesive" ? `L-${L} + F-${F} x W-${W}${unit}` :
+                b.measurement_type === "flap_gusset" ? `L-${L} + F-${F} + G-${G} x W-${W}${unit}` :
+                b.measurement_type === "pillow" ? `L-${L} + P-${P} x W-${W}${unit}` : "-";
               const { tube, cutting } = calcTubeCutting(b);
               const orderLbs = calcRequiredLbs(b, b.thickness_mm);
               const price = priceByBooking[b.id];

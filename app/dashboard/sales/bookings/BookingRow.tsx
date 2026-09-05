@@ -8,16 +8,7 @@ import { formatStyle } from "@/lib/formatStyle";
 import { deleteBookingCascade } from "@/lib/bookingDelete";
 import GuardedAction from "@/app/dashboard/GuardedAction";
 import { money } from "@/lib/format";
-
-function formatMeasurement(b: any) {
-  const unit = b.measurement_unit;
-  const L = b.length_val, W = b.width_val, F = b.flap_val, G = b.gusset_val;
-
-  if (b.measurement_type === "simple") return `L-${L} x W-${W} ${unit}`;
-  if (b.measurement_type === "gusset") return `L-${L} x W-${W} + G-${G} ${unit}`;
-  if (b.measurement_type === "adhesive") return `L-${L} + F-${F} x W-${W} ${unit}`;
-  return "-";
-}
+import { formatMeasurement } from "@/lib/formatMeasurement";
 
 export default function BookingRow({
   booking, serial, groupPiNo, deliveredQty, challanNos, selected, onToggleSelect, variant = "full",

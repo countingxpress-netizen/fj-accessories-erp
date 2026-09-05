@@ -12,10 +12,12 @@ function fmt(n: number) {
 function formatMeasurement(b: any) {
   if (!b) return "-";
   const unit = b.measurement_unit;
-  const L = b.length_val, W = b.width_val, F = b.flap_val, G = b.gusset_val;
+  const L = b.length_val, W = b.width_val, F = b.flap_val, G = b.gusset_val, P = b.pillow_val;
   if (b.measurement_type === "simple") return `L-${L} x W-${W} ${unit}`;
   if (b.measurement_type === "gusset") return `L-${L} x W-${W} + G-${G} ${unit}`;
   if (b.measurement_type === "adhesive") return `L-${L} + F-${F} x W-${W} ${unit}`;
+  if (b.measurement_type === "flap_gusset") return `L-${L} + F-${F} + G-${G} x W-${W} ${unit}`;
+  if (b.measurement_type === "pillow") return `L-${L} + P-${P} x W-${W} ${unit}`;
   return "-";
 }
 
@@ -28,7 +30,7 @@ export default async function InvoicePrintPage({ params }: { params: Promise<{ i
     .select(`*, customers(name, code, address, phone, opening_balance, opening_balance_date),
       creator:app_users!sales_invoices_created_by_fkey(signature_url),
       sales_invoice_items(quantity_pcs, unit_price, amount,
-        bookings(booking_no, style, measurement_type, measurement_unit, length_val, width_val, flap_val, gusset_val),
+        bookings(booking_no, style, measurement_type, measurement_unit, length_val, width_val, flap_val, gusset_val, pillow_val),
         finished_goods(product_name))`)
     .eq("id", id)
     .single();

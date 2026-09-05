@@ -75,13 +75,23 @@ export default async function SchedulePrintPage({
         <>
           <p className="text-sm mb-2">Print Colors: <strong>{booking?.print_colors ?? 0}</strong></p>
           <p className="text-sm mb-4">Print Layout Note: {booking?.print_layout_note || "কোনো লেআউট নোট নেই"}</p>
+          {booking?.print_layout_file_url && (
+            /\.(jpe?g|png|webp)$/i.test(booking.print_layout_file_url) ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={booking.print_layout_file_url} alt="Print Layout" className="max-w-full border mb-4" />
+            ) : (
+              <p className="text-sm mb-4 print:hidden">
+                Print Layout ফাইল (PDF): <a href={booking.print_layout_file_url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">আলাদাভাবে দেখুন/প্রিন্ট করুন</a>
+              </p>
+            )
+          )}
         </>
       )}
 
       {scheduleType === "cutting" && (
         <>
           <p className="text-sm">Measurement Type: {booking?.measurement_type}</p>
-          <p className="text-sm">L: {booking?.length_val} | W: {booking?.width_val} {booking?.flap_val ? `| Flap: ${booking.flap_val}` : ""} {booking?.gusset_val ? `| Gusset: ${booking.gusset_val}` : ""} ({booking?.measurement_unit})</p>
+          <p className="text-sm">L: {booking?.length_val} | W: {booking?.width_val} {booking?.flap_val ? `| Flap: ${booking.flap_val}` : ""} {booking?.gusset_val ? `| Gusset: ${booking.gusset_val}` : ""} {booking?.pillow_val ? `| Pillow: ${booking.pillow_val}` : ""} ({booking?.measurement_unit})</p>
         </>
       )}
 
