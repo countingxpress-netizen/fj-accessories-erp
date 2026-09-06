@@ -3,8 +3,10 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { money } from "@/lib/format";
+import { calcQuotedUnitPrice } from "@/lib/calcTubeCutting";
+import { syncAutoInvoiceForGroup } from "@/lib/autoInvoiceFromBooking";
 
-export default function EditBookingForm({ booking }: { booking: any }) {
+export default function EditBookingForm({ booking, pricePerLbs }: { booking: any; pricePerLbs: number }) {
   const [style, setStyle] = useState(booking.style ?? "");
   const [customerBookingRef, setCustomerBookingRef] = useState(booking.customer_booking_ref ?? "");
   const [productDetails, setProductDetails] = useState(booking.product_details ?? "");
@@ -22,14 +24,41 @@ export default function EditBookingForm({ booking }: { booking: any }) {
     setError("");
     setLoading(true);
 
-    const { error } = await supabase.from("bookings").update({
+    const colors = parseInt(printColors) || 0;
+    const printChanged = (hasPrint ? 1 : 0) !== (booking.has_print ? 1 : 0)
+      || colors !== (booking.print_colors ?? 0);
+
+    const patch: Record<string, unknown> = {
       style, customer_booking_ref: customerBookingRef, product_details: productDetails,
       delivery_point: deliveryPoint, print_layout_note: printLayoutNote,
-      has_print: hasPrint, print_colors: parseInt(printColors) || 0,
-    }).eq("id", booking.id);
+      has_print: hasPrint, print_colors: colors,
+    };
+
+    // Print on/off বা color বদলালে quoted price নতুন করে হিসাব হবে (auto Sales Invoice-এও যাবে)
+    if (printChanged && pricePerLbs) {
+      const newUnitPrice = calcQuotedUnitPrice(
+        { ...booking, has_print: hasPrint, print_colors: colors },
+        pricePerLbs,
+        booking.thickness_mm,
+      );
+      if (newUnitPrice > 0) {
+        patch.quoted_unit_price = newUnitPrice;
+        patch.quoted_amount = Math.round((booking.quantity_pcs || 0) * newUnitPrice);
+      }
+    }
+
+    const { error } = await supabase.from("bookings").update(patch).eq("id", booking.id);
+    if (error) { setLoading(false); setError(error.message); return; }
+
+    // এই booking group-এর auto Sales Invoice + JV আপডেট (header + লাইন + দাম)
+    if (booking.booking_group_id) {
+      const r = await syncAutoInvoiceForGroup(supabase, booking.booking_group_id, {
+        invoiceDate: booking.booking_date,
+      });
+      if (!r.ok) { setLoading(false); setError(`পরিবর্তন সেভ হয়েছে কিন্তু Sales Invoice আপডেটে সমস্যা: ${r.error}`); return; }
+    }
 
     setLoading(false);
-    if (error) { setError(error.message); return; }
     router.push(`/dashboard/sales/bookings/${booking.id}`);
     router.refresh();
   }

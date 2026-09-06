@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/client";
 import { DeleteResult, friendlyDeleteError } from "@/lib/deleteResult";
 import { reverseInventoryJv } from "@/lib/inventoryCost";
+import { syncAutoInvoiceForGroup } from "@/lib/autoInvoiceFromBooking";
 
 type SupabaseClient = ReturnType<typeof createClient>;
 
@@ -18,14 +19,37 @@ export async function deleteBookingCascade(
   bookingId: string
 ): Promise<DeleteResult> {
   const { data: challanItems } = await supabase.from("delivery_challans").select("id").eq("booking_id", bookingId);
-  const { data: invoiceItems } = await supabase.from("sales_invoice_items").select("id").eq("booking_id", bookingId);
-  if ((challanItems && challanItems.length > 0) || (invoiceItems && invoiceItems.length > 0)) {
-    return { ok: false, error: "এই বুকিং-এর সাথে ইতিমধ্যে Delivery Challan বা Sales Invoice যুক্ত আছে, তাই মুছে ফেলা যাবে না।" };
+  const { data: invoiceItems } = await supabase
+    .from("sales_invoice_items")
+    .select("id, invoice_id")
+    .eq("booking_id", bookingId);
+
+  // এই booking-এর invoice item-গুলো কোন invoice-এ, আর সেগুলো auto না হাতে তৈরি —
+  // embed এড়িয়ে আলাদা query (embed-এর array/object আচরণ role-ভেদে বদলাতে পারে)
+  const invoiceIds = Array.from(new Set((invoiceItems ?? []).map((i: any) => i.invoice_id).filter(Boolean)));
+  let autoInvoiceIds = new Set<string>();
+  if (invoiceIds.length > 0) {
+    const { data: invs } = await supabase.from("sales_invoices").select("id, auto_generated").in("id", invoiceIds);
+    autoInvoiceIds = new Set((invs ?? []).filter((v: any) => v.auto_generated).map((v: any) => v.id));
+  }
+
+  // Booking সেভ করলে যে auto Sales Invoice তৈরি হয় সেটা delete আটকায় না — নিচে
+  // cascade-এর সাথে re-sync হবে। শুধু হাতে তৈরি invoice বা Delivery Challan থাকলে আটকাবে।
+  const hasManualInvoice = invoiceIds.some((id) => !autoInvoiceIds.has(id));
+  if ((challanItems && challanItems.length > 0) || hasManualInvoice) {
+    return { ok: false, error: "এই বুকিং-এর সাথে Delivery Challan বা হাতে তৈরি Sales Invoice যুক্ত আছে, তাই মুছে ফেলা যাবে না।" };
   }
 
   // booking-এর নিজস্ব RM-issue JV (Dr WIP / Cr material inv) — voucher delete-এর
   // আগে reference null করা হয়, নাহলে plain FK-এ আটকে লাইনহীন orphan থেকে যায়
-  const { data: bookingRow } = await supabase.from("bookings").select("inventory_voucher_id").eq("id", bookingId).maybeSingle();
+  const { data: bookingRow } = await supabase.from("bookings").select("inventory_voucher_id, booking_group_id").eq("id", bookingId).maybeSingle();
+
+  // auto Sales Invoice থাকলে — এই booking-এর লাইন সরাও (FK আনব্লক); booking delete-এর
+  // পরে group re-sync হবে (বাকি booking থাকলে invoice আপডেট, না থাকলে invoice + JV মুছবে)
+  const autoInvoiceItemIds = (invoiceItems ?? []).filter((i: any) => autoInvoiceIds.has(i.invoice_id)).map((i: any) => i.id);
+  if (autoInvoiceItemIds.length > 0) {
+    await supabase.from("sales_invoice_items").delete().in("id", autoInvoiceItemIds);
+  }
   await reverseInventoryJv(supabase, bookingRow?.inventory_voucher_id, {
     unlink: { table: "bookings", column: "inventory_voucher_id", id: bookingId },
   });
@@ -109,5 +133,12 @@ export async function deleteBookingCascade(
   if (error) {
     return { ok: false, error: friendlyDeleteError(error) };
   }
+
+  // booking মুছে যাওয়ার পর group-এর auto Sales Invoice ঠিক করা — বাকি booking-এর
+  // সাথে মিলিয়ে invoice + JV নতুন করে, group খালি হলে invoice + JV মুছে যাবে
+  if (bookingRow?.booking_group_id) {
+    await syncAutoInvoiceForGroup(supabase, bookingRow.booking_group_id, {});
+  }
+
   return { ok: true };
 }

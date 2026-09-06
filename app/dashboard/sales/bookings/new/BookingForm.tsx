@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { generateNextDocNo } from "@/lib/docNumber";
 import { toInches, hasAdhesiveCharge } from "@/lib/calcTubeCutting";
 import { postBookingConsumptionJv } from "@/lib/inventoryCost";
+import { syncAutoInvoiceForGroup } from "@/lib/autoInvoiceFromBooking";
 import { getCurrentUserId } from "@/lib/currentUser";
 import { resolveRate, type RateHistoryRow } from "@/lib/rateHistory";
 import { money, qty as qtyFmt } from "@/lib/format";
@@ -246,6 +247,8 @@ export default function BookingForm({
   const [priceOverride, setPriceOverride] = useState("");
   const [bookingDate, setBookingDate] = useState(new Date().toISOString().slice(0, 10));
   const [deliveryPoint, setDeliveryPoint] = useState("");
+  // Booking সেভ করলে অটো Sales Invoice তৈরি হয় — টিক থাকলে Cash Sale, না থাকলে বাকিতে বিক্রি
+  const [paymentReceived, setPaymentReceived] = useState(false);
 
   // Style Info — এক স্টাইলের সব মাপের জন্য কমন। "এই স্টাইল বুকিং-এ যোগ করুন" চাপলে রিসেট হবে।
   const [style, setStyle] = useState("");
@@ -471,11 +474,13 @@ export default function BookingForm({
     let unitPrice = 0;
     if (pricePerLbs && T) {
       const baseUnitPrice = (pricePerLbs * tubeInch * cuttingInch * T) / 75000;
-      const printCharge = row.hasPrint ? (parseInt(row.printColors) || 0) * (parseFloat(row.ratePerColor) || 0.20) : 0;
+      // বড় ব্যাগে (Cutting > 29") Print rate দ্বিগুণ — Sales Invoice / PI-র সাথে মিল
+      const printCharge = row.hasPrint ? (parseInt(row.printColors) || 0) * (parseFloat(row.ratePerColor) || 0.20) * (cuttingInch > 29 ? 2 : 1) : 0;
       const adhesiveCharge = hasAdhesiveCharge(row.measurementType) ? cuttingInch * (parseFloat(row.ratePerInch) || 0.02) : 0;
       unitPrice = Math.round((baseUnitPrice + printCharge + adhesiveCharge) * 100) / 100;
     }
-    const amount = Math.floor(qtyN * unitPrice);
+    // Amount = round(Qty × Unit Price) — Sales Invoice-এর সাথে মিল (আগে floor ছিল)
+    const amount = Math.round(qtyN * unitPrice);
 
     return {
       tube, cutting, qty: qtyN, baseLbs, finalLbs,
@@ -816,6 +821,15 @@ export default function BookingForm({
       return;
     }
 
+    // Booking সেভ = অটো Sales Invoice — তাই প্রতিটা প্রোডাক্টের দাম বের হতে হবে
+    const unpricedIndex = allItems.findIndex((it) => !it.unitPrice || it.unitPrice <= 0);
+    if (unpricedIndex >= 0) {
+      const it = allItems[unpricedIndex];
+      const name = it.style || it.productDetails || "প্রোডাক্ট";
+      setError(`Row #${unpricedIndex + 1} (${name}) — Unit Price বের হচ্ছে না। Customer-এর Price/Lbs আছে কিনা দেখুন (auto Sales Invoice-এর জন্য দাম বাধ্যতামূলক)।`);
+      return;
+    }
+
     setLoading(true);
 
     const groupId = crypto.randomUUID();
@@ -969,6 +983,16 @@ export default function BookingForm({
           await supabase.from("bookings").update({ inventory_voucher_id: invVoucherId }).eq("id", booking.id);
         }
       }
+    }
+
+    // এই booking group-এর জন্য অটো Sales Invoice + JV তৈরি (প্রতিটা প্রোডাক্ট একটা লাইন)
+    const invResult = await syncAutoInvoiceForGroup(supabase, groupId, {
+      invoiceDate: bookingDate, paymentReceived, createdBy, createIfMissing: true,
+    });
+    if (!invResult.ok) {
+      setLoading(false);
+      setError(`Booking সেভ হয়েছে কিন্তু auto Sales Invoice তৈরিতে সমস্যা: ${invResult.error}`);
+      return;
     }
 
     setLoading(false);
@@ -1412,10 +1436,15 @@ export default function BookingForm({
         </div>
       </div>
 
+      <label className="flex items-center gap-2 text-sm bg-gray-50 border rounded-lg px-3 py-2 w-fit">
+        <input type="checkbox" checked={paymentReceived} onChange={(e) => setPaymentReceived(e.target.checked)} />
+        Payment Received (টিক থাকলে Cash Sale, না থাকলে বাকিতে বিক্রি) — auto Sales Invoice-এর জন্য
+      </label>
+
       {error && <p className="text-sm text-red-600">{error}</p>}
 
       <button type="submit" disabled={loading} className="rounded-lg bg-gray-900 px-5 py-2 text-sm text-white disabled:opacity-40">
-        {loading ? "সেভ হচ্ছে..." : `Booking সেভ করুন (${finalSubmitCount}টি প্রোডাক্ট, + Production Order অটো তৈরি)`}
+        {loading ? "সেভ হচ্ছে..." : `Booking সেভ করুন (${finalSubmitCount}টি প্রোডাক্ট, + Production Order + Sales Invoice অটো তৈরি)`}
       </button>
     </form>
   );

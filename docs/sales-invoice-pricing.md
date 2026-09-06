@@ -2,9 +2,21 @@
 
 **F & J Accessories ERP — প্রতি পিস Unit Price ও invoice Amount কীভাবে হিসাব হয়**
 
-- যাচাই: আসল ৫টি invoice line-এ হিসাব হুবহু মিলেছে
-- সর্বশেষ হালনাগাদ: ৬ সেপ্টেম্বর ২০২৬
+- সর্বশেষ হালনাগাদ: ৬ সেপ্টেম্বর ২০২৬ — নিয়মে কয়েকটা পরিবর্তন এসেছে (নিচে "সাম্প্রতিক পরিবর্তন")
 - এই ডকটা রেফারেন্স মাত্র — অ্যাপের কোডের সাথে সরাসরি যুক্ত নয়। কোড বদলালে এখানেও হাতে হালনাগাদ করতে হবে।
+
+---
+
+## সাম্প্রতিক পরিবর্তন (৬ সেপ্টেম্বর ২০২৬)
+
+| # | পরিবর্তন |
+|---|---|
+| ১ | **Amount = `round(Qty × Unit Price)`** — আগে `floor` ছিল। `.50–.99` উপরে, `.00–.49` নিচে। পূর্ণসংখ্যা। |
+| ২ | **"Other Charges" → "Adjustment"** — প্রতি পিসে ±, ঋণাত্মকও হতে পারে। Sales Invoice **ও PI (Booking mode)** — দুটোতেই। |
+| ৩ | **Print rate `× 2` যখন Cutting > 29″** — এখন Sales Invoice ও Booking quote-এও (PI-তে আগে থেকেই ছিল)। |
+| ৪ | **cm → inch: Cutting এখন material নির্বিশেষে** — Print থাকলে টেবিল, নাহলে ÷ 2.54। আগে PE-র Cutting সবসময় টেবিল ছিল। Sales Invoice দাম + Booking Required Lbs + PI — তিন জায়গাতেই। |
+
+পুরনো সেভ করা invoice-এ এসব নিজে থেকে বদলায় না (unit_price সেভ করা থাকে)। শুধু Amount-এর generated column পুরনো সব row-এ `round`-এ নতুন করে হিসাব হয়েছে (বেশিরভাগ ০–১ টাকা)।
 
 ---
 
@@ -14,20 +26,20 @@
 Unit Price  =  ( Price/Lbs × TubeInch × CuttingInch × Order Thickness ) ÷ 75000
             +  Print Charge
             +  Adhesive Charge
-            +  Other Charges
+            +  Adjustment                       // প্রতি পিসে ± (ঋণাত্মকও)
             →  round to 2 decimals
 
-Amount        =  floor( Qty × Unit Price )      // ভগ্নাংশ কেটে বাদ — কখনো up-round নয়
+Amount        =  round( Qty × Unit Price )       // half-up: .50–.99 উপরে, .00–.49 নিচে; পূর্ণসংখ্যা
 Invoice Total =  Σ (প্রতি লাইনের Amount)
 ```
 
-পাইপলাইন: `Price/Lbs → Tube × Cutting → cm→inch → Base → + Surcharges → round 2 → × Qty → floor → Amount`
+পাইপলাইন: `Price/Lbs → Tube × Cutting → cm→inch → Base → + Surcharges → round 2 → × Qty → round → Amount`
 
 | বিষয় | নিয়ম |
 |---|---|
 | Divisor | ÷ 75000 (fixed, কখনো বদলাবে না) |
 | Unit Price | ২ দশমিকে round (একবার, শেষে) |
-| Amount | `floor` — উপরে round নয় |
+| Amount | `round` (half-up) — পূর্ণসংখ্যা |
 | Quantity | সবসময় booking-এর পুরো বাকি quantity |
 
 ---
@@ -65,8 +77,10 @@ L = Length, W = Width, F = Flap, G = Gusset, P = Pillow।
 
 | | PE — LLDPE / LDPE / RLD / custom | PP |
 |---|---|---|
-| **Tube** | ÷ 2.54 | lookup টেবিল |
-| **Cutting** | lookup টেবিল | Print থাকলে টেবিল · নাহলে ÷ 2.54 |
+| **Tube** | সবসময় ÷ 2.54 | সবসময় lookup টেবিল |
+| **Cutting** | Print থাকলে টেবিল · Print না থাকলে ÷ 2.54 | Print থাকলে টেবিল · Print না থাকলে ÷ 2.54 |
+
+**Cutting দুই material-এ এখন একই নিয়মে** (৬ সেপ্টেম্বর ২০২৬-এর পরিবর্তন)। Tube-এ কোনো বদল নেই।
 
 lookup টেবিলটা 10–127 cm, 0.5 cm ধাপে একটা fixed তালিকা — মেশিন / ডাই সাইজের ভিত্তিতে ঠিক করা, সাধারণ ÷ 2.54 নয়। কয়েকটা নমুনা:
 
@@ -99,10 +113,11 @@ Base = ( Price/Lbs × TubeInch × CuttingInch × Order Thickness ) ÷ 75000
 ### Print Charge
 
 ```
-print_colors × rate_per_color        // has_print = false হলে ০
+print_colors × rate_per_color × (CuttingInch > 29″ ? 2 : 1)   // has_print = false হলে ০
 ```
 
 `rate_per_color` booking-এ সেভ থাকে, default **0.20** (customer-এর `default_print_rate` থেকে বুকিংয়ে কপি হয়)।
+**বড় ব্যাগে (Cutting > 29″) rate দ্বিগুণ** — Sales Invoice, Booking quote, PI — তিন জায়গাতেই একই।
 
 ### Adhesive Charge
 
@@ -112,36 +127,37 @@ CuttingInch × rate_per_inch          // শুধু adhesive ও flap_gusset �
 
 এই দুই টাইপে Cutting = Width, তাই কার্যত `widthInInch × rate_per_inch`। `rate_per_inch` default **0.02** (হানিফ-এর 0.01)।
 
-### Other Charges (নতুন)
+### Adjustment
 
 ```
-Other Charges                        // প্রতি row-এ হাতে দেওয়া per-piece সংখ্যা
+Adjustment                           // প্রতি row-এ হাতে দেওয়া per-piece সংখ্যা, ঋণাত্মকও হতে পারে
 ```
 
-উপরের দুটোর মতোই সরাসরি Unit Price-এ যোগ। আলাদা কলামে সেভ হয় না — `sales_invoice_items.unit_price`-এর ভেতরেই ঢুকে যায়, তাই print / ledger-এ Unit Price-এ যোগফলসহ দেখায়।
-
-> **⚠️ পার্থক্য:** PI-তে বড় ব্যাগে (Cutting > 29″) Print rate **দ্বিগুণ** হয়। Sales Invoice-এ এই দ্বিগুণ **হয় না**।
+উপরের দুটোর মতোই সরাসরি Unit Price-এ যোগ (বা বিয়োগ)। আলাদা কলামে সেভ হয় না — `sales_invoice_items.unit_price`-এর ভেতরেই ঢুকে যায়, তাই print / ledger-এ Unit Price-এ যোগফলসহ দেখায়। PI-তে (Booking mode) একই ভাবে `pi_items.price_unit`-এ ঢোকে।
 
 ---
 
 ## ধাপ ০৬ — Round ও Amount
 
 ```
-Unit Price = round( Base + Print + Adhesive + Other , 2 )
-Amount     = floor( Qty × Unit Price )
+Unit Price = round( Base + Print + Adhesive + Adjustment , 2 )
+Amount     = round( Qty × Unit Price )
 ```
 
 - Unit Price শুধু **একবার**, শেষে, ২ দশমিকে round হয়।
-- Amount সবসময় **floor** — পূর্ণসংখ্যা, ভগ্নাংশ কেটে বাদ, কখনো উপরে round নয়।
+- Amount = **round** (half-up) — পূর্ণসংখ্যা। `.50–.99` উপরে, `.00–.49` নিচে।
 - Invoice Total = সব লাইনের Amount-এর সাধারণ যোগফল।
+- DB-তে `sales_invoice_items.amount` একটা generated column: `round(unit_price × quantity_pcs)`।
 
 ---
 
-## ধাপ ০৭ — Quantity ও Edit
+## ধাপ ০৭ — Quantity, auto-invoice ও Edit
 
 Sales Invoice সবসময় booking-এর **পুরো বাকি quantity** নেয় — `বাকি = booking qty − আগে invoice হওয়া qty`। Partial ভাগ শুধু Delivery Challan-এ, Invoice-এ নয়।
 
-> **Edit:** Edit ফর্মে Unit Price **আবার হিসাব হয় না** — যা সেভ ছিল তা-ই দেখায়, Qty ও Unit Price হাতে বদলানো যায়। সেভ করলে পুরনো Journal Voucher মুছে নতুন JV বসে (সবসময় `1100` Accounts Receivable, narration-এ "edited")।
+> **Booking সেভ → auto Sales Invoice:** নতুন Booking সেভ করলে ওই booking group-এর জন্য **একটা Sales Invoice অটো তৈরি হয়** (প্রতিটা প্রোডাক্ট একটা লাইন, Unit Price = booking-এর quoted price)। Booking form-এ Cash/Credit টিক ও Booking Date ধরে invoice হয়। কোনো row-এ দাম না থাকলে booking সেভই আটকে যায়। Booking edit করলে (Print on/off, color) বা delete করলে auto-invoice + JV নিজে থেকে আপডেট/মুছে যায়। `sales_invoices.auto_generated` = true, `source_booking_group_id` দিয়ে লিংক।
+
+> **Edit (manual invoice):** Edit ফর্মে Unit Price **আবার হিসাব হয় না** — যা সেভ ছিল তা-ই দেখায়, Qty ও Unit Price হাতে বদলানো যায়। সেভ করলে পুরনো Journal Voucher মুছে নতুন JV বসে (সবসময় `1100` Accounts Receivable, narration-এ "edited")।
 
 ---
 
@@ -159,6 +175,8 @@ Debit ও Credit — দুটোই পুরো Invoice Total-এর সমা
 ## এটি এক্সেসোরিজ / AT Accessories (customer code `AT`)
 
 এটা একটা **আলাদা print variant মাত্র** ("Submit to Customer ভিউ")। আসল invoice, customer ledger, receivable — সব **উপরের standard formula-তেই** চলে। শুধু AT-কে **দেখানো** দামটা মার্কআপ + ফ্রেইট সহ বেশি।
+
+> **পরিকল্পিত (আলাদা ফিচার, এখনও করা হয়নি):** যেকোনো customer-এ কমিশন on/off করার অপশন (Customer Add/Edit ফর্মে), একটা কমিশন রিপোর্ট পেজ + কমিশন বাড়ানো/কমানোর ফর্ম, এবং AT ছাড়া বাকিদের ডিফল্ট নিয়ম = **Invoice Total × 1%**। বিস্তারিত প্ল্যান আলাদা করে হবে।
 
 ```
 freightPerPc      = round( ( Order Lbs ÷ Qty ) + 0.05 , 2 )
@@ -179,50 +197,50 @@ customerAmount    = round( customerUnitPrice × Qty )
 
 ---
 
-## যাচাই করা উদাহরণ
+## উদাহরণ (নতুন নিয়মে)
 
-সিস্টেমে সেভ করা আসল ডেটা — প্রতিটার শেষ ফল সেভ করা মানের সাথে হুবহু মিলেছে।
+আসল বুকিং ডেটা, কিন্তু হিসাব **নতুন নিয়মে** (print × 2, Amount round)। সিস্টেমে পুরনো নিয়মে সেভ করা মান বন্ধনীতে দেওয়া — নতুন invoice-এ নিচের মান আসবে।
 
-### উদাহরণ ১ — BK-2026-0003
+### উদাহরণ ১ — BK-2026-0003 (Cutting > 29″, print দ্বিগুণ)
 
 `simple · cm · L 90 · W 78 · Order Thickness 9.5 · PE · print 1 color @ 0.40 · Price/Lbs 116 · Qty 1,880`
 
 | ধাপ | ফল |
 |---|---|
 | Tube = W = 78 → ÷ 2.54 | 30.71″ |
-| Cutting = L = 90 → টেবিল lookup | 36″ |
+| Cutting = L = 90 → Print আছে → টেবিল | 36″ |
 | Base = (116 × 30.71 × 36 × 9.5) ÷ 75000 | 16.2437 |
-| Print charge = 1 × 0.40 | 0.40 |
+| Print charge = 1 × 0.40 **× 2** (Cutting 36 > 29) | **0.80** |
 | Adhesive charge (simple → নেই) | 0 |
-| **Unit Price** = 16.6437 → round 2 | **16.64** ✓ |
-| **Amount** = floor(1,880 × 16.64) | **31,283** ✓ |
+| **Unit Price** = 17.0437 → round 2 | **17.04** *(পুরনো: 16.64)* |
+| **Amount** = round(1,880 × 17.04) | **32,035** *(পুরনো: 31,283)* |
 
-### উদাহরণ ২ — BK-2026-0009 (adhesive)
+### উদাহরণ ২ — BK-2026-0009 (adhesive, Cutting < 29″)
 
 `adhesive · cm · L 58 · W 38 · Flap 6 · Order Thickness 7.5 · PE · print 1 color @ 0.20 · rate/inch 0.01 · Price/Lbs 116 · Qty 2,339`
 
 | ধাপ | ফল |
 |---|---|
 | Tube = L + Flap ÷ 2 = 58 + 3 = 61 → ÷ 2.54 | 24.02″ |
-| Cutting = W = 38 → টেবিল lookup | 15″ |
+| Cutting = W = 38 → Print আছে → টেবিল | 15″ |
 | Base = (116 × 24.02 × 15 × 7.5) ÷ 75000 | 4.1787 |
-| Print charge = 1 × 0.20 | 0.20 |
+| Print charge = 1 × 0.20 (Cutting 15 < 29, দ্বিগুণ নয়) | 0.20 |
 | Adhesive charge = 15 × 0.01 | 0.15 |
-| **Unit Price** = 4.5287 → round 2 | **4.53** ✓ |
-| **Amount** = floor(2,339 × 4.53) | **10,595** ✓ |
+| **Unit Price** = 4.5287 → round 2 | **4.53** (অপরিবর্তিত) |
+| **Amount** = round(2,339 × 4.53) = round(10,595.67) | **10,596** *(পুরনো floor: 10,595)* |
 
 ### উদাহরণ ৩ — BK-2026-0003, AT "Submit to Customer" ভিউ
 
-`আসল Unit Price 16.64 · Order Lbs 236 · Qty 1,880 · ধরা যাক Markup 2%`
+`আসল Unit Price 17.04 · আসল Amount 32,035 · Order Lbs 236 · Qty 1,880 · ধরা যাক Markup 2%`
 
 | ধাপ | ফল |
 |---|---|
 | freightPerPc = round((236 ÷ 1,880) + 0.05 , 2) | 0.18 |
-| customerUnitPrice = round(16.64 × 1.02 , 2) + 0.18 | 16.97 + 0.18 = 17.15 |
-| **customerAmount** = round(17.15 × 1,880) | **32,242** |
-| Commission (এই লাইনে) = 32,242 − 31,283 | 959 |
+| customerUnitPrice = round(17.04 × 1.02 , 2) + 0.18 | 17.38 + 0.18 = 17.56 |
+| **customerAmount** = round(17.56 × 1,880) | **33,013** |
+| Commission (এই লাইনে) = 33,013 − 32,035 | 978 |
 
-> Markup% এখানে 2 ধরে দেখানো — আসল মান buyer রেকর্ডের `markup_percentage` থেকে আসে। এটা শুধু customer-কে দেখানোর হিসাব; ledger-এ যায় আসল 31,283।
+> Markup% এখানে 2 ধরে দেখানো — আসল মান buyer রেকর্ডের `markup_percentage` থেকে আসে। এটা শুধু customer-কে দেখানোর হিসাব; ledger-এ যায় আসল **32,035**।
 
 ---
 
@@ -230,10 +248,13 @@ customerAmount    = round( customerUnitPrice × Qty )
 
 | ফাইল | কী আছে |
 |---|---|
-| `app/dashboard/sales/invoices/new/SalesInvoiceForm.tsx` | মূল হিসাব (`getUnitPrice`, `getSurcharge`) |
-| `lib/calcTubeCutting.ts` | Tube/Cutting ও cm→inch (`calcTubeCutting`, `toInches`) |
+| `app/dashboard/sales/invoices/new/SalesInvoiceForm.tsx` | মূল হিসাব (`getUnitPrice`, `getSurcharge`, `getLineAmount`) + Adjustment |
+| `lib/calcTubeCutting.ts` | Tube/Cutting ও cm→inch (`calcTubeCutting`, `toInches`) — Cutting rule এখানেই |
 | `lib/cmToInch.ts` | 10–127 cm lookup টেবিল |
 | `lib/rateHistory.ts` | Booking-Date-ভিত্তিক Price/Lbs (`resolveRate`) |
 | `lib/atCommission.ts` | AT Submit-to-Customer হিসাব (`calcAtCustomerLine`) |
+| `app/dashboard/sales/bookings/new/BookingForm.tsx` | Booking quote — একই formula inline (print × 2, Amount round) |
+| `app/dashboard/lc-export/proforma/new/ProformaForm.tsx` | PI — Adjustment (`effectivePriceUnit`), buyer pricing rules |
 | `app/dashboard/sales/invoices/[id]/print-customer/page.tsx` | AT print ভিউ |
 | `app/dashboard/sales/invoices/[id]/edit/EditInvoiceForm.tsx` | Edit — recalc নেই |
+| `supabase/migrations/…_sales_invoice_amount_round.sql` | `amount` generated column: floor → round |
