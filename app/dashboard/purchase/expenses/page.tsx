@@ -29,7 +29,8 @@ export default async function ExpensesPage({
   let query = supabase
     .from("expenses")
     .select("*, chart_of_accounts!expenses_account_id_fkey(account_name), creator:app_users!expenses_created_by_fkey(full_name)")
-    .order("expense_date", { ascending: false });
+    .order("expense_date", { ascending: false })
+    .order("created_at", { ascending: false });
 
   if (from) query = query.gte("expense_date", from);
   if (to) query = query.lte("expense_date", to);

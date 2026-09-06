@@ -7,7 +7,8 @@ export default async function ProformaListPage() {
   const { data: pis } = await supabase
     .from("proforma_invoices")
     .select("*, customers(name, price_per_lbs), pi_items(qty_pcs, booking_id, bookings(garments_name, quantity_pcs)), creator:app_users!proforma_invoices_created_by_fkey(full_name)")
-    .order("pi_date", { ascending: false });
+    .order("pi_date", { ascending: false })
+    .order("created_at", { ascending: false });
 
   // প্রতিটা PI-এর সাথে যুক্ত booking_id গুলোর বিপরীতে sales_invoice_items থেকে মোট বিক্রয় বের করুন
   const bookingIds = Array.from(

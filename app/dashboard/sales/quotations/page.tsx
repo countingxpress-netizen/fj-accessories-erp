@@ -7,7 +7,8 @@ export default async function QuotationListPage() {
   const { data: quotations } = await supabase
     .from("quotations")
     .select("*, customers(name), quotation_items(quantity_pcs, unit_price), creator:app_users!quotations_created_by_fkey(full_name)")
-    .order("quotation_date", { ascending: false });
+    .order("quotation_date", { ascending: false })
+    .order("created_at", { ascending: false });
 
   return (
     <div>

@@ -7,7 +7,8 @@ export default async function PurchaseEntryListPage() {
   const { data: entries } = await supabase
     .from("purchase_entries")
     .select("*, suppliers(name), purchase_entry_items(quantity_lbs, rate_per_lbs), creator:app_users!purchase_entries_created_by_fkey(full_name)")
-    .order("entry_date", { ascending: false });
+    .order("entry_date", { ascending: false })
+    .order("created_at", { ascending: false });
 
   // প্রতিটা entry-র Journal Voucher থেকে payment (credit) লাইনটা বের করে লেবেল বসানো —
   // পেমেন্ট সোর্স হার্ডকোড না করে সরাসরি অ্যাকাউন্টের নাম দেখানো হয় (Cash / Accounts Payable / Md Abu Jafor / ...)

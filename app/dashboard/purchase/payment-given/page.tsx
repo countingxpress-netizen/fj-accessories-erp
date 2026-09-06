@@ -22,7 +22,8 @@ export default async function PaymentGivenPage() {
   const { data: payments } = await supabase
     .from("supplier_payments")
     .select("*, suppliers(name), creator:app_users!supplier_payments_created_by_fkey(full_name)")
-    .order("payment_date", { ascending: false });
+    .order("payment_date", { ascending: false })
+    .order("created_at", { ascending: false });
 
   return (
     <div>

@@ -8,7 +8,8 @@ export default async function DeliveryChallanListPage() {
   const { data: challans, error } = await supabase
     .from("delivery_challans")
     .select("*, customers(name), bookings(booking_no), delivery_challan_items(quantity_pcs, finished_goods(product_name)), creator:app_users!delivery_challans_created_by_fkey(full_name)")
-    .order("challan_date", { ascending: false });
+    .order("challan_date", { ascending: false })
+    .order("created_at", { ascending: false });
 
   if (error) {
     console.error("Delivery Challan Fetch Error:", error);
