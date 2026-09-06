@@ -29,7 +29,9 @@ export default function EditInvoiceForm({
     setItems((prev) => prev.map((it) => (it.id === id ? { ...it, [field]: value } : it)));
   }
 
-  const totalAmount = items.reduce((s, it) => s + (parseFloat(it.qty) || 0) * (parseFloat(it.price) || 0), 0);
+  // প্রতি লাইনে Amount = round(Qty × Unit Price) — নতুন invoice ও DB generated column-এর সাথে মিল
+  const lineAmount = (qty: string, price: string) => Math.round((parseFloat(qty) || 0) * (parseFloat(price) || 0));
+  const totalAmount = items.reduce((s, it) => s + lineAmount(it.qty, it.price), 0);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -130,7 +132,7 @@ export default function EditInvoiceForm({
                 <td className="px-3 py-2">
                   <input type="number" step="0.01" value={it.price} onChange={(e) => updateItem(it.id, "price", e.target.value)} className="w-full rounded border px-2 py-1 text-sm" />
                 </td>
-                <td className="px-3 py-2 text-right">{money(((parseFloat(it.qty) || 0) * (parseFloat(it.price) || 0)))}</td>
+                <td className="px-3 py-2 text-right">{money(lineAmount(it.qty, it.price))}</td>
               </tr>
             ))}
           </tbody>

@@ -33,7 +33,8 @@ function formatMeasurement(b: Booking) {
 }
 
 function getLineAmount(qty: number, unitPriceRounded: number) {
-  return Math.floor(qty * unitPriceRounded);
+  // Amount = round(Qty × Unit Price) — half-up, পূর্ণসংখ্যা (আগে floor ছিল)
+  return Math.round(qty * unitPriceRounded);
 }
 
 export default function SalesInvoiceForm({
@@ -48,7 +49,7 @@ export default function SalesInvoiceForm({
   const [paymentReceived, setPaymentReceived] = useState(false);
   const [selectedBookings, setSelectedBookings] = useState<Record<string, boolean>>({});
   const [priceOverride, setPriceOverride] = useState<Record<string, string>>({});
-  const [otherCharges, setOtherCharges] = useState<Record<string, string>>({});
+  const [adjustment, setAdjustment] = useState<Record<string, string>>({});
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const router = useRouter();
@@ -101,7 +102,8 @@ export default function SalesInvoiceForm({
 
   function getSurcharge(b: Booking, cuttingInch: number) {
     let printCharge = 0, adhesiveCharge = 0;
-    if (b.has_print) printCharge = (b.print_colors || 0) * (b.rate_per_color || 0.20);
+    // বড় ব্যাগে (Cutting > 29") Print rate দ্বিগুণ — PI-র calcPiUnitPriceWithMarkup-এর সাথে মিল
+    if (b.has_print) printCharge = (b.print_colors || 0) * (b.rate_per_color || 0.20) * (cuttingInch > 29 ? 2 : 1);
     // Adhesive/Flap Gusset-এ width_val-ই cutting, তাই একই cuttingInch (CM to Inch টেবিল-সহ) ব্যবহার হবে
     if (hasAdhesiveCharge(b.measurement_type)) adhesiveCharge = cuttingInch * (b.rate_per_inch || 0.02);
     return { printCharge, adhesiveCharge };
@@ -117,8 +119,8 @@ export default function SalesInvoiceForm({
 
     const baseUnitPrice = (pricePerLbs * tubeInch * cuttingInch * b.thickness_mm) / 75000;
     const { printCharge, adhesiveCharge } = getSurcharge(b, cuttingInch);
-    const other = parseFloat(otherCharges[b.id] || "0") || 0;
-    return baseUnitPrice + printCharge + adhesiveCharge + other;
+    const adj = parseFloat(adjustment[b.id] || "0") || 0; // প্রতি পিসে ± (ঋণাত্মকও হতে পারে)
+    return baseUnitPrice + printCharge + adhesiveCharge + adj;
   }
 
   const lineItems = customerBookings
@@ -141,7 +143,7 @@ export default function SalesInvoiceForm({
       return;
     }
     if (lineItems.some((li) => li.unitPrice <= 0)) {
-      setError("কোনো একটা বুকিং-এর Unit Price শূন্য — Price/Lbs সেট করা আছে কিনা দেখুন।");
+      setError("কোনো একটা বুকিং-এর Unit Price ০ বা তার কম — Price/Lbs বা Adjustment দেখুন।");
       return;
     }
 
@@ -221,7 +223,7 @@ export default function SalesInvoiceForm({
       <div className="flex flex-wrap gap-4 items-end">
         <div className="flex-1 max-w-xs">
           <label className="block text-sm text-gray-600 mb-1">Customer</label>
-          <select value={customerId} onChange={(e) => { setCustomerId(e.target.value); setSelectedBookings({}); setPriceOverride({}); setOtherCharges({}); setBuyerFilter(""); setMerchantFilter(""); setStyleFilter(""); setGarmentsFilter(""); }} className="w-full rounded-lg border px-3 py-2 text-sm" required>
+          <select value={customerId} onChange={(e) => { setCustomerId(e.target.value); setSelectedBookings({}); setPriceOverride({}); setAdjustment({}); setBuyerFilter(""); setMerchantFilter(""); setStyleFilter(""); setGarmentsFilter(""); }} className="w-full rounded-lg border px-3 py-2 text-sm" required>
             <option value="">-- বাছুন --</option>
             {customers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
@@ -282,7 +284,7 @@ export default function SalesInvoiceForm({
                 <th className="px-3 py-2 text-right">Order Thickness</th>
                 <th className="px-3 py-2 text-right">Qty</th>
                 <th className="px-3 py-2 w-32">Price/Lbs</th>
-                <th className="px-3 py-2 w-28">Other Charges</th>
+                <th className="px-3 py-2 w-28">Adjustment</th>
                 <th className="px-3 py-2 text-right">Unit Price</th>
                 <th className="px-3 py-2 text-right">Amount</th>
               </tr>
@@ -310,8 +312,8 @@ export default function SalesInvoiceForm({
                       </span>
                     </td>
                     <td className="px-3 py-2">
-                      <input type="number" step="0.01" min="0" placeholder="0" value={otherCharges[b.id] || ""} onChange={(e) => setOtherCharges((prev) => ({ ...prev, [b.id]: e.target.value }))} className="w-full rounded border px-2 py-1 text-sm" />
-                      <span className="block text-[11px] text-gray-400">প্রতি পিসে যোগ</span>
+                      <input type="number" step="0.01" placeholder="0" value={adjustment[b.id] || ""} onChange={(e) => setAdjustment((prev) => ({ ...prev, [b.id]: e.target.value }))} className="w-full rounded border px-2 py-1 text-sm" />
+                      <span className="block text-[11px] text-gray-400">প্রতি পিসে ± (ঋণাত্মকও)</span>
                     </td>
                     <td className="px-3 py-2 text-right">{money((Math.round(unitPrice * 100) / 100))}</td>
                     <td className="px-3 py-2 text-right">{checked ? money(getLineAmount(b.remaining, unitPrice)) : "-"}</td>

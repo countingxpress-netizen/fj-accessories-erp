@@ -63,7 +63,7 @@ export default async function BookingViewPage({ params }: { params: Promise<{ id
   const salesInvoiceNoSet = new Set<string>();
   (invoiceItems ?? []).forEach((item: any) => {
     if (!item.booking_id) return;
-    const amount = Math.floor((item.quantity_pcs || 0) * (item.unit_price || 0));
+    const amount = Math.round((item.quantity_pcs || 0) * (item.unit_price || 0)); // Sales Invoice Amount = round
     const thisDate = item.sales_invoices?.invoice_date ?? "";
     if (item.sales_invoices?.invoice_no) salesInvoiceNoSet.add(item.sales_invoices.invoice_no);
     const existing = priceByBooking[item.booking_id];

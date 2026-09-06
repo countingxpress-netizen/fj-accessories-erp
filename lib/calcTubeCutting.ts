@@ -24,9 +24,10 @@ export function hasAdhesiveCharge(measurementType: string) {
   return measurementType === "adhesive" || measurementType === "flap_gusset";
 }
 
-// cm → inch রূপান্তর: PE-এর ক্ষেত্রে শুধু cutting টেবিল (die/print সাইজ) অনুযায়ী,
-// tube সবসময় ÷2.54। PP-এর ক্ষেত্রে tube সবসময় টেবিল অনুযায়ী; cutting শুধু Print
-// থাকলে টেবিল অনুযায়ী, না থাকলে ÷2.54।
+// cm → inch রূপান্তর:
+//  • Tube    — PP হলে টেবিল (die সাইজ) অনুযায়ী, নাহলে ÷2.54
+//  • Cutting — material নির্বিশেষে: Print থাকলে টেবিল (die/print সাইজ) অনুযায়ী,
+//              Print না থাকলে ÷2.54
 export function toInches(
   tube: number,
   cutting: number,
@@ -38,7 +39,7 @@ export function toInches(
 
   const isPP = materialType === "pp";
   const tubeInch = isPP ? cmToInch(tube) : tube / CM_PER_INCH;
-  const cuttingInch = isPP ? (hasPrint ? cmToInch(cutting) : cutting / CM_PER_INCH) : cmToInch(cutting);
+  const cuttingInch = hasPrint ? cmToInch(cutting) : cutting / CM_PER_INCH;
 
   return { tubeInch, cuttingInch };
 }
@@ -56,6 +57,26 @@ export function calcPiWeightLbs(booking: any, piThicknessMm: number): number {
   const { tube, cutting } = calcTubeCutting(booking);
   const { tubeInch, cuttingInch } = toInches(tube, cutting, booking.measurement_unit, booking.material_type, booking.has_print);
   return (booking.quantity_pcs * tubeInch * cuttingInch * piThicknessMm) / 75000;
+}
+
+// Booking quote / Sales Invoice-এর per-piece Unit Price — Order Thickness (thickness_mm)
+// ব্যবহার করে। = base + Print Charge + Adhesive Charge। ২ দশমিকে round।
+// Print Charge: colors × rate_per_color × (CuttingInch > 29" ? 2 : 1)  — বড় ব্যাগে দ্বিগুণ।
+// (Sales Invoice ফর্মে এর সাথে হাতে-দেওয়া Adjustment আলাদাভাবে যোগ হয়।)
+export function calcQuotedUnitPrice(booking: any, pricePerLbs: number, orderThicknessMm?: number): number {
+  const thickness = orderThicknessMm ?? booking.thickness_mm;
+  if (!thickness || !pricePerLbs) return 0;
+  const { tube, cutting } = calcTubeCutting(booking);
+  const { tubeInch, cuttingInch } = toInches(tube, cutting, booking.measurement_unit, booking.material_type, booking.has_print);
+  if (!tubeInch || !cuttingInch) return 0;
+  const base = (pricePerLbs * tubeInch * cuttingInch * thickness) / 75000;
+  const printCharge = booking.has_print
+    ? (booking.print_colors || 0) * (booking.rate_per_color || 0.20) * (cuttingInch > 29 ? 2 : 1)
+    : 0;
+  const adhesiveCharge = hasAdhesiveCharge(booking.measurement_type)
+    ? cuttingInch * (booking.rate_per_inch || 0.02)
+    : 0;
+  return Math.round((base + printCharge + adhesiveCharge) * 100) / 100;
 }
 
 export function calcPiUnitPrice(booking: any, pricePerLbs: number, piThicknessMm?: number): number {

@@ -102,6 +102,7 @@ export default function ProformaForm({
 
   const [selectedBookings, setSelectedBookings] = useState<Record<string, boolean>>({});
   const [bookingPrice, setBookingPrice] = useState<Record<string, string>>({});
+  const [bookingAdjust, setBookingAdjust] = useState<Record<string, string>>({}); // প্রতি unit ± (ঋণাত্মকও), Price/Unit-এর সাথে যোগ
   const [bookingBasis, setBookingBasis] = useState<Record<string, "pcs" | "dzn">>({});
   const [bookingThickness, setBookingThickness] = useState<Record<string, string>>({});
 
@@ -277,12 +278,18 @@ export default function ProformaForm({
     return qtyPcs * priceUnit;
   }
 
+  // Effective Price/Unit = (দেওয়া দাম + Adjustment) → precision অনুযায়ী round।
+  // Sales Invoice-এর মতোই Adjustment per-unit, ঋণাত্মকও হতে পারে।
+  function effectivePriceUnit(id: string): number {
+    return roundPrice((parseFloat(bookingPrice[id] || "0") || 0) + (parseFloat(bookingAdjust[id] || "0") || 0));
+  }
+
   const bookingLineItems = Object.keys(selectedBookings)
     .filter((id) => selectedBookings[id])
     .map((id) => {
       const b = customerBookings.find((bk) => bk.id === id);
       if (!b) return null;
-      const priceUnit = roundPrice(parseFloat(bookingPrice[id] || "0"));
+      const priceUnit = effectivePriceUnit(id);
       const basis = bookingBasis[id] || "pcs";
       const amount = calcLineAmount(b.quantity_pcs, priceUnit, basis);
       return { booking: b, priceUnit, basis, amount };
@@ -450,7 +457,7 @@ export default function ProformaForm({
           <label className="block text-sm text-gray-600 mb-1">Customer {mode === "manual" && "(ঐচ্ছিক)"}</label>
           <select
             value={customerId}
-            onChange={(e) => { setCustomerId(e.target.value); setSelectedBookings({}); setGarmentsId(""); setGarmentsAddress(""); setBuyerFilter(""); setMerchantFilter(""); setMerchantName(""); setStyleFilter(""); }}
+            onChange={(e) => { setCustomerId(e.target.value); setSelectedBookings({}); setBookingAdjust({}); setGarmentsId(""); setGarmentsAddress(""); setBuyerFilter(""); setMerchantFilter(""); setMerchantName(""); setStyleFilter(""); }}
             className="w-full rounded-lg border px-3 py-2 text-sm"
             required={mode === "booking"}
           >
@@ -531,6 +538,7 @@ export default function ProformaForm({
                 <th className="px-3 py-2 w-20">Basis</th>
                 <th className="px-3 py-2 w-24">PI Thick</th>
                 <th className="px-3 py-2 w-32">Price/Unit</th>
+                <th className="px-3 py-2 w-24">Adjust</th>
                 <th className="px-3 py-2 text-right">Amount</th>
               </tr>
             </thead>
@@ -587,14 +595,24 @@ export default function ProformaForm({
                         </div>
                       )}
                     </td>
+                    <td className="px-3 py-2">
+                      <input
+                        type="number" step="0.0001"
+                        value={bookingAdjust[b.id] || ""}
+                        onChange={(e) => setBookingAdjust((prev) => ({ ...prev, [b.id]: e.target.value }))}
+                        className="w-20 rounded border px-2 py-1 text-sm"
+                        placeholder="0"
+                      />
+                      <span className="block text-[11px] text-gray-400">± /{basis === "dzn" ? "dzn" : "pc"}</span>
+                    </td>
                     <td className="px-3 py-2 text-right">
-                      {money(calcLineAmount(b.quantity_pcs, roundPrice(parseFloat(bookingPrice[b.id] || "0")), basis))}
+                      {money(calcLineAmount(b.quantity_pcs, effectivePriceUnit(b.id), basis))}
                     </td>
                   </tr>
                 );
               })}
               {customerBookings.length === 0 && (
-                <tr><td colSpan={10} className="px-3 py-3 text-gray-400 italic">এই ফিল্টারে কোনো বুকিং নেই</td></tr>
+                <tr><td colSpan={11} className="px-3 py-3 text-gray-400 italic">এই ফিল্টারে কোনো বুকিং নেই</td></tr>
               )}
             </tbody>
           </table>
