@@ -59,6 +59,7 @@ export default function CustomersTable({ customers }: { customers: any[] }) {
               <th className="px-4 py-2">Print Rate</th>
               <th className="px-4 py-2">Adhesive Rate</th>
               <th className="px-4 py-2 text-right">Opening Balance</th>
+              <th className="px-4 py-2">Commission</th>
               <th className="px-4 py-2 text-right">Action</th>
             </tr>
           </thead>
@@ -67,7 +68,7 @@ export default function CustomersTable({ customers }: { customers: any[] }) {
               <CustomerRow key={c.id} customer={c} selected={isSelected(c.id)} onToggleSelect={() => toggle(c.id)} />
             ))}
             {customers.length === 0 && (
-              <tr><td colSpan={10} className="px-4 py-3 text-gray-400 italic">কোনো Customer যোগ করা হয়নি</td></tr>
+              <tr><td colSpan={11} className="px-4 py-3 text-gray-400 italic">কোনো Customer যোগ করা হয়নি</td></tr>
             )}
           </tbody>
         </table>

@@ -96,6 +96,7 @@ const menu: MenuGroup[] = [
       { label: "Outstanding Report", href: "/dashboard/reports/outstanding" },
       { label: "Expense Report", href: "/dashboard/reports/expense-report" },
       { label: "Receivable Statement", href: "/dashboard/reports/receivable-statement" },
+      { label: "Commission Report", href: "/dashboard/reports/commission" },
     ],
   },
 ];

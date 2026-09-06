@@ -176,8 +176,6 @@ Debit ও Credit — দুটোই পুরো Invoice Total-এর সমা
 
 এটা একটা **আলাদা print variant মাত্র** ("Submit to Customer ভিউ")। আসল invoice, customer ledger, receivable — সব **উপরের standard formula-তেই** চলে। শুধু AT-কে **দেখানো** দামটা মার্কআপ + ফ্রেইট সহ বেশি।
 
-> **পরিকল্পিত (আলাদা ফিচার, এখনও করা হয়নি):** যেকোনো customer-এ কমিশন on/off করার অপশন (Customer Add/Edit ফর্মে), একটা কমিশন রিপোর্ট পেজ + কমিশন বাড়ানো/কমানোর ফর্ম, এবং AT ছাড়া বাকিদের ডিফল্ট নিয়ম = **Invoice Total × 1%**। বিস্তারিত প্ল্যান আলাদা করে হবে।
-
 ```
 freightPerPc      = round( ( Order Lbs ÷ Qty ) + 0.05 , 2 )
 customerUnitPrice = round( আসল Unit Price × ( 1 + Markup% ÷ 100 ) , 2 ) + freightPerPc
@@ -188,6 +186,14 @@ customerAmount    = round( customerUnitPrice × Qty )
 - **0.05** = প্রতি পিস fixed freight (`AT_FREIGHT_PER_PIECE`)।
 - **Commission** = (Submit-to-Customer Total − আসল Total) → Sales Invoice লিস্টে আলাদা কলামে দেখায়, PI-র সাথে মেলানোর জন্য।
 - **Commission Lbs** = Order Lbs ÷ 116 → শুধু customer print-এ, কোনো হিসাবে যায় না।
+
+### Commission (সব customer) — শুধু রিপোর্ট, কোনো JV নয়
+
+- Customer Add/Edit ফর্মে **"কমিশন প্রযোজ্য"** টিক + **Commission %** (default 1)।
+- **AT** → উপরের markup + freight নিয়ম (percentage উপেক্ষিত)।
+- **অন্য commission-enabled customer** → `round(Invoice Total × Commission% / 100)`।
+- প্রতি invoice-এ **`commission_adjustment` (±)** — `/dashboard/reports/commission` (খসড়া) পেজ থেকে হাতে দেওয়া যায়। **Final Commission = হিসাবি + adjustment**।
+- লজিক: `lib/commission.ts` (`calcInvoiceCommission`); রিপোর্ট: `app/dashboard/reports/commission/`।
 
 ### বাকি সব customer
 

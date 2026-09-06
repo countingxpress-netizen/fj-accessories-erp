@@ -1,19 +1,21 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import InvoicesTable from "./InvoicesTable";
-import { AT_DEFAULT_MARKUP_PERCENTAGE, calcAtCustomerLine } from "@/lib/atCommission";
+import { AT_DEFAULT_MARKUP_PERCENTAGE } from "@/lib/atCommission";
+import { calcInvoiceCommission } from "@/lib/commission";
 
 export default async function SalesInvoiceListPage() {
   const supabase = await createClient();
   const { data: invoices } = await supabase
     .from("sales_invoices")
-    .select(`*, customers(name, code), creator:app_users!sales_invoices_created_by_fkey(full_name),
+    .select(`*, customers(name, code, commission_enabled, commission_percentage), creator:app_users!sales_invoices_created_by_fkey(full_name),
       sales_invoice_items(quantity_pcs, unit_price, amount,
         bookings(booking_no, required_lbs, buyer_id))`)
-    .order("invoice_date", { ascending: false });
+    .order("invoice_date", { ascending: false })
+    .order("created_at", { ascending: false });
 
-  // AT Accessories (customer code "AT") — নাম বদলালেও যেন feature কাজ করে তাই code-এ ম্যাচ করা হয়।
-  // "Submit to Customer" টোটাল − আসল টোটাল = Commission; Proforma Invoice-এর সাথে মেলানোর জন্য লিস্টেই দেখাই।
+  // Commission — শুধু রিপোর্টিং। AT (code "AT") → markup+freight; বাকি commission_enabled → Total × %।
+  // Final = হিসাবি + commission_adjustment (Commission Report পেজ থেকে হাতে দেওয়া)।
   const buyerIds = Array.from(
     new Set(
       (invoices ?? [])
@@ -29,20 +31,21 @@ export default async function SalesInvoiceListPage() {
   (buyers ?? []).forEach((b: any) => (markupMap[b.id] = b.markup_percentage ?? AT_DEFAULT_MARKUP_PERCENTAGE));
 
   const invoicesWithCommission = (invoices ?? []).map((inv: any) => {
-    if (inv.customers?.code !== "AT") return { ...inv, commission: null };
-
-    let realTotal = 0;
-    let customerTotal = 0;
-    for (const item of inv.sales_invoice_items ?? []) {
-      const actualPrice = item.unit_price || 0;
-      const qty = item.quantity_pcs || 0;
-      realTotal += item.amount || 0;
-      const orderLbs = item.bookings?.required_lbs || 0;
-      const markupPct = item.bookings?.buyer_id ? (markupMap[item.bookings.buyer_id] ?? AT_DEFAULT_MARKUP_PERCENTAGE) : AT_DEFAULT_MARKUP_PERCENTAGE;
-      const { customerAmount } = calcAtCustomerLine(actualPrice, qty, orderLbs, markupPct);
-      customerTotal += customerAmount;
-    }
-    return { ...inv, commission: customerTotal - realTotal };
+    const items = (inv.sales_invoice_items ?? []).map((item: any) => ({
+      unit_price: item.unit_price || 0,
+      quantity_pcs: item.quantity_pcs || 0,
+      amount: item.amount || 0,
+      order_lbs: item.bookings?.required_lbs || 0,
+      markup_pct: item.bookings?.buyer_id ? (markupMap[item.bookings.buyer_id] ?? AT_DEFAULT_MARKUP_PERCENTAGE) : AT_DEFAULT_MARKUP_PERCENTAGE,
+    }));
+    const calc = calcInvoiceCommission(
+      inv.customers?.code ?? null,
+      !!inv.customers?.commission_enabled,
+      Number(inv.customers?.commission_percentage ?? 1),
+      items,
+    );
+    const commission = calc == null ? null : calc + Number(inv.commission_adjustment || 0);
+    return { ...inv, commission };
   });
 
   return (

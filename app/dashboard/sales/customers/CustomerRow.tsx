@@ -13,9 +13,10 @@ type Customer = {
   phone: string | null; email: string | null; price_per_lbs: number | null;
   default_print_rate: number | null; default_adhesive_rate: number | null;
   opening_balance: number | null;
+  commission_enabled: boolean | null; commission_percentage: number | null;
 };
 
-const COL_SPAN = 10;
+const COL_SPAN = 11;
 
 export default function CustomerRow({
   customer, selected, onToggleSelect,
@@ -30,6 +31,8 @@ export default function CustomerRow({
   const [printRate, setPrintRate] = useState(customer.default_print_rate != null ? String(customer.default_print_rate) : "0.20");
   const [adhesiveRate, setAdhesiveRate] = useState(customer.default_adhesive_rate != null ? String(customer.default_adhesive_rate) : "0.02");
   const [openingBalance, setOpeningBalance] = useState(customer.opening_balance != null ? String(customer.opening_balance) : "0");
+  const [commissionEnabled, setCommissionEnabled] = useState(!!customer.commission_enabled);
+  const [commissionPercentage, setCommissionPercentage] = useState(customer.commission_percentage != null ? String(customer.commission_percentage) : "1");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const router = useRouter();
@@ -45,6 +48,8 @@ export default function CustomerRow({
         default_print_rate: parseFloat(printRate) || 0.20,
         default_adhesive_rate: parseFloat(adhesiveRate) || 0.02,
         opening_balance: parseFloat(openingBalance) || 0,
+        commission_enabled: commissionEnabled,
+        commission_percentage: parseFloat(commissionPercentage) || 0,
       })
       .eq("id", customer.id);
     if (error) { setLoading(false); setError(error.message); return; }
@@ -99,6 +104,15 @@ export default function CustomerRow({
           <td className="px-4 py-2"><input type="number" step="0.01" value={printRate} onChange={(e) => setPrintRate(e.target.value)} className="w-20 rounded border px-2 py-1 text-sm" /></td>
           <td className="px-4 py-2"><input type="number" step="0.001" value={adhesiveRate} onChange={(e) => setAdhesiveRate(e.target.value)} className="w-20 rounded border px-2 py-1 text-sm" /></td>
           <td className="px-4 py-2"><input type="number" step="0.01" value={openingBalance} onChange={(e) => setOpeningBalance(e.target.value)} className="w-24 rounded border px-2 py-1 text-sm" /></td>
+          <td className="px-4 py-2">
+            <label className="flex items-center gap-1 text-xs">
+              <input type="checkbox" checked={commissionEnabled} onChange={(e) => setCommissionEnabled(e.target.checked)} />
+              কমিশন
+            </label>
+            {commissionEnabled && customer.code !== "AT" && (
+              <input type="number" step="0.01" value={commissionPercentage} onChange={(e) => setCommissionPercentage(e.target.value)} className="mt-1 w-16 rounded border px-2 py-1 text-xs" title="Invoice Total-এর %" />
+            )}
+          </td>
           <td className="px-4 py-2 text-right whitespace-nowrap">
             <button onClick={handleSave} disabled={loading} className="rounded bg-green-600 px-3 py-1 text-xs text-white mr-1">সেভ</button>
             <button onClick={() => setEditing(false)} className="rounded bg-gray-200 px-3 py-1 text-xs text-gray-700">বাতিল</button>
@@ -130,6 +144,9 @@ export default function CustomerRow({
         <td className="px-4 py-2 text-gray-500">{customer.default_print_rate ?? "0.20"}</td>
         <td className="px-4 py-2 text-gray-500">{customer.default_adhesive_rate ?? "0.02"}</td>
         <td className="px-4 py-2 text-right text-gray-500">{money(customer.opening_balance ?? 0)}</td>
+        <td className="px-4 py-2 text-gray-500 text-xs">
+          {!customer.commission_enabled ? "—" : customer.code === "AT" ? "AT নিয়ম" : `${customer.commission_percentage ?? 1}%`}
+        </td>
         <td className="px-4 py-2 text-right whitespace-nowrap">
           <GuardedAction table="customers" recordId={customer.id} recordLabel={customer.name} action="edit"
             onAllowed={() => setEditing(true)}

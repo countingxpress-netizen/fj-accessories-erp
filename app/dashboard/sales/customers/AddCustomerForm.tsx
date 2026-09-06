@@ -19,6 +19,8 @@ export default function AddCustomerForm() {
   const [defaultAdhesiveRate, setDefaultAdhesiveRate] = useState("0.02");
   const [openingBalance, setOpeningBalance] = useState("0");
   const [openingBalanceDate, setOpeningBalanceDate] = useState(new Date().toISOString().slice(0, 10));
+  const [commissionEnabled, setCommissionEnabled] = useState(false);
+  const [commissionPercentage, setCommissionPercentage] = useState("1");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const router = useRouter();
@@ -39,6 +41,8 @@ export default function AddCustomerForm() {
       default_adhesive_rate: parseFloat(defaultAdhesiveRate) || 0.02,
       opening_balance: parseFloat(openingBalance) || 0,
       opening_balance_date: openingBalanceDate,
+      commission_enabled: commissionEnabled,
+      commission_percentage: parseFloat(commissionPercentage) || 0,
     }).select("id").single();
     if (error || !created) {
       setLoading(false);
@@ -64,6 +68,7 @@ export default function AddCustomerForm() {
     setPriceEffectiveFrom(new Date().toISOString().slice(0, 10));
     setDefaultPrintRate("0.20"); setDefaultAdhesiveRate("0.02");
     setOpeningBalance("0"); setOpeningBalanceDate(new Date().toISOString().slice(0, 10));
+    setCommissionEnabled(false); setCommissionPercentage("1");
     router.refresh();
   }
 
@@ -103,6 +108,15 @@ export default function AddCustomerForm() {
         <div>
           <label className="block text-xs text-gray-500 mb-1">Opening Balance Date</label>
           <input type="date" value={openingBalanceDate} onChange={(e) => setOpeningBalanceDate(e.target.value)} className="rounded-lg border px-3 py-2 text-sm" />
+        </div>
+        <div>
+          <label className="flex items-center gap-2 text-xs text-gray-600 mb-1">
+            <input type="checkbox" checked={commissionEnabled} onChange={(e) => setCommissionEnabled(e.target.checked)} />
+            কমিশন প্রযোজ্য
+          </label>
+          {commissionEnabled && (
+            <input type="number" step="0.01" value={commissionPercentage} onChange={(e) => setCommissionPercentage(e.target.value)} className="w-28 rounded-lg border px-3 py-2 text-sm" placeholder="Commission %" title="Invoice Total-এর কত % কমিশন (AT ছাড়া)" />
+          )}
         </div>
         <button type="submit" disabled={loading} className="rounded-lg bg-gray-900 px-4 py-2 text-sm text-white disabled:opacity-50">
           {loading ? "সেভ হচ্ছে..." : "যোগ করুন"}
