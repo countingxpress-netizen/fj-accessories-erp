@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { todayLocal, monthRange } from "@/lib/payroll";
-import { loadGroupMap, foldNumbers, displayEntity } from "@/lib/customerGroups";
+import { loadGroupMap, foldNumbers } from "@/lib/customerGroups";
+import SalesByCustomer from "./SalesByCustomer";
 
 function fmt(n: number) {
   return n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -140,12 +141,6 @@ export default async function DashboardPage() {
   const statusCounts: Record<string, number> = {};
   (bookingStatuses ?? []).forEach((b: any) => { statusCounts[b.status] = (statusCounts[b.status] ?? 0) + 1; });
 
-  const { data: recentInvoices } = await supabase
-    .from("sales_invoices")
-    .select("id, invoice_no, invoice_date, customer_id, customers(name), sales_invoice_items(amount)")
-    .order("invoice_date", { ascending: false })
-    .limit(5);
-
   const quickLinks = [
     { href: "/dashboard/accounting", label: "Accounting" },
     { href: "/dashboard/inventory", label: "Inventory" },
@@ -222,32 +217,10 @@ export default async function DashboardPage() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
-        <div className="lg:col-span-2 rounded-xl border bg-white shadow-sm overflow-hidden">
-          <div className="flex items-center justify-between px-4 py-3 border-b">
-            <h2 className="text-sm font-semibold uppercase text-gray-500">সাম্প্রতিক Sales Invoice</h2>
-            <Link href="/dashboard/sales/invoices" className="text-xs text-blue-700 hover:underline">সব দেখুন →</Link>
-          </div>
-          <table className="w-full text-sm">
-            <tbody>
-              {(recentInvoices ?? []).map((inv: any) => {
-                const total = (inv.sales_invoice_items ?? []).reduce((s: number, i: any) => s + (i.amount || 0), 0);
-                return (
-                  <tr key={inv.id} className="border-t">
-                    <td className="px-4 py-2">
-                      <Link href={`/dashboard/sales/invoices/${inv.id}/print`} className="hover:underline hover:text-blue-700">{inv.invoice_no}</Link>
-                    </td>
-                    <td className="px-4 py-2 text-gray-600">{displayEntity(groupMap, inv.customer_id, inv.customers?.name).name}</td>
-                    <td className="px-4 py-2 text-gray-500">{inv.invoice_date}</td>
-                    <td className="px-4 py-2 text-right">{fmt(total)}</td>
-                  </tr>
-                );
-              })}
-              {(recentInvoices ?? []).length === 0 && (
-                <tr><td colSpan={4} className="px-4 py-3 text-gray-400 italic">কোনো Invoice নেই</td></tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+        <SalesByCustomer
+          customers={(customers ?? []).map((c: any) => ({ id: c.id, name: c.name }))}
+          groupMap={groupMap}
+        />
 
         <div className="rounded-xl border bg-white shadow-sm overflow-hidden">
           <div className="px-4 py-3 border-b">

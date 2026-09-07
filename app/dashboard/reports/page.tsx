@@ -9,6 +9,7 @@ const links = [
   { label: "Outstanding Report", href: "/dashboard/reports/outstanding", desc: "কাস্টমার ও সাপ্লায়ারের বকেয়া/পাওনা" },
   { label: "Expense Report", href: "/dashboard/reports/expense-report", desc: "সময়ভিত্তিক খরচের বিশ্লেষণ" },
   { label: "Receivable Statement", href: "/dashboard/reports/receivable-statement", desc: "কাস্টমার-ওয়াইজ পাওনার বিস্তারিত" },
+  { label: "Sales by Customer", href: "/dashboard/reports/sales-by-customer", desc: "কাস্টমার/পার্টি-ওয়াইজ বিক্রি ও Production LBS — date range ফিল্টার সহ, প্রিন্টযোগ্য" },
   { label: "Commission Report", href: "/dashboard/reports/commission", desc: "খসড়া — Invoice-ভিত্তিক কমিশন (AT markup+freight / বাকি Total×%), হাতে ± করা যায়" },
 ];
 
