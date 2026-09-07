@@ -7,6 +7,7 @@ import { calcTubeCutting, toInches, hasAdhesiveCharge } from "@/lib/calcTubeCutt
 import { getCurrentUserId } from "@/lib/currentUser";
 import { resolveRate } from "@/lib/rateHistory";
 import { money } from "@/lib/format";
+import { buildLbsLines, type LbsBooking } from "@/lib/lbsInvoice";
 
 type Booking = {
   id: string; booking_no: string; booking_date: string | null; quantity_pcs: number; product_id: string; customer_id: string;
@@ -18,7 +19,10 @@ type Booking = {
   material_type: string;
   finished_goods: { product_name: string; length_cm: number; width_cm: number; thickness: number } | null;
 };
-type Customer = { id: string; name: string; price_per_lbs: number | null; lbs_invoicing_enabled?: boolean | null };
+type Customer = {
+  id: string; name: string; price_per_lbs: number | null;
+  lbs_invoicing_enabled?: boolean | null; making_cutting_rate?: number | null;
+};
 type PriceHistoryRow = { customer_id: string; effective_from: string; rate: number };
 
 function formatMeasurement(b: Booking) {
@@ -50,6 +54,11 @@ export default function SalesInvoiceForm({
   const [selectedBookings, setSelectedBookings] = useState<Record<string, boolean>>({});
   const [priceOverride, setPriceOverride] = useState<Record<string, string>>({});
   const [adjustment, setAdjustment] = useState<Record<string, string>>({});
+  // LBS Invoicing — চার্জ rate override (ফাঁকা = customer/booking থেকে ডিফল্ট)
+  const [lbsPowderRate, setLbsPowderRate] = useState("");
+  const [lbsMakingRate, setLbsMakingRate] = useState("");
+  const [lbsPrintRate, setLbsPrintRate] = useState("");
+  const [lbsAdhesiveRate, setLbsAdhesiveRate] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const router = useRouter();
@@ -135,12 +144,32 @@ export default function SalesInvoiceForm({
 
   const totalAmount = lineItems.reduce((s, li) => s + li.amount, 0);
 
+  // ── LBS Invoicing হিসাব ──────────────────────────────────────────────────
+  const lbsSelectedBookings = useMemo(
+    () =>
+      customerBookings
+        .filter((b) => selectedBookings[b.id])
+        .map((b) => ({ ...b, quantity_pcs: b.remaining })), // যতটা বাকি ততটাই
+    [customerBookings, selectedBookings]
+  );
+
+  const lbsResult = useMemo(() => {
+    if (!isLbsCustomer || lbsSelectedBookings.length === 0) return null;
+    return buildLbsLines(lbsSelectedBookings as unknown as LbsBooking[], {
+      materialRatePerLbs: parseFloat(lbsPowderRate) || Number(selectedCustomer?.price_per_lbs ?? 0),
+      makingCuttingRate: parseFloat(lbsMakingRate) || Number(selectedCustomer?.making_cutting_rate ?? 0),
+      printRate: lbsPrintRate.trim() === "" ? undefined : parseFloat(lbsPrintRate) || 0,
+      adhesiveRate: lbsAdhesiveRate.trim() === "" ? undefined : parseFloat(lbsAdhesiveRate) || 0,
+      bigBagDoublePrint: true,
+    });
+  }, [isLbsCustomer, lbsSelectedBookings, lbsPowderRate, lbsMakingRate, lbsPrintRate, lbsAdhesiveRate, selectedCustomer]);
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
 
     if (isLbsCustomer) {
-      setError("এই Customer LBS Invoicing — Booking group সেভ করলেই অটো Invoice হয়।");
+      await handleLbsSubmit();
       return;
     }
     if (!customerId || lineItems.length === 0) {
@@ -223,12 +252,96 @@ export default function SalesInvoiceForm({
     router.refresh();
   }
 
+  // LBS Invoice — প্রোডাক্ট রো + Powder/Making/Printing/Non-Print/Adhesive চার্জ রো।
+  async function handleLbsSubmit() {
+    if (!customerId || lbsSelectedBookings.length === 0) {
+      setError("Customer বাছুন এবং অন্তত একটা বুকিং সিলেক্ট করুন।");
+      return;
+    }
+    if (!lbsResult || lbsResult.total <= 0) {
+      setError("Total ০ — Powder/Making rate বা বুকিং সিলেকশন দেখুন।");
+      return;
+    }
+    setLoading(true);
+
+    const first = lbsSelectedBookings[0];
+    const styles = Array.from(new Set(lbsSelectedBookings.map((b) => b.style).filter(Boolean))).join(", ");
+    const bookingRefs = Array.from(new Set(lbsSelectedBookings.map((b) => b.customer_booking_ref).filter(Boolean))).join(", ");
+
+    const invoiceNo = await generateNextDocNo(supabase, "sales_invoices", "invoice_no", "INV", "invoice_date", invoiceDate);
+    const createdBy = await getCurrentUserId(supabase);
+
+    const { data: invoice, error: invoiceError } = await supabase
+      .from("sales_invoices")
+      .insert({
+        invoice_no: invoiceNo, customer_id: customerId, invoice_date: invoiceDate,
+        invoice_type: "lbs",
+        buyer_name: first.buyers?.name ?? null,
+        merchant_name: first.merchants?.name ?? null,
+        style: styles || null,
+        delivery_point: first.delivery_point ?? null,
+        customer_booking_ref: bookingRefs || null,
+        payment_received: paymentReceived,
+        payment_type: paymentReceived ? "cash" : "credit",
+        created_by: createdBy,
+      })
+      .select().single();
+
+    if (invoiceError || !invoice) {
+      setLoading(false);
+      setError(invoiceError?.message ?? "Invoice তৈরি ব্যর্থ হয়েছে।");
+      return;
+    }
+
+    const items = [
+      ...lbsResult.productLines.map((l) => ({
+        invoice_id: invoice.id, product_id: l.product_id, booking_id: l.booking_id,
+        quantity_pcs: l.quantity_pcs, unit_price: 0,
+        line_type: l.line_type, line_label: l.label, required_lbs: l.required_lbs,
+      })),
+      ...lbsResult.chargeLines.map((l) => ({
+        invoice_id: invoice.id, product_id: null, booking_id: null,
+        quantity_pcs: l.quantity_pcs, unit_price: l.unit_price,
+        line_type: l.line_type, line_label: l.label, required_lbs: null,
+      })),
+    ];
+    const { error: itemsError } = await supabase.from("sales_invoice_items").insert(items);
+    if (itemsError) { setLoading(false); setError(itemsError.message); return; }
+
+    const debitAccountCode = paymentReceived ? "1000" : "1100";
+    const { data: debitAccount } = await supabase.from("chart_of_accounts").select("id").eq("account_code", debitAccountCode).single();
+    const { data: salesAccount } = await supabase.from("chart_of_accounts").select("id").eq("account_code", "4000").single();
+
+    if (debitAccount && salesAccount) {
+      const voucherNo = await generateNextDocNo(supabase, "journal_vouchers", "voucher_no", "JV", "voucher_date", invoiceDate);
+      const { data: voucher } = await supabase
+        .from("journal_vouchers")
+        .insert({
+          voucher_no: voucherNo, voucher_date: invoiceDate,
+          narration: `Sales Invoice ${invoiceNo} — ${selectedCustomer?.name} (LBS, ${paymentReceived ? "Cash" : "Credit"})`,
+          created_by: createdBy,
+        })
+        .select().single();
+      if (voucher) {
+        await supabase.from("journal_entry_lines").insert([
+          { voucher_id: voucher.id, account_id: debitAccount.id, debit: lbsResult.total, credit: 0, memo: `Invoice ${invoiceNo}` },
+          { voucher_id: voucher.id, account_id: salesAccount.id, debit: 0, credit: lbsResult.total, memo: `Invoice ${invoiceNo}` },
+        ]);
+        await supabase.from("sales_invoices").update({ voucher_id: voucher.id }).eq("id", invoice.id);
+      }
+    }
+
+    setLoading(false);
+    router.push("/dashboard/sales/invoices");
+    router.refresh();
+  }
+
   return (
     <form onSubmit={handleSubmit} className="rounded-xl border bg-white p-6 shadow-sm space-y-4 max-w-5xl">
       <div className="flex flex-wrap gap-4 items-end">
         <div className="flex-1 max-w-xs">
           <label className="block text-sm text-gray-600 mb-1">Customer</label>
-          <select value={customerId} onChange={(e) => { setCustomerId(e.target.value); setSelectedBookings({}); setPriceOverride({}); setAdjustment({}); setBuyerFilter(""); setMerchantFilter(""); setStyleFilter(""); setGarmentsFilter(""); }} className="w-full rounded-lg border px-3 py-2 text-sm" required>
+          <select value={customerId} onChange={(e) => { setCustomerId(e.target.value); setSelectedBookings({}); setPriceOverride({}); setAdjustment({}); setBuyerFilter(""); setMerchantFilter(""); setStyleFilter(""); setGarmentsFilter(""); setLbsPowderRate(""); setLbsMakingRate(""); setLbsPrintRate(""); setLbsAdhesiveRate(""); }} className="w-full rounded-lg border px-3 py-2 text-sm" required>
             <option value="">-- বাছুন --</option>
             {customers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
@@ -277,10 +390,108 @@ export default function SalesInvoiceForm({
       </label>
 
       {customerId && isLbsCustomer && (
-        <div className="rounded-xl border bg-amber-50 border-amber-200 p-5 text-sm text-amber-900 space-y-1">
-          <p className="font-medium">এই Customer LBS Invoicing-এ আছে।</p>
-          <p>এদের Invoice (Powder / Making Cutting / Printing / Adhesive চার্জ) Booking group সেভ করলেই অটো তৈরি হয় — এখান থেকে হাতে বানানো যায় না।</p>
-          <p>Booking যোগ করতে: Sales → Bookings → নতুন Booking।</p>
+        <div className="space-y-3">
+          <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+            এই Customer <b>LBS Invoicing</b>-এ — Invoice হয় Powder / Making Cutting / Printing / Non-Print / Adhesive চার্জে।
+            বুকিং সিলেক্ট করলে চার্জ রো নিচে হিসাব হবে।
+          </p>
+
+          <div className="overflow-x-auto rounded-lg border">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 text-left text-gray-600">
+                <tr>
+                  <th className="px-3 py-2 w-10"></th>
+                  <th className="px-3 py-2">Booking</th>
+                  <th className="px-3 py-2">Style</th>
+                  <th className="px-3 py-2">Product</th>
+                  <th className="px-3 py-2">Measurement</th>
+                  <th className="px-3 py-2 text-right">Order Thickness</th>
+                  <th className="px-3 py-2 text-right">Qty (বাকি)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {customerBookings.map((b) => {
+                  const checked = !!selectedBookings[b.id];
+                  return (
+                    <tr key={b.id} className="border-t">
+                      <td className="px-3 py-2">
+                        <input type="checkbox" checked={checked} onChange={(e) => setSelectedBookings((prev) => ({ ...prev, [b.id]: e.target.checked }))} />
+                      </td>
+                      <td className="px-3 py-2 font-medium">{b.booking_no}</td>
+                      <td className="px-3 py-2 text-gray-500">{b.style || "-"}</td>
+                      <td className="px-3 py-2">{b.finished_goods?.product_name}</td>
+                      <td className="px-3 py-2 text-gray-500 text-xs">{formatMeasurement(b)}</td>
+                      <td className="px-3 py-2 text-right text-gray-500">{b.thickness_mm} mm</td>
+                      <td className="px-3 py-2 text-right">{b.remaining}</td>
+                    </tr>
+                  );
+                })}
+                {customerBookings.length === 0 && (
+                  <tr><td colSpan={7} className="px-3 py-3 text-gray-400 italic">এই ফিল্টারে বাকি বুকিং নেই</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {lbsResult && (
+            <>
+              <div className="flex flex-wrap gap-3">
+                <div>
+                  <label className="block text-[11px] text-gray-500 mb-1">Powder Rate /Lb</label>
+                  <input type="number" step="0.01" value={lbsPowderRate} placeholder={String(selectedCustomer?.price_per_lbs ?? 0)} onChange={(e) => setLbsPowderRate(e.target.value)} className="w-28 rounded border px-2 py-1 text-sm" />
+                </div>
+                <div>
+                  <label className="block text-[11px] text-gray-500 mb-1">Making-Cutting Rate /Lb</label>
+                  <input type="number" step="0.01" value={lbsMakingRate} placeholder={String(selectedCustomer?.making_cutting_rate ?? 0)} onChange={(e) => setLbsMakingRate(e.target.value)} className="w-28 rounded border px-2 py-1 text-sm" />
+                </div>
+                <div>
+                  <label className="block text-[11px] text-gray-500 mb-1">Print Rate /Pc</label>
+                  <input type="number" step="0.01" value={lbsPrintRate} placeholder="booking থেকে" onChange={(e) => setLbsPrintRate(e.target.value)} className="w-28 rounded border px-2 py-1 text-sm" />
+                </div>
+                <div>
+                  <label className="block text-[11px] text-gray-500 mb-1">Adhesive Rate /Inch</label>
+                  <input type="number" step="0.01" value={lbsAdhesiveRate} placeholder="booking থেকে" onChange={(e) => setLbsAdhesiveRate(e.target.value)} className="w-28 rounded border px-2 py-1 text-sm" />
+                </div>
+              </div>
+
+              <div className="overflow-x-auto rounded-lg border">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50 text-left text-gray-600">
+                    <tr>
+                      <th className="px-3 py-2">Item / চার্জ</th>
+                      <th className="px-3 py-2">Measurement</th>
+                      <th className="px-3 py-2 text-right">Qty</th>
+                      <th className="px-3 py-2 text-right">Rate</th>
+                      <th className="px-3 py-2 text-right">Amount</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {lbsResult.productLines.map((l) => (
+                      <tr key={l.booking_id} className="border-t">
+                        <td className="px-3 py-2">{l.label}</td>
+                        <td className="px-3 py-2 text-gray-500 text-xs">{l.measurement}</td>
+                        <td className="px-3 py-2 text-right">{l.quantity_pcs.toLocaleString("en-IN")} Pcs</td>
+                        <td className="px-3 py-2 text-right text-gray-500">{l.required_lbs.toLocaleString("en-IN")} Lbs</td>
+                        <td className="px-3 py-2 text-right text-gray-400">—</td>
+                      </tr>
+                    ))}
+                    {lbsResult.chargeLines.map((l) => (
+                      <tr key={l.line_type} className="border-t">
+                        <td className="px-3 py-2 font-medium">{l.label}</td>
+                        <td className="px-3 py-2"></td>
+                        <td className="px-3 py-2 text-right">{l.quantity_pcs ? l.quantity_pcs.toLocaleString("en-IN") : ""}</td>
+                        <td className="px-3 py-2 text-right">{money(l.unit_price)}</td>
+                        <td className="px-3 py-2 text-right">{l.amount ? money(l.amount) : "-"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot className="bg-gray-50 border-t font-semibold">
+                    <tr><td colSpan={4} className="px-3 py-2 text-right">Total</td><td className="px-3 py-2 text-right">{money(lbsResult.total)}</td></tr>
+                  </tfoot>
+                </table>
+              </div>
+            </>
+          )}
         </div>
       )}
 
@@ -346,8 +557,12 @@ export default function SalesInvoiceForm({
 
       {error && <p className="text-sm text-red-600">{error}</p>}
 
-      <button type="submit" disabled={loading || isLbsCustomer || lineItems.length === 0} className="rounded-lg bg-gray-900 px-5 py-2 text-sm text-white disabled:opacity-40">
-        {loading ? "সেভ হচ্ছে..." : "Sales Invoice তৈরি করুন"}
+      <button
+        type="submit"
+        disabled={loading || (isLbsCustomer ? !lbsResult || lbsResult.total <= 0 : lineItems.length === 0)}
+        className="rounded-lg bg-gray-900 px-5 py-2 text-sm text-white disabled:opacity-40"
+      >
+        {loading ? "সেভ হচ্ছে..." : isLbsCustomer ? "LBS Invoice তৈরি করুন" : "Sales Invoice তৈরি করুন"}
       </button>
     </form>
   );

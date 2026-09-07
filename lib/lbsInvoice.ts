@@ -36,8 +36,10 @@ export type LbsBooking = {
 };
 
 export type LbsRates = {
-  materialRatePerLbs: number; // customers.price_per_lbs (তারিখ ধরে resolve)
+  materialRatePerLbs: number; // customers.price_per_lbs
   makingCuttingRate: number; // customers.making_cutting_rate
+  printRate?: number; // override — না দিলে প্রথম print booking থেকে (colors × rate_per_color × bigBag)
+  adhesiveRate?: number; // override — না দিলে প্রথম adhesive booking-এর rate_per_inch
   bigBagDoublePrint?: boolean; // cutting > 29" হলে print rate দ্বিগুণ (default true, editable)
 };
 
@@ -156,18 +158,23 @@ export function buildLbsLines(bookings: LbsBooking[], rates: LbsRates): LbsInvoi
     adhesiveBookings.reduce((s, b) => s + lbsCuttingInch(b) * (b.quantity_pcs || 0), 0),
   );
 
-  // Printing rate — প্রথম print-করা booking: colors × rate_per_color × (বড় ব্যাগ ? 2 : 1)
-  const firstPrint = bookings.find((b) => b.has_print);
-  let printRate = 0;
-  if (firstPrint) {
-    const colors = firstPrint.print_colors || 0;
-    const perColor = firstPrint.rate_per_color || 0;
-    const factor = bigBag && lbsCuttingInch(firstPrint) > 29 ? 2 : 1;
-    printRate = round2(colors * perColor * factor);
+  // Printing rate — override না দিলে প্রথম print-করা booking: colors × rate_per_color × (বড় ব্যাগ ? 2 : 1)
+  let printRate = rates.printRate;
+  if (printRate == null) {
+    const firstPrint = bookings.find((b) => b.has_print);
+    if (firstPrint) {
+      const colors = firstPrint.print_colors || 0;
+      const perColor = firstPrint.rate_per_color || 0;
+      const factor = bigBag && lbsCuttingInch(firstPrint) > 29 ? 2 : 1;
+      printRate = round2(colors * perColor * factor);
+    } else {
+      printRate = 0;
+    }
   }
 
-  // Adhesive rate — প্রথম adhesive/flap_gusset booking-এর rate_per_inch
-  const adhesiveRate = adhesiveBookings.length ? round2(adhesiveBookings[0].rate_per_inch || 0) : 0;
+  // Adhesive rate — override না দিলে প্রথম adhesive/flap_gusset booking-এর rate_per_inch
+  const adhesiveRate = rates.adhesiveRate
+    ?? (adhesiveBookings.length ? round2(adhesiveBookings[0].rate_per_inch || 0) : 0);
 
   const materialLabel = lbsMaterialLabel(bookings[0]?.material_type);
 
