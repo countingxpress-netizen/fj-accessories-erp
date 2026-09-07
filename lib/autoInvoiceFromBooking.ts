@@ -1,12 +1,17 @@
 import { createClient } from "@/lib/supabase/client";
 import { generateNextDocNo } from "@/lib/docNumber";
 import { getCurrentUserId } from "@/lib/currentUser";
+import { resolveRate } from "@/lib/rateHistory";
+import { buildLbsLines, type LbsBooking } from "@/lib/lbsInvoice";
 
 type SupabaseClient = ReturnType<typeof createClient>;
 
 // এক booking_group সেভ করলে অটো একটা Sales Invoice তৈরি হয় — group-এর প্রতিটা
 // booking = invoice-এর একটা লাইন, unit_price = booking-এর quoted_unit_price।
 // Booking edit/delete-এ আবার এই sync ডাকা হয় যাতে invoice + JV আপডেট থাকে।
+//
+// customers.lbs_invoicing_enabled = true হলে standard লাইনের বদলে LBS Invoice
+// (প্রোডাক্ট রো + Powder/Making/Printing/Non-Print/Adhesive চার্জ রো — lib/lbsInvoice.ts)।
 //
 // JV:  Dr 1000 Cash / 1100 AR      Cr 4000 Sales Revenue-Local
 //      (Cash না Credit — paymentReceived অনুযায়ী)
@@ -84,9 +89,21 @@ export async function deleteAutoInvoiceForGroup(supabase: SupabaseClient, groupI
   if (inv) await destroyInvoice(supabase, inv);
 }
 
+// এক group-এর সব booking থেকে যে row-গুলো insert হবে (standard বা LBS)।
+type ItemInsert = {
+  invoice_id: string;
+  product_id?: string | null;
+  booking_id?: string | null;
+  quantity_pcs: number;
+  unit_price: number;
+  line_type?: string;
+  line_label?: string | null;
+  required_lbs?: number | null;
+};
+
 /**
  * Booking group-এর auto Sales Invoice-কে বর্তমান (non-cancelled) booking-গুলোর সাথে
- * মিলিয়ে তৈরি / আপডেট করে। কোনো valid (দাম-সহ) booking না থাকলে invoice মুছে ফেলে।
+ * মিলিয়ে তৈরি / আপডেট করে। কোনো valid booking না থাকলে invoice মুছে ফেলে।
  */
 export async function syncAutoInvoiceForGroup(
   supabase: SupabaseClient,
@@ -95,13 +112,28 @@ export async function syncAutoInvoiceForGroup(
 ): Promise<AutoInvoiceResult> {
   const { data: groupBookings } = await supabase
     .from("bookings")
-    .select("id, product_id, quantity_pcs, quoted_unit_price, booking_date, customer_id, style, delivery_point, customer_booking_ref, buyers(name), merchants(name)")
+    .select(`id, product_id, quantity_pcs, quoted_unit_price, booking_date, customer_id, style,
+      delivery_point, customer_booking_ref, buyers(name), merchants(name),
+      thickness_mm, material_type, measurement_type, measurement_unit,
+      length_val, width_val, flap_val, gusset_val, pillow_val,
+      has_print, print_colors, rate_per_color, rate_per_inch`)
     .eq("booking_group_id", groupId)
     .neq("status", "cancelled");
 
   const existing = await findAutoInvoice(supabase, groupId);
+
+  const firstAny: any = (groupBookings ?? [])[0];
+  const { data: customer } = firstAny
+    ? await supabase
+        .from("customers")
+        .select("*")
+        .eq("id", firstAny.customer_id)
+        .maybeSingle()
+    : { data: null };
+  const isLbs = !!(customer as any)?.lbs_invoicing_enabled;
+
   const rows = (groupBookings ?? []).filter(
-    (b: any) => (b.quantity_pcs || 0) > 0 && (b.quoted_unit_price || 0) > 0,
+    (b: any) => (b.quantity_pcs || 0) > 0 && (isLbs || (b.quoted_unit_price || 0) > 0),
   );
 
   // valid কোনো লাইন নেই → invoice থাকলে মুছে ফেলো
@@ -120,13 +152,15 @@ export async function syncAutoInvoiceForGroup(
   const paymentReceived = opts.paymentReceived ?? existing?.payment_received ?? false;
   const createdBy = opts.createdBy ?? (await getCurrentUserId(supabase));
 
-  const { data: customer } = await supabase.from("customers").select("name").eq("id", first.customer_id).maybeSingle();
   const styles = Array.from(new Set(rows.map((r: any) => r.style).filter(Boolean))).join(", ");
   const bookingRefs = Array.from(new Set(rows.map((r: any) => r.customer_booking_ref).filter(Boolean))).join(", ");
 
   const header = {
     customer_id: first.customer_id,
     invoice_date: invoiceDate,
+    // invoice_type শুধু LBS হলে সেট করি — standard-এ DB default 'standard' (মাইগ্রেশন-পূর্ব
+    // ডিপ্লয়েও standard auto-invoice ভাঙবে না)।
+    ...(isLbs ? { invoice_type: "lbs" } : {}),
     buyer_name: first.buyers?.name ?? null,
     merchant_name: first.merchants?.name ?? null,
     style: styles || null,
@@ -136,11 +170,51 @@ export async function syncAutoInvoiceForGroup(
     payment_type: paymentReceived ? "cash" : "credit",
   };
 
-  const totalAmount = rows.reduce(
-    (s: number, r: any) => s + Math.round((r.quantity_pcs || 0) * (r.quoted_unit_price || 0)),
-    0,
-  );
+  // ── লাইন ও Total বানানো ──────────────────────────────────────────────────
+  let makeItems: (invoiceId: string) => ItemInsert[];
+  let totalAmount: number;
 
+  if (isLbs) {
+    const { data: rh } = await supabase
+      .from("rate_history")
+      .select("effective_from, rate")
+      .eq("customer_id", first.customer_id);
+    const materialRatePerLbs = resolveRate(rh ?? [], first.booking_date, customer?.price_per_lbs ?? 0);
+
+    const { productLines, chargeLines, total } = buildLbsLines(
+      rows as unknown as LbsBooking[],
+      {
+        materialRatePerLbs,
+        makingCuttingRate: Number(customer?.making_cutting_rate ?? 0),
+        bigBagDoublePrint: true,
+      },
+    );
+    totalAmount = total;
+    makeItems = (invoiceId) => [
+      ...productLines.map((l) => ({
+        invoice_id: invoiceId, product_id: l.product_id, booking_id: l.booking_id,
+        quantity_pcs: l.quantity_pcs, unit_price: 0,
+        line_type: l.line_type, line_label: l.label, required_lbs: l.required_lbs,
+      })),
+      ...chargeLines.map((l) => ({
+        invoice_id: invoiceId, product_id: null, booking_id: null,
+        quantity_pcs: l.quantity_pcs, unit_price: l.unit_price,
+        line_type: l.line_type, line_label: l.label, required_lbs: null,
+      })),
+    ];
+  } else {
+    totalAmount = rows.reduce(
+      (s: number, r: any) => s + Math.round((r.quantity_pcs || 0) * (r.quoted_unit_price || 0)),
+      0,
+    );
+    makeItems = (invoiceId) =>
+      rows.map((r: any) => ({
+        invoice_id: invoiceId, product_id: r.product_id, booking_id: r.id,
+        quantity_pcs: r.quantity_pcs, unit_price: r.quoted_unit_price,
+      }));
+  }
+
+  // ── invoice তৈরি / আপডেট ────────────────────────────────────────────────
   let invoiceId: string;
   let invoiceNo: string;
   let repostJv = true;
@@ -149,7 +223,6 @@ export async function syncAutoInvoiceForGroup(
     invoiceId = existing.id;
     invoiceNo = existing.invoice_no;
 
-    // পুরনো total ও payment type — না বদলালে JV নতুন করে পোস্ট করার দরকার নেই
     const { data: oldItems } = await supabase.from("sales_invoice_items").select("amount").eq("invoice_id", invoiceId);
     const oldTotal = (oldItems ?? []).reduce((s: number, i: any) => s + Number(i.amount || 0), 0);
     repostJv = !existing.voucher_id
@@ -169,12 +242,7 @@ export async function syncAutoInvoiceForGroup(
     invoiceId = inv.id;
   }
 
-  const { error: itemsError } = await supabase.from("sales_invoice_items").insert(
-    rows.map((r: any) => ({
-      invoice_id: invoiceId, product_id: r.product_id, booking_id: r.id,
-      quantity_pcs: r.quantity_pcs, unit_price: r.quoted_unit_price,
-    })),
-  );
+  const { error: itemsError } = await supabase.from("sales_invoice_items").insert(makeItems(invoiceId));
   if (itemsError) return { ok: false, error: itemsError.message };
 
   if (repostJv) {

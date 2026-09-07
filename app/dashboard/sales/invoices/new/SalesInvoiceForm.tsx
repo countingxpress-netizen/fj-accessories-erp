@@ -18,7 +18,7 @@ type Booking = {
   material_type: string;
   finished_goods: { product_name: string; length_cm: number; width_cm: number; thickness: number } | null;
 };
-type Customer = { id: string; name: string; price_per_lbs: number | null };
+type Customer = { id: string; name: string; price_per_lbs: number | null; lbs_invoicing_enabled?: boolean | null };
 type PriceHistoryRow = { customer_id: string; effective_from: string; rate: number };
 
 function formatMeasurement(b: Booking) {
@@ -56,6 +56,7 @@ export default function SalesInvoiceForm({
   const supabase = createClient();
 
   const selectedCustomer = customers.find((c) => c.id === customerId);
+  const isLbsCustomer = !!selectedCustomer?.lbs_invoicing_enabled;
 
   const historyForCustomer = useMemo(
     () => priceHistory.filter((h) => h.customer_id === customerId),
@@ -138,6 +139,10 @@ export default function SalesInvoiceForm({
     e.preventDefault();
     setError("");
 
+    if (isLbsCustomer) {
+      setError("এই Customer LBS Invoicing — Booking group সেভ করলেই অটো Invoice হয়।");
+      return;
+    }
     if (!customerId || lineItems.length === 0) {
       setError("Customer বাছুন এবং অন্তত একটা বুকিং সিলেক্ট করুন।");
       return;
@@ -271,7 +276,15 @@ export default function SalesInvoiceForm({
         Payment Received (টিক থাকলে Cash Sale, না থাকলে বাকিতে বিক্রি)
       </label>
 
-      {customerId && (
+      {customerId && isLbsCustomer && (
+        <div className="rounded-xl border bg-amber-50 border-amber-200 p-5 text-sm text-amber-900 space-y-1">
+          <p className="font-medium">এই Customer LBS Invoicing-এ আছে।</p>
+          <p>এদের Invoice (Powder / Making Cutting / Printing / Adhesive চার্জ) Booking group সেভ করলেই অটো তৈরি হয় — এখান থেকে হাতে বানানো যায় না।</p>
+          <p>Booking যোগ করতে: Sales → Bookings → নতুন Booking।</p>
+        </div>
+      )}
+
+      {customerId && !isLbsCustomer && (
         <div className="overflow-x-auto rounded-lg border">
           <table className="w-full text-sm">
             <thead className="bg-gray-50 text-left text-gray-600">
@@ -333,7 +346,7 @@ export default function SalesInvoiceForm({
 
       {error && <p className="text-sm text-red-600">{error}</p>}
 
-      <button type="submit" disabled={loading || lineItems.length === 0} className="rounded-lg bg-gray-900 px-5 py-2 text-sm text-white disabled:opacity-40">
+      <button type="submit" disabled={loading || isLbsCustomer || lineItems.length === 0} className="rounded-lg bg-gray-900 px-5 py-2 text-sm text-white disabled:opacity-40">
         {loading ? "সেভ হচ্ছে..." : "Sales Invoice তৈরি করুন"}
       </button>
     </form>

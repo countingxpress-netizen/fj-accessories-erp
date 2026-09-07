@@ -9,6 +9,21 @@ export default async function EditInvoicePage({ params }: { params: Promise<{ id
   const { data: invoice } = await supabase.from("sales_invoices").select("*, customers(name)").eq("id", id).single();
   if (!invoice) return notFound();
 
+  // LBS Invoice-এর লাইন booking থেকে অটো হয় — এখানে qty/price এডিট করলে ভেঙে যাবে।
+  if (invoice.invoice_type === "lbs") {
+    return (
+      <div className="max-w-2xl">
+        <h1 className="text-2xl font-semibold mb-4">Sales Invoice — {invoice.invoice_no}</h1>
+        <div className="rounded-xl border bg-amber-50 border-amber-200 p-5 text-sm text-amber-900 space-y-2">
+          <p className="font-medium">এটা একটা LBS Invoice ({invoice.customers?.name})।</p>
+          <p>এর লাইন ও চার্জ (Powder / Making Cutting / Printing / Adhesive) সংশ্লিষ্ট Booking group থেকে অটো তৈরি হয়। এখান থেকে এডিট করা যায় না।</p>
+          <p>পরিবর্তন দরকার হলে Booking group এডিট করুন — Invoice ও Journal Voucher নিজে থেকেই আপডেট হবে। Rate বদলাতে Customer-এর Price/Lbs (History) বা Making-Cutting Rate ঠিক করুন।</p>
+          <a href={`/dashboard/sales/invoices/${id}/print-lbs`} target="_blank" className="inline-block mt-1 text-purple-700 underline">Invoice দেখুন →</a>
+        </div>
+      </div>
+    );
+  }
+
   const { data: items } = await supabase
     .from("sales_invoice_items")
     .select("*, bookings(booking_no, quantity_pcs), finished_goods(product_name)")

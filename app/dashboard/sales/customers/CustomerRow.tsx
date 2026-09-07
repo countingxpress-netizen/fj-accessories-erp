@@ -14,9 +14,10 @@ type Customer = {
   default_print_rate: number | null; default_adhesive_rate: number | null;
   opening_balance: number | null;
   commission_enabled: boolean | null; commission_percentage: number | null;
+  lbs_invoicing_enabled: boolean | null; making_cutting_rate: number | null;
 };
 
-const COL_SPAN = 11;
+const COL_SPAN = 12;
 
 export default function CustomerRow({
   customer, selected, onToggleSelect,
@@ -33,6 +34,8 @@ export default function CustomerRow({
   const [openingBalance, setOpeningBalance] = useState(customer.opening_balance != null ? String(customer.opening_balance) : "0");
   const [commissionEnabled, setCommissionEnabled] = useState(!!customer.commission_enabled);
   const [commissionPercentage, setCommissionPercentage] = useState(customer.commission_percentage != null ? String(customer.commission_percentage) : "1");
+  const [lbsInvoicingEnabled, setLbsInvoicingEnabled] = useState(!!customer.lbs_invoicing_enabled);
+  const [makingCuttingRate, setMakingCuttingRate] = useState(customer.making_cutting_rate != null ? String(customer.making_cutting_rate) : "0");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const router = useRouter();
@@ -50,6 +53,8 @@ export default function CustomerRow({
         opening_balance: parseFloat(openingBalance) || 0,
         commission_enabled: commissionEnabled,
         commission_percentage: parseFloat(commissionPercentage) || 0,
+        lbs_invoicing_enabled: lbsInvoicingEnabled,
+        making_cutting_rate: parseFloat(makingCuttingRate) || 0,
       })
       .eq("id", customer.id);
     if (error) { setLoading(false); setError(error.message); return; }
@@ -113,6 +118,15 @@ export default function CustomerRow({
               <input type="number" step="0.01" value={commissionPercentage} onChange={(e) => setCommissionPercentage(e.target.value)} className="mt-1 w-16 rounded border px-2 py-1 text-xs" title="Invoice Total-এর %" />
             )}
           </td>
+          <td className="px-4 py-2">
+            <label className="flex items-center gap-1 text-xs" title="এই কাস্টমারের booking group সেভ করলে Powder/Making/Printing/Adhesive ভাগে LBS Invoice হবে">
+              <input type="checkbox" checked={lbsInvoicingEnabled} onChange={(e) => setLbsInvoicingEnabled(e.target.checked)} />
+              LBS Invoice
+            </label>
+            {lbsInvoicingEnabled && (
+              <input type="number" step="0.01" value={makingCuttingRate} onChange={(e) => setMakingCuttingRate(e.target.value)} className="mt-1 w-20 rounded border px-2 py-1 text-xs" placeholder="M/C Rate" title="Making + Cutting চার্জ — BDT / Lb" />
+            )}
+          </td>
           <td className="px-4 py-2 text-right whitespace-nowrap">
             <button onClick={handleSave} disabled={loading} className="rounded bg-green-600 px-3 py-1 text-xs text-white mr-1">সেভ</button>
             <button onClick={() => setEditing(false)} className="rounded bg-gray-200 px-3 py-1 text-xs text-gray-700">বাতিল</button>
@@ -146,6 +160,9 @@ export default function CustomerRow({
         <td className="px-4 py-2 text-right text-gray-500">{money(customer.opening_balance ?? 0)}</td>
         <td className="px-4 py-2 text-gray-500 text-xs">
           {!customer.commission_enabled ? "—" : customer.code === "AT" ? "AT নিয়ম" : `${customer.commission_percentage ?? 1}%`}
+        </td>
+        <td className="px-4 py-2 text-gray-500 text-xs">
+          {customer.lbs_invoicing_enabled ? `M/C ${customer.making_cutting_rate ?? 0}` : "—"}
         </td>
         <td className="px-4 py-2 text-right whitespace-nowrap">
           <GuardedAction table="customers" recordId={customer.id} recordLabel={customer.name} action="edit"

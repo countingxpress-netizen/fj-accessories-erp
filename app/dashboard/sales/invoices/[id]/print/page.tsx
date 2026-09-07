@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { formatDate } from "@/lib/formatDate";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import PrintButton from "@/app/dashboard/PrintButton";
 import { amountInWords } from "@/lib/numberToWords";
@@ -38,6 +38,7 @@ export default async function InvoicePrintPage({ params }: { params: Promise<{ i
   const { data: company } = await supabase.from("company_profile").select("*").single();
 
   if (!invoice) return notFound();
+  if (invoice.invoice_type === "lbs") redirect(`/dashboard/sales/invoices/${id}/print-lbs`);
 
   const total = (invoice.sales_invoice_items ?? []).reduce((s: number, i: any) => s + (i.amount || 0), 0);
 

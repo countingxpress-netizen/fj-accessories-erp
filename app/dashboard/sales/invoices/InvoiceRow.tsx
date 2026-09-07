@@ -49,7 +49,7 @@ export default function InvoiceRow({
       <td className="px-4 py-2 text-right">{money(total)}</td>
       <td className="px-4 py-2 text-right text-purple-700">{invoice.commission != null ? money(invoice.commission) : "-"}</td>
       <td className="px-4 py-2 text-right whitespace-nowrap">
-        <Link href={`/dashboard/sales/invoices/${invoice.id}/print`} target="_blank" className="text-blue-700 hover:underline text-xs mr-2">View</Link>
+        <Link href={`/dashboard/sales/invoices/${invoice.id}/${invoice.invoice_type === "lbs" ? "print-lbs" : "print"}`} target="_blank" className="text-blue-700 hover:underline text-xs mr-2">View</Link>
         {invoice.customers?.code === "AT" && (
           <Link href={`/dashboard/sales/invoices/${invoice.id}/print-customer`} target="_blank" className="text-purple-700 hover:underline text-xs mr-2">Submit to Customer</Link>
         )}

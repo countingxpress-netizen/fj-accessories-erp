@@ -21,6 +21,8 @@ export default function AddCustomerForm() {
   const [openingBalanceDate, setOpeningBalanceDate] = useState(new Date().toISOString().slice(0, 10));
   const [commissionEnabled, setCommissionEnabled] = useState(false);
   const [commissionPercentage, setCommissionPercentage] = useState("1");
+  const [lbsInvoicingEnabled, setLbsInvoicingEnabled] = useState(false);
+  const [makingCuttingRate, setMakingCuttingRate] = useState("0");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const router = useRouter();
@@ -43,6 +45,8 @@ export default function AddCustomerForm() {
       opening_balance_date: openingBalanceDate,
       commission_enabled: commissionEnabled,
       commission_percentage: parseFloat(commissionPercentage) || 0,
+      lbs_invoicing_enabled: lbsInvoicingEnabled,
+      making_cutting_rate: parseFloat(makingCuttingRate) || 0,
     }).select("id").single();
     if (error || !created) {
       setLoading(false);
@@ -69,6 +73,7 @@ export default function AddCustomerForm() {
     setDefaultPrintRate("0.20"); setDefaultAdhesiveRate("0.02");
     setOpeningBalance("0"); setOpeningBalanceDate(new Date().toISOString().slice(0, 10));
     setCommissionEnabled(false); setCommissionPercentage("1");
+    setLbsInvoicingEnabled(false); setMakingCuttingRate("0");
     router.refresh();
   }
 
@@ -116,6 +121,15 @@ export default function AddCustomerForm() {
           </label>
           {commissionEnabled && (
             <input type="number" step="0.01" value={commissionPercentage} onChange={(e) => setCommissionPercentage(e.target.value)} className="w-28 rounded-lg border px-3 py-2 text-sm" placeholder="Commission %" title="Invoice Total-এর কত % কমিশন (AT ছাড়া)" />
+          )}
+        </div>
+        <div>
+          <label className="flex items-center gap-2 text-xs text-gray-600 mb-1" title="Powder/Making/Printing/Adhesive ভাগে LBS Invoice হবে">
+            <input type="checkbox" checked={lbsInvoicingEnabled} onChange={(e) => setLbsInvoicingEnabled(e.target.checked)} />
+            LBS Invoicing
+          </label>
+          {lbsInvoicingEnabled && (
+            <input type="number" step="0.01" value={makingCuttingRate} onChange={(e) => setMakingCuttingRate(e.target.value)} className="w-32 rounded-lg border px-3 py-2 text-sm" placeholder="Making-Cutting Rate" title="Making + Cutting চার্জ — BDT / Lb" />
           )}
         </div>
         <button type="submit" disabled={loading} className="rounded-lg bg-gray-900 px-4 py-2 text-sm text-white disabled:opacity-50">
