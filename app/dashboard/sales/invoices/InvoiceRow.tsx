@@ -38,7 +38,15 @@ export default function InvoiceRow({
           aria-label={`Select invoice ${invoice.invoice_no}`}
         />
       </td>
-      <td className="px-4 py-2 font-medium">{invoice.invoice_no}</td>
+      <td className="px-4 py-2 font-medium">
+        {invoice.invoice_no}
+        {invoice.invoice_type === "other" && (
+          <span className="ml-1.5 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700">Other</span>
+        )}
+        {invoice.invoice_type === "lbs" && (
+          <span className="ml-1.5 rounded bg-purple-100 px-1.5 py-0.5 text-[10px] font-medium text-purple-700">LBS</span>
+        )}
+      </td>
       <td className="px-4 py-2 text-gray-500">
         {formatDate(invoice.invoice_date)}
         {invoice.creator?.full_name && <div className="text-[11px] text-gray-400">by {invoice.creator.full_name}</div>}
@@ -50,7 +58,7 @@ export default function InvoiceRow({
       <td className="px-4 py-2 text-right text-purple-700">{invoice.commission != null ? money(invoice.commission) : "-"}</td>
       <td className="px-4 py-2 text-right whitespace-nowrap">
         <Link href={`/dashboard/sales/invoices/${invoice.id}/${invoice.invoice_type === "lbs" ? "print-lbs" : "print"}`} target="_blank" className="text-blue-700 hover:underline text-xs mr-2">View</Link>
-        {invoice.customers?.code === "AT" && (
+        {invoice.customers?.code === "AT" && invoice.invoice_type !== "other" && (
           <Link href={`/dashboard/sales/invoices/${invoice.id}/print-customer`} target="_blank" className="text-purple-700 hover:underline text-xs mr-2">Submit to Customer</Link>
         )}
         <GuardedAction

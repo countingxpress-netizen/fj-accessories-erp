@@ -21,7 +21,7 @@ export default async function NewSalesInvoicePage() {
   });
 
   return (
-    <div className="mx-auto w-full max-w-screen-lg px-4 sm:px-5 lg:px-6">
+    <div>
       <h1 className="text-2xl font-semibold mb-4">নতুন Sales Invoice</h1>
       <SalesInvoiceForm customers={customers ?? []} bookings={(bookings ?? []) as any} invoicedMap={invoicedMap} priceHistory={(priceHistory ?? []) as any} />
     </div>

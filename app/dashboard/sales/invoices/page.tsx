@@ -31,6 +31,8 @@ export default async function SalesInvoiceListPage() {
   (buyers ?? []).forEach((b: any) => (markupMap[b.id] = b.markup_percentage ?? AT_DEFAULT_MARKUP_PERCENTAGE));
 
   const invoicesWithCommission = (invoices ?? []).map((inv: any) => {
+    // Other Sales Invoice (scrap/charge বিক্রি) commission হিসাবের বাইরে
+    if (inv.invoice_type === "other") return { ...inv, commission: null };
     const items = (inv.sales_invoice_items ?? []).map((item: any) => ({
       unit_price: item.unit_price || 0,
       quantity_pcs: item.quantity_pcs || 0,
@@ -52,7 +54,10 @@ export default async function SalesInvoiceListPage() {
     <div>
       <div className="flex items-center justify-between mb-4">
         <h1 className="text-2xl font-semibold">Sales Invoices</h1>
-        <Link href="/dashboard/sales/invoices/new" className="rounded-lg bg-gray-900 px-4 py-2 text-sm text-white">+ নতুন Sales Invoice</Link>
+        <div className="flex items-center gap-2">
+          <Link href="/dashboard/sales/invoices/new" className="rounded-lg bg-gray-900 px-4 py-2 text-sm text-white">+ নতুন Sales Invoice</Link>
+          <Link href="/dashboard/sales/invoices/new-other" className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">+ Other Invoice</Link>
+        </div>
       </div>
 
       <InvoicesTable invoices={invoicesWithCommission} />

@@ -39,7 +39,7 @@ export default async function CustomerLedgerDetailPage({
 
   const { data: invoices } = await supabase
     .from("sales_invoices")
-    .select("id, invoice_no, invoice_date, sales_invoice_items(quantity_pcs, unit_price, amount, finished_goods(product_name))")
+    .select("id, invoice_no, invoice_date, sales_invoice_items(quantity_pcs, unit_price, amount, line_label, finished_goods(product_name))")
     .eq("customer_id", id);
 
   const { data: payments } = await supabase
@@ -60,7 +60,7 @@ export default async function CustomerLedgerDetailPage({
 
   (invoices ?? []).forEach((inv: any) => {
     const amount = (inv.sales_invoice_items ?? []).reduce((s: number, i: any) => s + (i.amount || 0), 0);
-    const desc = (inv.sales_invoice_items ?? []).map((i: any) => `${i.finished_goods?.product_name} (${i.quantity_pcs})`).join(", ");
+    const desc = (inv.sales_invoice_items ?? []).map((i: any) => `${i.finished_goods?.product_name ?? i.line_label ?? "-"} (${i.quantity_pcs})`).join(", ");
     rows.push({ date: inv.invoice_date, type: "invoice", ref: inv.invoice_no, desc, debit: amount, credit: 0 });
   });
 

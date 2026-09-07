@@ -337,7 +337,7 @@ export default function SalesInvoiceForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="rounded-xl border bg-white p-6 shadow-sm space-y-4 max-w-5xl">
+    <form onSubmit={handleSubmit} className="rounded-xl border bg-white p-6 shadow-sm space-y-4">
       <div className="flex flex-wrap gap-4 items-end">
         <div className="flex-1 max-w-xs">
           <label className="block text-sm text-gray-600 mb-1">Customer</label>

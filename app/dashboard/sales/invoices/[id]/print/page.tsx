@@ -29,7 +29,7 @@ export default async function InvoicePrintPage({ params }: { params: Promise<{ i
     .from("sales_invoices")
     .select(`*, customers(name, code, address, phone, opening_balance, opening_balance_date),
       creator:app_users!sales_invoices_created_by_fkey(signature_url),
-      sales_invoice_items(quantity_pcs, unit_price, amount,
+      sales_invoice_items(quantity_pcs, unit_price, amount, line_label,
         bookings(booking_no, style, measurement_type, measurement_unit, length_val, width_val, flap_val, gusset_val, pillow_val),
         finished_goods(product_name))`)
     .eq("id", id)
@@ -40,6 +40,7 @@ export default async function InvoicePrintPage({ params }: { params: Promise<{ i
   if (!invoice) return notFound();
   if (invoice.invoice_type === "lbs") redirect(`/dashboard/sales/invoices/${id}/print-lbs`);
 
+  const isOther = invoice.invoice_type === "other";
   const total = (invoice.sales_invoice_items ?? []).reduce((s: number, i: any) => s + (i.amount || 0), 0);
 
   // --- Previous Bill / This Bill / Running Due হিসাব ---
@@ -136,9 +137,15 @@ export default async function InvoicePrintPage({ params }: { params: Promise<{ i
         <thead>
           <tr className="border-b-2 border-gray-800">
             <th className="text-left py-2">Sl</th>
-            <th className="text-left py-2">Style</th>
-            <th className="text-left py-2">Product</th>
-            <th className="text-left py-2">Measurement</th>
+            {isOther ? (
+              <th className="text-left py-2">Description</th>
+            ) : (
+              <>
+                <th className="text-left py-2">Style</th>
+                <th className="text-left py-2">Product</th>
+                <th className="text-left py-2">Measurement</th>
+              </>
+            )}
             <th className="text-right py-2">Qty</th>
             <th className="text-right py-2">Unit Price</th>
             <th className="text-right py-2">Amount</th>
@@ -148,9 +155,15 @@ export default async function InvoicePrintPage({ params }: { params: Promise<{ i
           {(invoice.sales_invoice_items ?? []).map((item: any, i: number) => (
             <tr key={i} className="border-b">
               <td className="py-2 text-gray-600">{i + 1}</td>
-              <td className="py-2 text-gray-600">{item.bookings?.style || item.bookings?.booking_no || "-"}</td>
-              <td className="py-2">{item.finished_goods?.product_name}</td>
-              <td className="py-2 text-gray-600 text-xs">{formatMeasurement(item.bookings)}</td>
+              {isOther ? (
+                <td className="py-2">{item.line_label}</td>
+              ) : (
+                <>
+                  <td className="py-2 text-gray-600">{item.bookings?.style || item.bookings?.booking_no || "-"}</td>
+                  <td className="py-2">{item.finished_goods?.product_name}</td>
+                  <td className="py-2 text-gray-600 text-xs">{formatMeasurement(item.bookings)}</td>
+                </>
+              )}
               <td className="text-right py-2">{item.quantity_pcs}</td>
               <td className="text-right py-2">{fmt(item.unit_price)}</td>
               <td className="text-right py-2">{fmt(item.amount)}</td>
@@ -159,7 +172,7 @@ export default async function InvoicePrintPage({ params }: { params: Promise<{ i
         </tbody>
         <tfoot>
           <tr className="border-t-2 border-gray-800 font-semibold">
-            <td colSpan={6} className="text-right py-2">Total</td>
+            <td colSpan={isOther ? 4 : 6} className="text-right py-2">Total</td>
             <td className="text-right py-2">{fmt(total)}</td>
           </tr>
         </tfoot>
