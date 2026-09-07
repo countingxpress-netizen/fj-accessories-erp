@@ -131,8 +131,25 @@ export async function syncAutoInvoiceForGroup(
     : { data: null };
   const isLbs = !!(customer as any)?.lbs_invoicing_enabled;
 
+  // LBS-এ: এই group-এর কোনো booking যদি অন্য কোনো invoice-এ (হাতে বানানো period bill,
+  // বা অন্য group-এর auto invoice) ইতিমধ্যে থাকে — সেটা এই auto invoice-এ দুবার নেব না।
+  let billedElsewhere = new Set<string>();
+  if (isLbs && (groupBookings ?? []).length > 0) {
+    const { data: otherItems } = await supabase
+      .from("sales_invoice_items")
+      .select("booking_id, invoice_id")
+      .in("booking_id", (groupBookings ?? []).map((b: any) => b.id));
+    billedElsewhere = new Set(
+      (otherItems ?? [])
+        .filter((it: any) => it.booking_id && it.invoice_id !== existing?.id)
+        .map((it: any) => it.booking_id as string),
+    );
+  }
+
   const rows = (groupBookings ?? []).filter(
-    (b: any) => (b.quantity_pcs || 0) > 0 && (isLbs || (b.quoted_unit_price || 0) > 0),
+    (b: any) =>
+      (b.quantity_pcs || 0) > 0 &&
+      (isLbs ? !billedElsewhere.has(b.id) : (b.quoted_unit_price || 0) > 0),
   );
 
   // valid কোনো লাইন নেই → invoice থাকলে মুছে ফেলো
