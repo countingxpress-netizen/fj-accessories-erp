@@ -41,22 +41,51 @@ function getLineAmount(qty: number, unitPriceRounded: number) {
   return Math.round(qty * unitPriceRounded);
 }
 
+// Sales Invoice Edit — এই ফর্মটাই এডিট মোডে খোলে শুধু হাতে-বানানো (manual) invoice-এর
+// জন্য (standard বা LBS)। auto invoice (Booking সেভ করলে যেটা হয়) এখানে আসে না —
+// সেটা বদলাতে হলে সংশ্লিষ্ট Booking Group এডিট করতে হয়। "Other" invoice আলাদা
+// EditOtherInvoiceForm-এ। editInvoice থাকলে Customer locked, invoice-এর booking-গুলো
+// প্রি-সিলেক্ট, প্রতি লাইনে Qty এডিটেবল, সেভ করলে পুরনো invoice + JV জায়গায় আপডেট হয়
+// (invoice_no একই থাকে)।
+export type EditInvoiceCtx = {
+  id: string;
+  invoiceNo: string;
+  invoiceType: "standard" | "lbs";
+  customerId: string;
+  invoiceDate: string;
+  paymentReceived: boolean;
+  voucherId: string | null;
+  lines: { bookingId: string; qty: number; unitPrice: number }[];
+  adjustmentSeed: Record<string, string>;
+  lbsPowderRate: string;
+  lbsMakingRate: string;
+};
+
 export default function SalesInvoiceForm({
-  customers, bookings, invoicedMap, priceHistory = [],
-}: { customers: Customer[]; bookings: Booking[]; invoicedMap: Record<string, number>; priceHistory?: PriceHistoryRow[] }) {
-  const [customerId, setCustomerId] = useState("");
+  customers, bookings, invoicedMap, priceHistory = [], editInvoice,
+}: { customers: Customer[]; bookings: Booking[]; invoicedMap: Record<string, number>; priceHistory?: PriceHistoryRow[]; editInvoice?: EditInvoiceCtx }) {
+  const isEdit = !!editInvoice;
+  const editLineIds = useMemo(() => new Set((editInvoice?.lines ?? []).map((l) => l.bookingId)), [editInvoice]);
+
+  const [customerId, setCustomerId] = useState(editInvoice?.customerId ?? "");
   const [buyerFilter, setBuyerFilter] = useState("");
   const [merchantFilter, setMerchantFilter] = useState("");
   const [styleFilter, setStyleFilter] = useState("");
   const [garmentsFilter, setGarmentsFilter] = useState("");
-  const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().slice(0, 10));
-  const [paymentReceived, setPaymentReceived] = useState(false);
-  const [selectedBookings, setSelectedBookings] = useState<Record<string, boolean>>({});
+  const [invoiceDate, setInvoiceDate] = useState(editInvoice?.invoiceDate ?? new Date().toISOString().slice(0, 10));
+  const [paymentReceived, setPaymentReceived] = useState(editInvoice?.paymentReceived ?? false);
+  const [selectedBookings, setSelectedBookings] = useState<Record<string, boolean>>(
+    () => Object.fromEntries((editInvoice?.lines ?? []).map((l) => [l.bookingId, true])),
+  );
   const [priceOverride, setPriceOverride] = useState<Record<string, string>>({});
-  const [adjustment, setAdjustment] = useState<Record<string, string>>({});
+  const [adjustment, setAdjustment] = useState<Record<string, string>>(editInvoice?.adjustmentSeed ?? {});
+  // এডিট মোডে প্রতি লাইনে Qty (ডিফল্ট = আগের Qty, max = বাকি Qty)
+  const [qtyOverride, setQtyOverride] = useState<Record<string, string>>(
+    () => Object.fromEntries((editInvoice?.lines ?? []).map((l) => [l.bookingId, String(l.qty)])),
+  );
   // LBS Invoicing — চার্জ rate override (ফাঁকা = customer/booking থেকে ডিফল্ট)
-  const [lbsPowderRate, setLbsPowderRate] = useState("");
-  const [lbsMakingRate, setLbsMakingRate] = useState("");
+  const [lbsPowderRate, setLbsPowderRate] = useState(editInvoice?.lbsPowderRate ?? "");
+  const [lbsMakingRate, setLbsMakingRate] = useState(editInvoice?.lbsMakingRate ?? "");
   const [lbsPrintRate, setLbsPrintRate] = useState("");
   const [lbsAdhesiveRate, setLbsAdhesiveRate] = useState("");
   const [error, setError] = useState("");
@@ -66,6 +95,9 @@ export default function SalesInvoiceForm({
 
   const selectedCustomer = customers.find((c) => c.id === customerId);
   const isLbsCustomer = !!selectedCustomer?.lbs_invoicing_enabled;
+  // এডিট মোডে invoice type-ই ঠিক করে LBS UI দেখাবে কিনা (customer পরে LBS হলেও পুরনো
+  // standard invoice standard-ই থাকবে, উল্টোটাও)।
+  const showLbs = isEdit ? editInvoice!.invoiceType === "lbs" : isLbsCustomer;
 
   const historyForCustomer = useMemo(
     () => priceHistory.filter((h) => h.customer_id === customerId),
@@ -78,20 +110,36 @@ export default function SalesInvoiceForm({
     return resolveRate(historyForCustomer, b.booking_date, selectedCustomer?.price_per_lbs ?? 0);
   }
 
+  // এডিট মোডে invoice-এর প্রতিটা লাইনের আগের Qty
+  const storedQtyById = useMemo(
+    () => Object.fromEntries((editInvoice?.lines ?? []).map((l) => [l.bookingId, l.qty])),
+    [editInvoice],
+  );
+
   const customerBookings = useMemo(() => {
     return bookings
       .filter((b) => b.customer_id === customerId)
       .map((b) => {
         const invoiced = invoicedMap[b.id] ?? 0;
         const remaining = b.quantity_pcs - invoiced;
-        return { ...b, invoiced, remaining };
+        // এডিট মোডে নিজের লাইন সবসময় সিলেক্ট করা যাবে — max = বাকি Qty, তবে অন্তত আগের Qty
+        const maxQty = editLineIds.has(b.id) ? Math.max(remaining, storedQtyById[b.id] ?? 0) : remaining;
+        return { ...b, invoiced, remaining, maxQty };
       })
-      .filter((b) => b.remaining > 0)
+      .filter((b) => b.remaining > 0 || editLineIds.has(b.id))
       .filter((b) => !buyerFilter || b.buyers?.name === buyerFilter)
       .filter((b) => !merchantFilter || b.merchants?.name === merchantFilter)
       .filter((b) => !styleFilter || b.style === styleFilter)
       .filter((b) => !garmentsFilter || b.garments_name === garmentsFilter);
-  }, [bookings, customerId, invoicedMap, buyerFilter, merchantFilter, styleFilter, garmentsFilter]);
+  }, [bookings, customerId, invoicedMap, buyerFilter, merchantFilter, styleFilter, garmentsFilter, editLineIds, storedQtyById]);
+
+  // এডিট মোডে সিলেক্ট করা লাইনের কার্যকর Qty (Qty ইনপুট → নাহলে আগের/বাকি Qty)
+  function effectiveQty(b: { id: string; remaining: number }) {
+    if (!isEdit) return b.remaining;
+    const raw = qtyOverride[b.id];
+    if (raw === undefined) return storedQtyById[b.id] ?? b.remaining;
+    return parseFloat(raw) || 0;
+  }
 
   const availableBuyers = useMemo(
     () => Array.from(new Set(bookings.filter((b) => b.customer_id === customerId).map((b) => b.buyers?.name).filter(Boolean))) as string[],
@@ -136,7 +184,7 @@ export default function SalesInvoiceForm({
   const lineItems = customerBookings
     .filter((b) => selectedBookings[b.id])
     .map((b) => {
-      const qty = b.remaining; // Sales Invoice সবসময় Full Quantity
+      const qty = effectiveQty(b); // New: Full Quantity; Edit: প্রতি লাইনের Qty ইনপুট
       const unitPriceRaw = getUnitPrice(b);
       const unitPrice = Math.round(unitPriceRaw * 100) / 100;
       return { booking: b, qty, unitPrice, amount: getLineAmount(qty, unitPrice) };
@@ -149,12 +197,13 @@ export default function SalesInvoiceForm({
     () =>
       customerBookings
         .filter((b) => selectedBookings[b.id])
-        .map((b) => ({ ...b, quantity_pcs: b.remaining })), // যতটা বাকি ততটাই
-    [customerBookings, selectedBookings]
+        .map((b) => ({ ...b, quantity_pcs: effectiveQty(b) })), // New: বাকি; Edit: Qty ইনপুট
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [customerBookings, selectedBookings, qtyOverride]
   );
 
   const lbsResult = useMemo(() => {
-    if (!isLbsCustomer || lbsSelectedBookings.length === 0) return null;
+    if (!showLbs || lbsSelectedBookings.length === 0) return null;
     return buildLbsLines(lbsSelectedBookings as unknown as LbsBooking[], {
       materialRatePerLbs: parseFloat(lbsPowderRate) || Number(selectedCustomer?.price_per_lbs ?? 0),
       makingCuttingRate: parseFloat(lbsMakingRate) || Number(selectedCustomer?.making_cutting_rate ?? 0),
@@ -162,11 +211,16 @@ export default function SalesInvoiceForm({
       adhesiveRate: lbsAdhesiveRate.trim() === "" ? undefined : parseFloat(lbsAdhesiveRate) || 0,
       bigBagDoublePrint: true,
     });
-  }, [isLbsCustomer, lbsSelectedBookings, lbsPowderRate, lbsMakingRate, lbsPrintRate, lbsAdhesiveRate, selectedCustomer]);
+  }, [showLbs, lbsSelectedBookings, lbsPowderRate, lbsMakingRate, lbsPrintRate, lbsAdhesiveRate, selectedCustomer]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
+
+    if (isEdit) {
+      await handleEditSubmit();
+      return;
+    }
 
     if (isLbsCustomer) {
       await handleLbsSubmit();
@@ -244,6 +298,104 @@ export default function SalesInvoiceForm({
           { voucher_id: voucher.id, account_id: salesAccount.id, debit: 0, credit: totalAmount, memo: `Invoice ${invoiceNo}` },
         ]);
         await supabase.from("sales_invoices").update({ voucher_id: voucher.id }).eq("id", invoice.id);
+      }
+    }
+
+    setLoading(false);
+    router.push("/dashboard/sales/invoices");
+    router.refresh();
+  }
+
+  // ── Manual invoice edit — পুরনো invoice + JV জায়গায় আপডেট (invoice_no একই) ──────
+  async function handleEditSubmit() {
+    if (!editInvoice) return;
+    const isLbs = editInvoice.invoiceType === "lbs";
+
+    if (isLbs) {
+      if (!lbsResult || lbsResult.total <= 0) {
+        setError("Total ০ — Powder/Making rate বা বুকিং সিলেকশন দেখুন।");
+        return;
+      }
+    } else {
+      if (lineItems.length === 0) { setError("অন্তত একটা বুকিং সিলেক্ট করুন।"); return; }
+      for (const li of lineItems) {
+        const b = li.booking as any;
+        if (li.qty <= 0) { setError(`${b.booking_no}-এ Qty দিন।`); return; }
+        if (li.qty > b.maxQty) { setError(`${b.booking_no}-এ সর্বোচ্চ ${b.maxQty} পিস পর্যন্ত দেওয়া যাবে।`); return; }
+      }
+      if (lineItems.some((li) => li.unitPrice <= 0)) {
+        setError("কোনো একটা বুকিং-এর Unit Price ০ বা তার কম — Price/Lbs বা Adjustment দেখুন।");
+        return;
+      }
+    }
+
+    setLoading(true);
+    const createdBy = await getCurrentUserId(supabase);
+
+    const src: any[] = isLbs ? lbsSelectedBookings : lineItems.map((li) => li.booking);
+    const first: any = src[0];
+    const styles = Array.from(new Set(src.map((b) => b.style).filter(Boolean))).join(", ");
+    const bookingRefs = Array.from(new Set(src.map((b) => b.customer_booking_ref).filter(Boolean))).join(", ");
+
+    await supabase.from("sales_invoices").update({
+      invoice_date: invoiceDate,
+      payment_received: paymentReceived,
+      payment_type: paymentReceived ? "cash" : "credit",
+      buyer_name: first?.buyers?.name ?? null,
+      merchant_name: first?.merchants?.name ?? null,
+      style: styles || null,
+      delivery_point: first?.delivery_point ?? null,
+      customer_booking_ref: bookingRefs || null,
+    }).eq("id", editInvoice.id);
+
+    await supabase.from("sales_invoice_items").delete().eq("invoice_id", editInvoice.id);
+    const items: Record<string, unknown>[] = isLbs
+      ? [
+          ...lbsResult!.productLines.map((l) => ({
+            invoice_id: editInvoice.id, product_id: l.product_id, booking_id: l.booking_id,
+            quantity_pcs: l.quantity_pcs, unit_price: 0,
+            line_type: l.line_type, line_label: l.label, required_lbs: l.required_lbs,
+          })),
+          ...lbsResult!.chargeLines.map((l) => ({
+            invoice_id: editInvoice.id, product_id: null, booking_id: null,
+            quantity_pcs: l.quantity_pcs, unit_price: l.unit_price,
+            line_type: l.line_type, line_label: l.label, required_lbs: null,
+          })),
+        ]
+      : lineItems.map((li) => ({
+          invoice_id: editInvoice.id, product_id: li.booking.product_id, booking_id: li.booking.id,
+          quantity_pcs: li.qty, unit_price: li.unitPrice,
+        }));
+    const { error: itemsError } = await supabase.from("sales_invoice_items").insert(items);
+    if (itemsError) { setLoading(false); setError(itemsError.message); return; }
+
+    // পুরনো JV মুছে নতুন — invoice row টিকে থাকছে, তাই আগে voucher_id null করতে হবে
+    const total = isLbs ? lbsResult!.total : totalAmount;
+    if (editInvoice.voucherId) {
+      await supabase.from("sales_invoices").update({ voucher_id: null }).eq("id", editInvoice.id);
+      await supabase.from("journal_entry_lines").delete().eq("voucher_id", editInvoice.voucherId);
+      await supabase.from("journal_vouchers").delete().eq("id", editInvoice.voucherId);
+    }
+
+    const debitCode = paymentReceived ? "1000" : "1100";
+    const { data: debitAccount } = await supabase.from("chart_of_accounts").select("id").eq("account_code", debitCode).single();
+    const { data: salesAccount } = await supabase.from("chart_of_accounts").select("id").eq("account_code", "4000").single();
+    if (debitAccount && salesAccount) {
+      const voucherNo = await generateNextDocNo(supabase, "journal_vouchers", "voucher_no", "JV", "voucher_date", invoiceDate);
+      const { data: voucher } = await supabase
+        .from("journal_vouchers")
+        .insert({
+          voucher_no: voucherNo, voucher_date: invoiceDate,
+          narration: `Sales Invoice ${editInvoice.invoiceNo} — ${selectedCustomer?.name ?? ""} (${paymentReceived ? "Cash" : "Credit"}, edited)`,
+          created_by: createdBy,
+        })
+        .select().single();
+      if (voucher) {
+        await supabase.from("journal_entry_lines").insert([
+          { voucher_id: voucher.id, account_id: debitAccount.id, debit: total, credit: 0, memo: `Invoice ${editInvoice.invoiceNo}` },
+          { voucher_id: voucher.id, account_id: salesAccount.id, debit: 0, credit: total, memo: `Invoice ${editInvoice.invoiceNo}` },
+        ]);
+        await supabase.from("sales_invoices").update({ voucher_id: voucher.id }).eq("id", editInvoice.id);
       }
     }
 
@@ -338,10 +490,19 @@ export default function SalesInvoiceForm({
 
   return (
     <form onSubmit={handleSubmit} className="rounded-xl border bg-white p-6 shadow-sm space-y-4">
+      {isEdit && (
+        <div className="rounded-lg border border-blue-300 bg-blue-50 p-3 text-sm text-blue-800">
+          <p className="font-semibold">Sales Invoice এডিট — {editInvoice!.invoiceNo}</p>
+          <p className="text-xs mt-1">
+            হাতে-বানানো invoice। সেভ করলে এই invoice ও তার Journal Voucher জায়গায় আপডেট হবে
+            (invoice নম্বর একই থাকবে)। প্রতি লাইনে Qty বদলানো যাবে।
+          </p>
+        </div>
+      )}
       <div className="flex flex-wrap gap-4 items-end">
         <div className="flex-1 max-w-xs">
           <label className="block text-sm text-gray-600 mb-1">Customer</label>
-          <select value={customerId} onChange={(e) => { setCustomerId(e.target.value); setSelectedBookings({}); setPriceOverride({}); setAdjustment({}); setBuyerFilter(""); setMerchantFilter(""); setStyleFilter(""); setGarmentsFilter(""); setLbsPowderRate(""); setLbsMakingRate(""); setLbsPrintRate(""); setLbsAdhesiveRate(""); }} className="w-full rounded-lg border px-3 py-2 text-sm" required>
+          <select value={customerId} disabled={isEdit} onChange={(e) => { setCustomerId(e.target.value); setSelectedBookings({}); setPriceOverride({}); setAdjustment({}); setBuyerFilter(""); setMerchantFilter(""); setStyleFilter(""); setGarmentsFilter(""); setLbsPowderRate(""); setLbsMakingRate(""); setLbsPrintRate(""); setLbsAdhesiveRate(""); }} className="w-full rounded-lg border px-3 py-2 text-sm disabled:bg-gray-100 disabled:text-gray-600" required>
             <option value="">-- বাছুন --</option>
             {customers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
@@ -389,7 +550,7 @@ export default function SalesInvoiceForm({
         Payment Received (টিক থাকলে Cash Sale, না থাকলে বাকিতে বিক্রি)
       </label>
 
-      {customerId && isLbsCustomer && (
+      {customerId && showLbs && (
         <div className="space-y-3">
           <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
             এই Customer <b>LBS Invoicing</b>-এ — Invoice হয় Powder / Making Cutting / Printing / Non-Print / Adhesive চার্জে।
@@ -422,7 +583,16 @@ export default function SalesInvoiceForm({
                       <td className="px-3 py-2">{b.finished_goods?.product_name}</td>
                       <td className="px-3 py-2 text-gray-500 text-xs">{formatMeasurement(b)}</td>
                       <td className="px-3 py-2 text-right text-gray-500">{b.thickness_mm} mm</td>
-                      <td className="px-3 py-2 text-right">{b.remaining}</td>
+                      <td className="px-3 py-2 text-right">
+                        {isEdit && checked ? (
+                          <input
+                            type="number" step="1" min="0" max={b.maxQty}
+                            value={qtyOverride[b.id] ?? String(storedQtyById[b.id] ?? b.remaining)}
+                            onChange={(e) => setQtyOverride((prev) => ({ ...prev, [b.id]: e.target.value }))}
+                            className="w-24 rounded border px-2 py-1 text-sm text-right"
+                          />
+                        ) : b.remaining}
+                      </td>
                     </tr>
                   );
                 })}
@@ -495,7 +665,7 @@ export default function SalesInvoiceForm({
         </div>
       )}
 
-      {customerId && !isLbsCustomer && (
+      {customerId && !showLbs && (
         <div className="overflow-x-auto rounded-lg border">
           <table className="w-full text-sm">
             <thead className="bg-gray-50 text-left text-gray-600">
@@ -528,7 +698,19 @@ export default function SalesInvoiceForm({
                     <td className="px-3 py-2">{b.finished_goods?.product_name}</td>
                     <td className="px-3 py-2 text-gray-500 text-xs">{formatMeasurement(b)}</td>
                     <td className="px-3 py-2 text-right text-gray-500">{b.thickness_mm} mm</td>
-                    <td className="px-3 py-2 text-right">{checked ? b.remaining : "-"}</td>
+                    <td className="px-3 py-2 text-right">
+                      {!checked ? "-" : isEdit ? (
+                        <span className="inline-flex flex-col items-end">
+                          <input
+                            type="number" step="1" min="0" max={b.maxQty}
+                            value={qtyOverride[b.id] ?? String(storedQtyById[b.id] ?? b.remaining)}
+                            onChange={(e) => setQtyOverride((prev) => ({ ...prev, [b.id]: e.target.value }))}
+                            className="w-24 rounded border px-2 py-1 text-sm text-right"
+                          />
+                          <span className="text-[11px] text-gray-400">max {b.maxQty}</span>
+                        </span>
+                      ) : b.remaining}
+                    </td>
                     <td className="px-3 py-2">
                       <input type="number" step="0.01" placeholder={String(bookingPricePerLbs(b) || "")} value={priceOverride[b.id] || ""} onChange={(e) => setPriceOverride((prev) => ({ ...prev, [b.id]: e.target.value }))} className="w-full rounded border px-2 py-1 text-sm" />
                       <span className="block text-[11px] text-gray-400">
@@ -540,7 +722,7 @@ export default function SalesInvoiceForm({
                       <span className="block text-[11px] text-gray-400">প্রতি পিসে ± (ঋণাত্মকও)</span>
                     </td>
                     <td className="px-3 py-2 text-right">{money((Math.round(unitPrice * 100) / 100))}</td>
-                    <td className="px-3 py-2 text-right">{checked ? money(getLineAmount(b.remaining, unitPrice)) : "-"}</td>
+                    <td className="px-3 py-2 text-right">{checked ? money(getLineAmount(effectiveQty(b), unitPrice)) : "-"}</td>
                   </tr>
                 );
               })}
@@ -559,10 +741,14 @@ export default function SalesInvoiceForm({
 
       <button
         type="submit"
-        disabled={loading || (isLbsCustomer ? !lbsResult || lbsResult.total <= 0 : lineItems.length === 0)}
+        disabled={loading || (showLbs ? !lbsResult || lbsResult.total <= 0 : lineItems.length === 0)}
         className="rounded-lg bg-gray-900 px-5 py-2 text-sm text-white disabled:opacity-40"
       >
-        {loading ? "সেভ হচ্ছে..." : isLbsCustomer ? "LBS Invoice তৈরি করুন" : "Sales Invoice তৈরি করুন"}
+        {loading
+          ? "সেভ হচ্ছে..."
+          : isEdit
+            ? "পরিবর্তন সেভ করুন (Journal Voucher নতুন হবে)"
+            : showLbs ? "LBS Invoice তৈরি করুন" : "Sales Invoice তৈরি করুন"}
       </button>
     </form>
   );

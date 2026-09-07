@@ -259,8 +259,9 @@ customerAmount    = round( customerUnitPrice × Qty )
 | `lib/cmToInch.ts` | 10–127 cm lookup টেবিল |
 | `lib/rateHistory.ts` | Booking-Date-ভিত্তিক Price/Lbs (`resolveRate`) |
 | `lib/atCommission.ts` | AT Submit-to-Customer হিসাব (`calcAtCustomerLine`) |
-| `app/dashboard/sales/bookings/new/BookingForm.tsx` | Booking quote — একই formula inline (print × 2, Amount round) |
+| `app/dashboard/sales/bookings/new/BookingForm.tsx` | Booking quote — একই formula inline (print × 2, Amount round) + per-row `Adjust/Pc` |
+| `lib/bookingGroupWrite.ts` | Booking Group সেভ/reverse cascade — New ও Booking Group Edit দুটোই এটা ব্যবহার করে |
 | `app/dashboard/lc-export/proforma/new/ProformaForm.tsx` | PI — Adjustment (`effectivePriceUnit`), buyer pricing rules |
 | `app/dashboard/sales/invoices/[id]/print-customer/page.tsx` | AT print ভিউ |
-| `app/dashboard/sales/invoices/[id]/edit/EditInvoiceForm.tsx` | Edit — recalc নেই |
+| `app/dashboard/sales/invoices/[id]/edit/page.tsx` | Edit রাউটিং — other→নিজস্ব এডিটর, auto→Booking Edit-এ পাঠায়, manual→`SalesInvoiceForm` edit mode |
 | `supabase/migrations/…_sales_invoice_amount_round.sql` | `amount` generated column: floor → round |

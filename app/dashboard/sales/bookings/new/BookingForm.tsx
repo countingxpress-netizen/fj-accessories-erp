@@ -4,8 +4,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { generateNextDocNo } from "@/lib/docNumber";
 import { toInches, hasAdhesiveCharge } from "@/lib/calcTubeCutting";
-import { postBookingConsumptionJv } from "@/lib/inventoryCost";
-import { syncAutoInvoiceForGroup } from "@/lib/autoInvoiceFromBooking";
+import { writeBookingGroup, reverseBookingGroupDerived, type BookingGroupItemInput } from "@/lib/bookingGroupWrite";
 import { getCurrentUserId } from "@/lib/currentUser";
 import { resolveRate, type RateHistoryRow } from "@/lib/rateHistory";
 import { money, qty as qtyFmt } from "@/lib/format";
@@ -32,7 +31,7 @@ const MEASUREMENT_TYPE_LABELS: Record<MeasurementType, string> = {
   pillow: "Pillow (L + P x W)",
 };
 
-type PendingItem = {
+export type PendingItem = {
   style: string;
   customerBookingRef: string;
   poNo: string;
@@ -58,6 +57,7 @@ type PendingItem = {
   printColors: number;
   ratePerColor: number;
   ratePerInch: number;
+  adjustmentPerPc: number;
   kg: number;
   bags: number;
   materialsNeeded: { name: string; qty: number }[];
@@ -74,6 +74,7 @@ const BASELINE_ROW_SEED: RowDefaults = {
   productDetails: "", measurementType: "simple", unit: "cm",
   thicknessMm: "", productionThicknessMm: "", piThicknessMm: "",
   hasPrint: false, printColors: "", ratePerColor: "0.20", ratePerInch: "0.02",
+  adjustmentPerPc: "",
 };
 
 type BuyerMaster = {
@@ -112,6 +113,8 @@ type MeasurementRow = {
   printColors: string;
   ratePerColor: string;
   ratePerInch: string;
+  // Sales Invoice ফর্মের Adjustment-এর মতো — প্রতি পিসে ± টাকা, Unit Price-এ সরাসরি যোগ হয়।
+  adjustmentPerPc: string;
 };
 
 type RowDefaults = {
@@ -125,6 +128,7 @@ type RowDefaults = {
   printColors: string;
   ratePerColor: string;
   ratePerInch: string;
+  adjustmentPerPc: string;
 };
 
 function makeEmptyRow(defaults: RowDefaults): MeasurementRow {
@@ -146,6 +150,7 @@ function makeEmptyRow(defaults: RowDefaults): MeasurementRow {
     printColors: defaults.printColors,
     ratePerColor: defaults.ratePerColor,
     ratePerInch: defaults.ratePerInch,
+    adjustmentPerPc: defaults.adjustmentPerPc,
   };
 }
 
@@ -229,26 +234,51 @@ function parseBulkPasteLine(line: string, defaults: RowDefaults): BulkParseResul
   };
 }
 
+// Booking Group Edit — এই ফর্মটাই এডিট মোডে খোলে (Production শুরুর আগে)। editContext
+// থাকলে পুরো group-এর সব প্রোডাক্ট pendingItems-এ প্রি-লোড হয়, header ফিল্ড ভরা থাকে,
+// সেভ করলে group-এর সব derived data নতুন করে হিসাব হয় (reverseBookingGroupDerived → writeBookingGroup)।
+export type BookingEditContext = {
+  groupId: string;
+  bookingNo: string;
+  bookingDate: string;
+  customerId: string;
+  customerName: string;
+  buyerId: string | null;
+  buyerName: string | null;
+  garmentsId: string | null;
+  garmentsName: string | null;
+  merchantId: string | null;
+  merchantName: string | null;
+  deliveryPoint: string;
+  paymentReceived: boolean;
+  priceOverride: string;
+  items: PendingItem[];
+};
+
 export default function BookingForm({
   customers, warehouses, materials, buyersMaster, garmentsMaster, merchantsMaster, priceHistory,
+  editContext,
 }: {
   customers: Customer[]; warehouses: Warehouse[]; materials: Material[];
   buyersMaster: BuyerMaster[]; garmentsMaster: GarmentMaster[]; merchantsMaster: MerchantMaster[]; priceHistory: PriceHistoryRow[];
+  editContext?: BookingEditContext;
 }) {
+  const isEdit = !!editContext;
+
   // পুরো বুকিং-এর জন্য কমন (একবার দিলেই সব স্টাইলে থাকবে)
-  const [customerId, setCustomerId] = useState("");
-  const [customerNameInput, setCustomerNameInput] = useState("");
-  const [garmentsId, setGarmentsId] = useState("");
-  const [garmentsNameInput, setGarmentsNameInput] = useState("");
-  const [buyerId, setBuyerId] = useState("");
-  const [buyerNameInput, setBuyerNameInput] = useState("");
-  const [merchantId, setMerchantId] = useState("");
-  const [merchantNameInput, setMerchantNameInput] = useState("");
-  const [priceOverride, setPriceOverride] = useState("");
-  const [bookingDate, setBookingDate] = useState(new Date().toISOString().slice(0, 10));
-  const [deliveryPoint, setDeliveryPoint] = useState("");
+  const [customerId, setCustomerId] = useState(editContext?.customerId ?? "");
+  const [customerNameInput, setCustomerNameInput] = useState(editContext?.customerName ?? "");
+  const [garmentsId, setGarmentsId] = useState(editContext?.garmentsId ?? "");
+  const [garmentsNameInput, setGarmentsNameInput] = useState(editContext?.garmentsName ?? "");
+  const [buyerId, setBuyerId] = useState(editContext?.buyerId ?? "");
+  const [buyerNameInput, setBuyerNameInput] = useState(editContext?.buyerName ?? "");
+  const [merchantId, setMerchantId] = useState(editContext?.merchantId ?? "");
+  const [merchantNameInput, setMerchantNameInput] = useState(editContext?.merchantName ?? "");
+  const [priceOverride, setPriceOverride] = useState(editContext?.priceOverride ?? "");
+  const [bookingDate, setBookingDate] = useState(editContext?.bookingDate ?? new Date().toISOString().slice(0, 10));
+  const [deliveryPoint, setDeliveryPoint] = useState(editContext?.deliveryPoint ?? "");
   // Booking সেভ করলে অটো Sales Invoice তৈরি হয় — টিক থাকলে Cash Sale, না থাকলে বাকিতে বিক্রি
-  const [paymentReceived, setPaymentReceived] = useState(false);
+  const [paymentReceived, setPaymentReceived] = useState(editContext?.paymentReceived ?? false);
 
   // Style Info — এক স্টাইলের সব মাপের জন্য কমন। "এই স্টাইল বুকিং-এ যোগ করুন" চাপলে রিসেট হবে।
   const [style, setStyle] = useState("");
@@ -322,7 +352,7 @@ export default function BookingForm({
   const [bulkPasteText, setBulkPasteText] = useState("");
   const [bulkPasteErrors, setBulkPasteErrors] = useState<string[]>([]);
 
-  const [pendingItems, setPendingItems] = useState<PendingItem[]>([]);
+  const [pendingItems, setPendingItems] = useState<PendingItem[]>(editContext?.items ?? []);
   const [customersList, setCustomersList] = useState(customers);
   const [buyersList, setBuyersList] = useState(buyersMaster);
   const [garmentsList, setGarmentsList] = useState(garmentsMaster);
@@ -471,13 +501,15 @@ export default function BookingForm({
     // Price/Pc — Sales Invoice-এর ঠিক একই ফর্মুলা: Order Thickness (T) ব্যবহার করে
     // (Production Thickness নয়), + এই Row-এর নিজস্ব Print charge + Adhesive charge। ২ দশমিকে রাউন্ড।
     // Adhesive Rate/Inch চার্জ Adhesive আর Flap Gusset — দুই টাইপেই লাগে (দুটোতেই Flap থাকে)।
+    // Adjustment — প্রতি পিসে ± টাকা (Sales Invoice ফর্মের মতো, ঋণাত্মকও হতে পারে)
+    const adj = parseFloat(row.adjustmentPerPc) || 0;
     let unitPrice = 0;
     if (pricePerLbs && T) {
       const baseUnitPrice = (pricePerLbs * tubeInch * cuttingInch * T) / 75000;
       // বড় ব্যাগে (Cutting > 29") Print rate দ্বিগুণ — Sales Invoice / PI-র সাথে মিল
       const printCharge = row.hasPrint ? (parseInt(row.printColors) || 0) * (parseFloat(row.ratePerColor) || 0.20) * (cuttingInch > 29 ? 2 : 1) : 0;
       const adhesiveCharge = hasAdhesiveCharge(row.measurementType) ? cuttingInch * (parseFloat(row.ratePerInch) || 0.02) : 0;
-      unitPrice = Math.round((baseUnitPrice + printCharge + adhesiveCharge) * 100) / 100;
+      unitPrice = Math.round((baseUnitPrice + printCharge + adhesiveCharge + adj) * 100) / 100;
     }
     // Amount = round(Qty × Unit Price) — Sales Invoice-এর সাথে মিল (আগে floor ছিল)
     const amount = Math.round(qtyN * unitPrice);
@@ -534,6 +566,7 @@ export default function BookingForm({
       materialsNeeded, lengthCm, widthCm, hasPrint: row.hasPrint, printColors: parseInt(row.printColors) || 0,
       ratePerColor: parseFloat(row.ratePerColor) || 0.20,
       ratePerInch: parseFloat(row.ratePerInch) || 0.02,
+      adjustmentPerPc: parseFloat(row.adjustmentPerPc) || 0,
       unitPrice: calc.unitPrice, amount: calc.amount,
     };
   }
@@ -798,6 +831,65 @@ export default function BookingForm({
     setPendingItems((prev) => prev.filter((_, i) => i !== index));
   }
 
+  // যোগ করা তালিকার একটা প্রোডাক্ট আবার Style Info + একটা Measurement Row-এ ফিরিয়ে এনে
+  // এডিট করতে দেয় (তালিকা থেকে সরে যায়) — বদলে আবার "যোগ করুন" চাপলে re-append হয়।
+  // মূলত Booking Group Edit-এর জন্য, তবে New ফর্মেও ভুল Row ঠিক করতে কাজে লাগে।
+  function editPendingItem(index: number) {
+    setError("");
+    if (rows.some((r) => (parseFloat(r.quantity) || 0) > 0)) {
+      setWarning("⚠ আগে বর্তমান Measurement Row-গুলো তালিকায় যোগ করুন বা সরান, তারপর তালিকা থেকে Edit করুন।");
+      return;
+    }
+    const it = pendingItems[index];
+    if (!it) return;
+
+    setStyle(it.style ?? "");
+    setCustomerBookingRef(it.customerBookingRef ?? "");
+    setPoNo(it.poNo ?? "");
+    setMaterialType(it.materialType as MaterialTypeVal);
+    setWarehouseId(it.warehouseId ?? "");
+    setPrintLayoutNote(it.printLayoutNote ?? "");
+    setPrintLayoutFileUrl(it.printLayoutFileUrl ?? "");
+    setPrintLayoutFileName(it.printLayoutFileUrl ? "সংযুক্ত ফাইল" : "");
+
+    if (it.materialType === "custom") {
+      const lines = it.materialsNeeded.map((m) => {
+        const mat = materials.find((mm) => mm.material_name === m.name);
+        const pct = it.finalLbs > 0 ? Math.round((m.qty / it.finalLbs) * 10000) / 100 : 0;
+        return { material_id: mat?.id ?? "", percentage: pct ? String(pct) : "" };
+      });
+      setCustomLines(lines.length >= 2 ? lines : [...lines, { material_id: "", percentage: "" }]);
+    } else {
+      setCustomLines([{ material_id: "", percentage: "" }, { material_id: "", percentage: "" }]);
+    }
+
+    const numStr = (n: number) => (n ? String(n) : "");
+    setRows([{
+      rowId: crypto.randomUUID(),
+      productDetails: it.productDetails ?? "",
+      measurementType: it.measurementType as MeasurementType,
+      unit: it.unit as Unit,
+      lengthVal: numStr(it.lengthVal),
+      widthVal: numStr(it.widthVal),
+      flapVal: numStr(it.flapVal),
+      gussetVal: numStr(it.gussetVal),
+      pillowVal: numStr(it.pillowVal),
+      quantity: numStr(it.quantity),
+      thicknessMm: numStr(it.thicknessMm),
+      productionThicknessMm: numStr(it.productionThicknessMm),
+      piThicknessMm: numStr(it.piThicknessMm),
+      hasPrint: it.hasPrint,
+      printColors: it.printColors ? String(it.printColors) : "",
+      ratePerColor: String(it.ratePerColor ?? "0.20"),
+      ratePerInch: String(it.ratePerInch ?? "0.02"),
+      adjustmentPerPc: it.adjustmentPerPc ? String(it.adjustmentPerPc) : "",
+    }]);
+
+    setPendingItems((prev) => prev.filter((_, i) => i !== index));
+    setWarning("");
+    measurementRowsRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
@@ -832,8 +924,6 @@ export default function BookingForm({
 
     setLoading(true);
 
-    const groupId = crypto.randomUUID();
-    const sharedBookingNo = await generateNextDocNo(supabase, "bookings", "booking_no", "BK", "booking_date", bookingDate);
     const createdBy = await getCurrentUserId(supabase);
 
     let resolvedMerchantId: string | null = null;
@@ -845,10 +935,6 @@ export default function BookingForm({
       setError(`Merchant সেভ করতে ব্যর্থ হয়েছে: ${err?.message ?? "অজানা কারণ"}`);
       return;
     }
-
-    const { data: allMaterials } = await supabase.from("raw_materials").select("id, material_name");
-    const materialMap: Record<string, string> = {};
-    (allMaterials ?? []).forEach((m) => (materialMap[m.material_name] = m.id));
 
     let resolvedCustomerId: string | null = null;
     try {
@@ -868,135 +954,61 @@ export default function BookingForm({
     const { buyerId: resolvedBuyerId } = await ensureBuyerForCurrentCustomer(resolvedCustomerId);
     const { garmentsId: resolvedGarmentsId, garmentsName: resolvedGarmentsName } = await ensureGarmentsForCurrentCustomer(resolvedCustomerId);
 
-    for (const item of allItems) {
-      // Finished Goods খুঁজুন/তৈরি করুন
-      const productName = item.productDetails || `${item.style || "Product"} (${item.lengthCm.toFixed(1)}x${item.widthCm.toFixed(1)})`;
-      const { data: existingProduct } = await supabase
-        .from("finished_goods").select("id")
-        .eq("length_cm", Number(item.lengthCm.toFixed(3)))
-        .eq("width_cm", Number(item.widthCm.toFixed(3)))
-        .eq("thickness", item.thicknessMm)
-        .maybeSingle();
+    const groupId = editContext ? editContext.groupId : crypto.randomUUID();
+    const effectiveBookingDate = editContext ? editContext.bookingDate : bookingDate;
+    const sharedBookingNo = editContext
+      ? editContext.bookingNo
+      : await generateNextDocNo(supabase, "bookings", "booking_no", "BK", "booking_date", effectiveBookingDate);
 
-      let productId = existingProduct?.id;
-      if (!productId) {
-        const { data: newProduct } = await supabase
-          .from("finished_goods")
-          .insert({ product_name: productName, length_cm: item.lengthCm, width_cm: item.widthCm, thickness: item.thicknessMm })
-          .select().single();
-        productId = newProduct?.id;
-      }
-      if (!productId) continue;
-
-      const { data: booking, error: bookingError } = await supabase
-        .from("bookings")
-        .insert({
-          booking_no: sharedBookingNo, customer_id: resolvedCustomerId, buyer_id: resolvedBuyerId, merchant_id: resolvedMerchantId,
-          style: item.style, product_details: item.productDetails, product_id: productId,
-          measurement_type: item.measurementType, measurement_unit: item.unit,
-          length_val: item.lengthVal, width_val: item.widthVal,
-          flap_val: item.flapVal || null, gusset_val: item.gussetVal || null, pillow_val: item.pillowVal || null,
-          thickness_mm: item.thicknessMm, production_thickness_mm: item.productionThicknessMm,
-          pi_thickness_mm: item.piThicknessMm,
-          material_type: item.materialType,
-          quantity_pcs: item.quantity, booking_date: bookingDate,
-          required_lbs: Number(item.finalLbs.toFixed(2)),
-          required_kg: Number(item.kg.toFixed(2)),
-          required_bags: Number(item.bags.toFixed(2)),
-          delivery_point: deliveryPoint, print_layout_note: item.printLayoutNote || null,
-          print_layout_file_url: item.printLayoutFileUrl || null,
-          has_print: item.hasPrint, print_colors: item.printColors,
-          rate_per_color: item.ratePerColor, rate_per_inch: item.ratePerInch,
-          quoted_unit_price: item.unitPrice || null, quoted_amount: item.amount || null,
-          garments_name: resolvedGarmentsName ?? null,
-          garments_id: resolvedGarmentsId || null, booking_group_id: groupId,
-          customer_booking_ref: item.customerBookingRef || null,
-          po_no: item.poNo || null,
-          warehouse_id: item.warehouseId, status: "in_production",
-          created_by: createdBy,
-        })
-        .select().single();
-
-      if (bookingError || !booking) {
+    // Booking Group Edit — আগের সব derived data (Production Order, স্টক কর্তন, WIP JV,
+    // auto Sales Invoice-এর লাইন) ফেরত/মুছে দিন, তারপর নতুন করে লিখুন।
+    if (editContext) {
+      try {
+        await reverseBookingGroupDerived(supabase, groupId);
+      } catch (err: any) {
         setLoading(false);
-        setError(`"${item.style || item.productDetails || 'একটি প্রোডাক্ট'}" সেভ করতে ব্যর্থ হয়েছে: ${bookingError?.message ?? 'অজানা কারণ'}`);
+        setError(`পুরনো Booking data সরাতে সমস্যা: ${err?.message ?? "অজানা কারণ"}`);
         return;
-      }
-
-      const productionNo = await generateNextDocNo(supabase, "production_orders", "production_no", "PROD", "order_date", bookingDate);
-      const { data: productionOrder } = await supabase
-        .from("production_orders")
-        .insert({
-          production_no: productionNo, booking_id: booking.id, product_id: productId,
-          quantity_pcs: item.quantity, stage: "blowing", required_lbs: item.finalLbs, order_date: bookingDate,
-        })
-        .select().single();
-
-      for (const m of item.materialsNeeded) {
-        const materialId = materialMap[m.name];
-        if (!materialId || m.qty <= 0) continue;
-
-        await supabase.from("booking_materials").insert({
-          booking_id: booking.id, material_id: materialId, quantity_lbs: m.qty,
-        });
-
-        const { data: stock } = await supabase
-          .from("raw_material_stock").select("*")
-          .eq("material_id", materialId).eq("warehouse_id", item.warehouseId).maybeSingle();
-
-        if (stock) {
-          await supabase.from("raw_material_stock")
-            .update({ quantity_lbs: stock.quantity_lbs - m.qty, updated_at: new Date().toISOString() })
-            .eq("id", stock.id);
-        } else {
-          // স্টক রো আগে থেকে না থাকলেও তৈরি করুন — ঘাটতি (negative) হলেও যেন দেখা যায়
-          await supabase.from("raw_material_stock").insert({
-            material_id: materialId, warehouse_id: item.warehouseId, quantity_lbs: -m.qty,
-          });
-        }
-
-        await supabase.from("stock_ledger").insert({
-          item_type: "raw_material", item_id: materialId, warehouse_id: item.warehouseId,
-          txn_type: "out", quantity: m.qty, reference_type: "production",
-          reference_id: productionOrder?.id, txn_date: bookingDate,
-        });
-
-        if (productionOrder) {
-          await supabase.from("material_consumption").insert({
-            production_id: productionOrder.id, material_id: materialId,
-            quantity_lbs: m.qty, consumption_date: bookingDate,
-          });
-        }
-      }
-
-      // Perpetual inventory — issue করা কাঁচামালের মূল্য WIP-এ তোলা (Dr 1300 / Cr material inv)
-      if (productionOrder) {
-        const invVoucherId = await postBookingConsumptionJv(supabase, {
-          date: bookingDate,
-          bookingNo: sharedBookingNo,
-          productionOrderId: productionOrder.id,
-          lines: item.materialsNeeded
-            .map((m) => ({ materialId: materialMap[m.name], qtyLbs: m.qty }))
-            .filter((l) => l.materialId && l.qtyLbs > 0),
-        });
-        if (invVoucherId) {
-          await supabase.from("bookings").update({ inventory_voucher_id: invVoucherId }).eq("id", booking.id);
-        }
       }
     }
 
-    // এই booking group-এর জন্য অটো Sales Invoice + JV তৈরি (প্রতিটা প্রোডাক্ট একটা লাইন)
-    const invResult = await syncAutoInvoiceForGroup(supabase, groupId, {
-      invoiceDate: bookingDate, paymentReceived, createdBy, createIfMissing: true,
+    const items: BookingGroupItemInput[] = allItems.map((it) => ({
+      style: it.style, customerBookingRef: it.customerBookingRef, poNo: it.poNo,
+      printLayoutNote: it.printLayoutNote, printLayoutFileUrl: it.printLayoutFileUrl,
+      productDetails: it.productDetails, measurementType: it.measurementType, unit: it.unit,
+      lengthVal: it.lengthVal, widthVal: it.widthVal, flapVal: it.flapVal, gussetVal: it.gussetVal, pillowVal: it.pillowVal,
+      thicknessMm: it.thicknessMm, productionThicknessMm: it.productionThicknessMm, piThicknessMm: it.piThicknessMm,
+      materialType: it.materialType, quantity: it.quantity, warehouseId: it.warehouseId,
+      finalLbs: it.finalLbs, kg: it.kg, bags: it.bags,
+      hasPrint: it.hasPrint, printColors: it.printColors, ratePerColor: it.ratePerColor, ratePerInch: it.ratePerInch,
+      lengthCm: it.lengthCm, widthCm: it.widthCm, unitPrice: it.unitPrice, amount: it.amount,
+      materialsNeeded: it.materialsNeeded,
+    }));
+
+    const result = await writeBookingGroup(supabase, {
+      groupId,
+      bookingNo: sharedBookingNo,
+      bookingDate: effectiveBookingDate,
+      customerId: resolvedCustomerId,
+      buyerId: resolvedBuyerId,
+      merchantId: resolvedMerchantId,
+      garmentsId: resolvedGarmentsId,
+      garmentsName: resolvedGarmentsName,
+      deliveryPoint,
+      paymentReceived,
+      createdBy,
+      createInvoiceIfMissing: !editContext,
+      items,
     });
-    if (!invResult.ok) {
+
+    if (!result.ok) {
       setLoading(false);
-      setError(`Booking সেভ হয়েছে কিন্তু auto Sales Invoice তৈরিতে সমস্যা: ${invResult.error}`);
+      setError(result.error);
       return;
     }
 
     setLoading(false);
-    router.push("/dashboard/sales/bookings");
+    router.push(editContext ? `/dashboard/sales/bookings/${result.firstBookingId ?? ""}` : "/dashboard/sales/bookings");
     router.refresh();
   }
 
@@ -1014,6 +1026,16 @@ export default function BookingForm({
 
   return (
     <form onSubmit={handleSubmit} className="rounded-xl border bg-white p-6 shadow-sm space-y-4 max-w-[1700px]">
+      {isEdit && (
+        <div className="rounded-lg border border-orange-300 bg-orange-50 p-3 text-sm text-orange-800">
+          <p className="font-semibold">Booking Group এডিট — {editContext!.bookingNo}</p>
+          <p className="text-xs mt-1">
+            সেভ করলে এই গ্রুপের সব Production Order, স্টক কর্তন, WIP Journal Voucher আর auto Sales Invoice
+            (+ তার JV) নতুন করে হিসাব হবে। Booking No ও তারিখ একই থাকবে। প্রোডাক্ট বদলাতে তালিকা থেকে
+            সেই সারির Edit বাটন চাপুন, নতুন প্রোডাক্ট নিচে যোগ করুন।
+          </p>
+        </div>
+      )}
       <div className="flex flex-wrap gap-4">
         <div className="flex-1 min-w-[180px]">
           <label className="block text-sm text-gray-600 mb-1">Customer</label>
@@ -1298,6 +1320,13 @@ export default function BookingForm({
                     className="w-16 rounded border px-1.5 py-1.5 text-xs" disabled={!hasAdhesiveCharge(row.measurementType)}
                   />
                 </div>
+                <div>
+                  <label className="block text-[11px] text-gray-500 mb-1">Adjust/Pc (±)</label>
+                  <input
+                    type="number" step="0.01" value={row.adjustmentPerPc} onChange={(e) => updateRow(row.rowId, "adjustmentPerPc", e.target.value)} onKeyDown={focusNextRowFieldOrAddButton}
+                    className="w-16 rounded border px-1.5 py-1.5 text-xs" placeholder="0"
+                  />
+                </div>
                 <span className="text-xs text-gray-500 ml-2">Tube: <strong className="text-gray-700">{calc ? money(calc.tube) : "-"}</strong></span>
                 <span className="text-xs text-gray-500">Cutting: <strong className="text-gray-700">{calc ? money(calc.cutting) : "-"}</strong></span>
                 <span className="text-xs text-blue-700">Req.Lbs: <strong>{calc ? money(calc.finalLbs) : "-"}</strong></span>
@@ -1387,7 +1416,7 @@ export default function BookingForm({
                   <th className="px-3 py-2 text-right">Qty</th>
                   <th className="px-3 py-2 text-right">Required Lbs</th>
                   <th className="px-3 py-2">Warehouse</th>
-                  <th className="px-3 py-2 w-16"></th>
+                  <th className="px-3 py-2 w-28"></th>
                 </tr>
               </thead>
               <tbody>
@@ -1400,7 +1429,8 @@ export default function BookingForm({
                     <td className="px-3 py-2 text-right">{item.quantity}</td>
                     <td className="px-3 py-2 text-right">{money(item.finalLbs)}</td>
                     <td className="px-3 py-2">{item.warehouseName}</td>
-                    <td className="px-3 py-2 text-right">
+                    <td className="px-3 py-2 text-right whitespace-nowrap">
+                      <button type="button" onClick={() => editPendingItem(i)} className="text-blue-600 text-xs hover:underline mr-3">Edit</button>
                       <button type="button" onClick={() => removePendingItem(i)} className="text-red-600 text-xs hover:underline">সরান</button>
                     </td>
                   </tr>
@@ -1414,7 +1444,8 @@ export default function BookingForm({
       <div className="flex flex-wrap gap-4">
         <div>
           <label className="block text-sm text-gray-600 mb-1">Booking Date</label>
-          <input type="date" value={bookingDate} onChange={(e) => setBookingDate(e.target.value)} className="rounded-lg border px-3 py-2 text-sm" required />
+          <input type="date" value={bookingDate} onChange={(e) => setBookingDate(e.target.value)} disabled={isEdit} className="rounded-lg border px-3 py-2 text-sm disabled:bg-gray-100 disabled:text-gray-500" required />
+          {isEdit && <p className="mt-1 text-xs text-gray-400">এডিটে তারিখ বদলানো যায় না</p>}
         </div>
         <div className="flex-1 min-w-[280px]">
           <label className="block text-sm text-gray-600 mb-1">Delivery Point (পূর্ণ ঠিকানা)</label>
@@ -1444,7 +1475,11 @@ export default function BookingForm({
       {error && <p className="text-sm text-red-600">{error}</p>}
 
       <button type="submit" disabled={loading} className="rounded-lg bg-gray-900 px-5 py-2 text-sm text-white disabled:opacity-40">
-        {loading ? "সেভ হচ্ছে..." : `Booking সেভ করুন (${finalSubmitCount}টি প্রোডাক্ট, + Production Order + Sales Invoice অটো তৈরি)`}
+        {loading
+          ? "সেভ হচ্ছে..."
+          : isEdit
+            ? `পরিবর্তন সেভ করুন (${finalSubmitCount}টি প্রোডাক্ট — Production Order, স্টক, JV, Sales Invoice নতুন করে হিসাব হবে)`
+            : `Booking সেভ করুন (${finalSubmitCount}টি প্রোডাক্ট, + Production Order + Sales Invoice অটো তৈরি)`}
       </button>
     </form>
   );

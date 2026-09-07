@@ -1,44 +1,34 @@
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
-import EditInvoiceForm from "./EditInvoiceForm";
+import SalesInvoiceForm, { type EditInvoiceCtx } from "../../new/SalesInvoiceForm";
 import EditOtherInvoiceForm from "./EditOtherInvoiceForm";
 import { notFound } from "next/navigation";
+import { resolveRate } from "@/lib/rateHistory";
+import { calcQuotedUnitPrice } from "@/lib/calcTubeCutting";
 
 export default async function EditInvoicePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const supabase = await createClient();
 
-  const { data: invoice } = await supabase.from("sales_invoices").select("*, customers(name)").eq("id", id).single();
+  const { data: invoice } = await supabase
+    .from("sales_invoices")
+    .select("*, customers(name)")
+    .eq("id", id)
+    .single();
   if (!invoice) return notFound();
 
-  // LBS Invoice-এর লাইন booking থেকে অটো হয় — এখানে qty/price এডিট করলে ভেঙে যাবে।
-  if (invoice.invoice_type === "lbs") {
-    return (
-      <div className="max-w-2xl">
-        <h1 className="text-2xl font-semibold mb-4">Sales Invoice — {invoice.invoice_no}</h1>
-        <div className="rounded-xl border bg-amber-50 border-amber-200 p-5 text-sm text-amber-900 space-y-2">
-          <p className="font-medium">এটা একটা LBS Invoice ({invoice.customers?.name})।</p>
-          <p>এর লাইন ও চার্জ (Powder / Making Cutting / Printing / Adhesive) সংশ্লিষ্ট Booking group থেকে অটো তৈরি হয়। এখান থেকে এডিট করা যায় না।</p>
-          <p>পরিবর্তন দরকার হলে Booking group এডিট করুন — Invoice ও Journal Voucher নিজে থেকেই আপডেট হবে। Rate বদলাতে Customer-এর Price/Lbs (History) বা Making-Cutting Rate ঠিক করুন।</p>
-          <a href={`/dashboard/sales/invoices/${id}/print-lbs`} target="_blank" className="inline-block mt-1 text-purple-700 underline">Invoice দেখুন →</a>
-        </div>
-      </div>
-    );
-  }
-
-  // Other Sales Invoice — booking নেই, লাইন = বিবরণ + পরিমাণ + রেট (সব editable)
+  // ── Other Sales Invoice — নিজস্ব লাইন এডিটর ─────────────────────────────
   if (invoice.invoice_type === "other") {
     const { data: otherItems } = await supabase
       .from("sales_invoice_items")
       .select("id, line_label, quantity_pcs, unit_price")
       .eq("invoice_id", id);
-
     const otherLines = (otherItems ?? []).map((it: any) => ({
       id: it.id,
       description: it.line_label ?? "",
       quantity_pcs: Number(it.quantity_pcs) || 0,
       unit_price: Number(it.unit_price) || 0,
     }));
-
     return (
       <div>
         <h1 className="text-2xl font-semibold mb-4">Other Sales Invoice এডিট করুন — {invoice.invoice_no}</h1>
@@ -54,36 +44,127 @@ export default async function EditInvoicePage({ params }: { params: Promise<{ id
     );
   }
 
-  const { data: items } = await supabase
-    .from("sales_invoice_items")
-    .select("*, bookings(booking_no, quantity_pcs), finished_goods(product_name)")
-    .eq("invoice_id", id);
+  // ── Auto-generated invoice — Booking থেকে অটো, এখানে এডিট হয় না ──────────
+  if (invoice.auto_generated) {
+    let bookingEditId: string | null = null;
+    if (invoice.source_booking_group_id) {
+      const { data: gb } = await supabase
+        .from("bookings").select("id").eq("booking_group_id", invoice.source_booking_group_id)
+        .order("created_at", { ascending: true }).limit(1).maybeSingle();
+      bookingEditId = gb?.id ?? null;
+    }
+    if (!bookingEditId) {
+      const { data: it } = await supabase
+        .from("sales_invoice_items").select("booking_id").eq("invoice_id", id).not("booking_id", "is", null).limit(1).maybeSingle();
+      bookingEditId = it?.booking_id ?? null;
+    }
+    return (
+      <div className="max-w-2xl">
+        <h1 className="text-2xl font-semibold mb-4">Sales Invoice — {invoice.invoice_no}</h1>
+        <div className="rounded-xl border bg-amber-50 border-amber-200 p-5 text-sm text-amber-900 space-y-3">
+          <p className="font-medium">এটা Booking থেকে অটো তৈরি হওয়া Invoice ({invoice.customers?.name})।</p>
+          <p>
+            এর লাইন ও দাম সংশ্লিষ্ট Booking Group থেকে আসে — এখান থেকে সরাসরি এডিট করা যায় না।
+            দাম/পরিমাণ/মাপ বদলাতে Booking Group এডিট করুন; Invoice ও Journal Voucher নিজে থেকেই
+            আপডেট হবে। প্রতি পিসে দাম কমাতে/বাড়াতে Booking-এর Measurement Row-এ Adjust/Pc ফিল্ড ব্যবহার করুন।
+          </p>
+          <div className="flex gap-3">
+            {bookingEditId && (
+              <Link href={`/dashboard/sales/bookings/${bookingEditId}/edit`} className="rounded-lg bg-amber-700 px-4 py-2 text-white hover:bg-amber-800">
+                Booking Group এডিট করুন →
+              </Link>
+            )}
+            <Link
+              href={`/dashboard/sales/invoices/${id}/${invoice.invoice_type === "lbs" ? "print-lbs" : "print"}`}
+              target="_blank"
+              className="rounded-lg border border-amber-400 px-4 py-2 text-amber-800 hover:bg-amber-100"
+            >
+              Invoice দেখুন
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
-  // প্রতিটা booking-এর জন্য এই invoice ছাড়া বাকি ইনভয়েসে কত হয়েছে বের করুন
-  const bookingIds = (items ?? []).map((it: any) => it.booking_id).filter(Boolean);
-  const { data: otherItems } = bookingIds.length
-    ? await supabase.from("sales_invoice_items").select("booking_id, quantity_pcs, invoice_id").in("booking_id", bookingIds)
-    : { data: [] };
+  // ── Manual Invoice (standard / lbs) — নতুন-Invoice ফর্মে এডিট ────────────
+  const [
+    { data: customers }, { data: bookings }, { data: priceHistory }, { data: allItems }, { data: myItems },
+  ] = await Promise.all([
+    supabase.from("customers").select("*").order("name"),
+    supabase
+      .from("bookings")
+      .select("id, booking_no, booking_date, quantity_pcs, product_id, customer_id, style, garments_name, buyers(name), merchants(name), delivery_point, customer_booking_ref, has_print, print_colors, rate_per_color, rate_per_inch, measurement_type, measurement_unit, length_val, width_val, flap_val, gusset_val, pillow_val, thickness_mm, material_type, finished_goods(product_name, length_cm, width_cm, thickness)")
+      .order("booking_date", { ascending: false }),
+    supabase.from("rate_history").select("customer_id, effective_from, rate").not("customer_id", "is", null),
+    supabase.from("sales_invoice_items").select("booking_id, quantity_pcs"),
+    supabase.from("sales_invoice_items").select("id, booking_id, quantity_pcs, unit_price, line_type").eq("invoice_id", id),
+  ]);
 
-  const otherInvoicedMap: Record<string, number> = {};
-  (otherItems ?? []).forEach((oi: any) => {
-    if (oi.invoice_id === id) return; // এই ইনভয়েসের নিজের এন্ট্রি বাদ
-    otherInvoicedMap[oi.booking_id] = (otherInvoicedMap[oi.booking_id] ?? 0) + oi.quantity_pcs;
+  // invoicedMap — এই invoice-এর নিজের লাইন বাদ দিয়ে (এডিট করার সময় নিজের বুকিং আবার সিলেক্টযোগ্য হবে)
+  const myByBooking: Record<string, number> = {};
+  (myItems ?? []).forEach((it: any) => {
+    if (it.booking_id) myByBooking[it.booking_id] = (myByBooking[it.booking_id] ?? 0) + Number(it.quantity_pcs || 0);
+  });
+  const invoicedMap: Record<string, number> = {};
+  (allItems ?? []).forEach((it: any) => {
+    if (!it.booking_id) return;
+    invoicedMap[it.booking_id] = (invoicedMap[it.booking_id] ?? 0) + Number(it.quantity_pcs || 0);
+  });
+  Object.keys(myByBooking).forEach((bid) => {
+    invoicedMap[bid] = Math.max(0, (invoicedMap[bid] ?? 0) - myByBooking[bid]);
   });
 
-  const lines = (items ?? []).map((it: any) => ({
-    id: it.id, booking_id: it.booking_id, product_id: it.product_id,
-    quantity_pcs: it.quantity_pcs, unit_price: it.unit_price,
-    booking_no: it.bookings?.booking_no ?? "-", product_name: it.finished_goods?.product_name ?? "-",
-    maxQty: (it.bookings?.quantity_pcs ?? 0) - (otherInvoicedMap[it.booking_id] ?? 0),
+  const customer = (customers ?? []).find((c: any) => c.id === invoice.customer_id);
+  const historyForCustomer = (priceHistory ?? []).filter((h: any) => h.customer_id === invoice.customer_id);
+
+  const productLines = (myItems ?? []).filter((it: any) => it.booking_id);
+  const lines = productLines.map((it: any) => ({
+    bookingId: it.booking_id as string,
+    qty: Number(it.quantity_pcs) || 0,
+    unitPrice: Number(it.unit_price) || 0,
   }));
+
+  // standard: প্রতি লাইনের stored Unit Price হুবহু ধরে রাখতে Adjustment seed
+  const adjustmentSeed: Record<string, string> = {};
+  if (invoice.invoice_type !== "lbs") {
+    productLines.forEach((it: any) => {
+      const b: any = (bookings ?? []).find((x: any) => x.id === it.booking_id);
+      if (!b) return;
+      const rate = resolveRate(historyForCustomer, b.booking_date, Number(customer?.price_per_lbs ?? 0));
+      const formulaUnit = calcQuotedUnitPrice(b, rate, b.thickness_mm);
+      const seed = Math.round((Number(it.unit_price || 0) - formulaUnit) * 100) / 100;
+      if (Math.abs(seed) > 0.001) adjustmentSeed[it.booking_id] = String(seed);
+    });
+  }
+
+  // LBS — Powder / Making rate পুরনো charge লাইন থেকেই ফিরিয়ে আনি (নাহলে Customer master rate)
+  const powderLine = (myItems ?? []).find((it: any) => it.line_type === "lbs_powder");
+  const makingLine = (myItems ?? []).find((it: any) => it.line_type === "lbs_making");
+
+  const editInvoice: EditInvoiceCtx = {
+    id,
+    invoiceNo: invoice.invoice_no,
+    invoiceType: invoice.invoice_type === "lbs" ? "lbs" : "standard",
+    customerId: invoice.customer_id,
+    invoiceDate: invoice.invoice_date,
+    paymentReceived: !!invoice.payment_received,
+    voucherId: invoice.voucher_id,
+    lines,
+    adjustmentSeed,
+    lbsPowderRate: powderLine?.unit_price != null ? String(powderLine.unit_price) : "",
+    lbsMakingRate: makingLine?.unit_price != null ? String(makingLine.unit_price) : "",
+  };
 
   return (
     <div>
       <h1 className="text-2xl font-semibold mb-4">Sales Invoice এডিট করুন — {invoice.invoice_no}</h1>
-      <EditInvoiceForm
-        invoiceId={id} customerId={invoice.customer_id} customerName={invoice.customers?.name ?? "-"}
-        initialDate={invoice.invoice_date} voucherId={invoice.voucher_id} lines={lines}
+      <SalesInvoiceForm
+        customers={(customers ?? []) as any}
+        bookings={(bookings ?? []) as any}
+        invoicedMap={invoicedMap}
+        priceHistory={(priceHistory ?? []) as any}
+        editInvoice={editInvoice}
       />
     </div>
   );
