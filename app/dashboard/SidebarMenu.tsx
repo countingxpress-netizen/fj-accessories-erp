@@ -42,6 +42,7 @@ const menu: MenuGroup[] = [
     label: "Sales", href: "/dashboard/sales",
     items: [
       { label: "Customers", href: "/dashboard/sales/customers" },
+      { label: "Customer Groups", href: "/dashboard/sales/customer-groups" },
       { label: "Buyers", href: "/dashboard/sales/buyers" },
       { label: "Garments", href: "/dashboard/sales/garments" },
       { label: "Booking Received", href: "/dashboard/sales/bookings" },

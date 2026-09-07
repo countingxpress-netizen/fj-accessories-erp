@@ -2,6 +2,7 @@ import Link from "next/link";
 
 const links = [
   { label: "Customers", href: "/dashboard/sales/customers", desc: "কাস্টমারের তালিকা ও দর (Price/Lbs) পরিচালনা" },
+  { label: "Customer Groups", href: "/dashboard/sales/customer-groups", desc: "নগদ/একাধিক কাস্টমারকে এক পার্টি-গ্রুপে — রিপোর্টে গ্রুপ নামে রোল-আপ" },
   { label: "Booking Received", href: "/dashboard/sales/bookings", desc: "নতুন বুকিং — প্রয়োজনীয় কাঁচামাল অটো ক্যালকুলেট" },
   { label: "Quotation", href: "/dashboard/sales/quotations", desc: "কোটেশন তৈরি ও পাঠানো" },
   { label: "Sales Invoice", href: "/dashboard/sales/invoices", desc: "বিক্রয় চালান, কাস্টমার-ওয়াইজ দর অনুযায়ী" },

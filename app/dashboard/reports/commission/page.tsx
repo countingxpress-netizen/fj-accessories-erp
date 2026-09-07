@@ -4,6 +4,7 @@ import { money } from "@/lib/format";
 import { formatDate } from "@/lib/formatDate";
 import { AT_DEFAULT_MARKUP_PERCENTAGE } from "@/lib/atCommission";
 import { calcInvoiceCommission } from "@/lib/commission";
+import { loadGroupMap, displayEntity } from "@/lib/customerGroups";
 import CommissionRow from "./CommissionRow";
 
 export default async function CommissionReportPage({
@@ -14,6 +15,9 @@ export default async function CommissionReportPage({
 
   const { data: customers } = await supabase
     .from("customers").select("id, name, code, commission_enabled, commission_percentage").order("name");
+
+  // গ্রুপভুক্ত কাস্টমারের নাম রিপোর্টে গ্রুপ নামে দেখাবে।
+  const gm = await loadGroupMap(supabase);
 
   let q = supabase
     .from("sales_invoices")
@@ -54,9 +58,10 @@ export default async function CommissionReportPage({
       );
       if (calc == null) return null;
       const adjustment = Number(inv.commission_adjustment || 0);
+      const ent = displayEntity(gm, inv.customer_id, inv.customers?.name);
       return {
         id: inv.id, invoice_no: inv.invoice_no, invoice_date: inv.invoice_date,
-        customer_name: inv.customers?.name ?? "-", customer_code: inv.customers?.code ?? null,
+        customer_name: ent.name, customer_code: ent.isGroup ? null : (inv.customers?.code ?? null),
         invoiceTotal, calc, adjustment, note: inv.commission_note ?? "",
         final: calc + adjustment,
       };
@@ -67,7 +72,17 @@ export default async function CommissionReportPage({
   const totalAdj = rows.reduce((s, r) => s + r.adjustment, 0);
   const totalFinal = rows.reduce((s, r) => s + r.final, 0);
 
-  const commissionCustomers = (customers ?? []).filter((c: any) => c.commission_enabled || c.code === "AT");
+  const commissionCustomers = (() => {
+    const seen = new Set<string>();
+    const opts: { id: string; name: string }[] = [];
+    (customers ?? []).filter((c: any) => c.commission_enabled || c.code === "AT").forEach((c: any) => {
+      const e = displayEntity(gm, c.id, c.name);
+      if (seen.has(e.key)) return;
+      seen.add(e.key);
+      opts.push({ id: c.id, name: e.name });
+    });
+    return opts;
+  })();
 
   return (
     <div>

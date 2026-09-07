@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { todayLocal, monthRange } from "@/lib/payroll";
+import { loadGroupMap, foldNumbers, displayEntity } from "@/lib/customerGroups";
 
 function fmt(n: number) {
   return n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -31,7 +32,7 @@ export default async function DashboardPage() {
     : { data: [] };
   const cashBankBalance = (cashBankLines ?? []).reduce((s: number, l: any) => s + (l.debit || 0) - (l.credit || 0), 0);
 
-  const { data: customers } = await supabase.from("customers").select("id, opening_balance");
+  const { data: customers } = await supabase.from("customers").select("id, name, opening_balance");
   const { data: invoices } = await supabase.from("sales_invoices").select("customer_id, invoice_date, sales_invoice_items(amount)");
   const { data: customerPayments } = await supabase.from("customer_payments").select("customer_id, amount");
 
@@ -42,7 +43,9 @@ export default async function DashboardPage() {
     customerDue[inv.customer_id] = (customerDue[inv.customer_id] ?? 0) + amt;
   });
   (customerPayments ?? []).forEach((p: any) => { customerDue[p.customer_id] = (customerDue[p.customer_id] ?? 0) - p.amount; });
-  const totalReceivable = Object.values(customerDue).reduce((s, v) => s + (v > 0 ? v : 0), 0);
+  // গ্রুপভুক্ত কাস্টমার এক পার্টি হিসেবে net — Outstanding রিপোর্টের সাথে মিল রেখে।
+  const groupMap = await loadGroupMap(supabase);
+  const totalReceivable = foldNumbers(groupMap, customers ?? [], customerDue).reduce((s, r) => s + (r.value > 0 ? r.value : 0), 0);
 
   const { data: suppliers } = await supabase.from("suppliers").select("id");
   const { data: purchases } = await supabase.from("purchase_entries").select("supplier_id, purchase_entry_items(quantity_lbs, rate_per_lbs)");
@@ -139,7 +142,7 @@ export default async function DashboardPage() {
 
   const { data: recentInvoices } = await supabase
     .from("sales_invoices")
-    .select("id, invoice_no, invoice_date, customers(name), sales_invoice_items(amount)")
+    .select("id, invoice_no, invoice_date, customer_id, customers(name), sales_invoice_items(amount)")
     .order("invoice_date", { ascending: false })
     .limit(5);
 
@@ -233,7 +236,7 @@ export default async function DashboardPage() {
                     <td className="px-4 py-2">
                       <Link href={`/dashboard/sales/invoices/${inv.id}/print`} className="hover:underline hover:text-blue-700">{inv.invoice_no}</Link>
                     </td>
-                    <td className="px-4 py-2 text-gray-600">{inv.customers?.name}</td>
+                    <td className="px-4 py-2 text-gray-600">{displayEntity(groupMap, inv.customer_id, inv.customers?.name).name}</td>
                     <td className="px-4 py-2 text-gray-500">{inv.invoice_date}</td>
                     <td className="px-4 py-2 text-right">{fmt(total)}</td>
                   </tr>

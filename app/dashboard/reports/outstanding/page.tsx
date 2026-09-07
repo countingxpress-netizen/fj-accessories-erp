@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { money } from "@/lib/format";
+import { loadGroupMap, foldNumbers, ledgerHref } from "@/lib/customerGroups";
 
 export default async function OutstandingReportPage() {
   const supabase = await createClient();
@@ -21,6 +22,12 @@ export default async function OutstandingReportPage() {
     customerDue[p.customer_id] = (customerDue[p.customer_id] ?? 0) - p.amount;
   });
 
+  // গ্রুপভুক্ত কাস্টমার এক পার্টি — তাদের বাকি একসাথে (net) দেখানো হয়।
+  const gm = await loadGroupMap(supabase);
+  const dueRows = foldNumbers(gm, customers ?? [], customerDue)
+    .filter((r) => r.value > 0)
+    .sort((a, b) => b.value - a.value);
+
   const { data: suppliers } = await supabase.from("suppliers").select("id, name");
   const { data: purchases } = await supabase.from("purchase_entries").select("supplier_id, purchase_entry_items(quantity_lbs, rate_per_lbs)");
   const { data: supplierPayments } = await supabase.from("supplier_payments").select("supplier_id, amount");
@@ -34,7 +41,7 @@ export default async function OutstandingReportPage() {
     supplierDue[p.supplier_id] = (supplierDue[p.supplier_id] ?? 0) - p.amount;
   });
 
-  const totalReceivable = Object.values(customerDue).reduce((s, v) => s + (v > 0 ? v : 0), 0);
+  const totalReceivable = dueRows.reduce((s, r) => s + r.value, 0);
   const totalPayable = Object.values(supplierDue).reduce((s, v) => s + (v > 0 ? v : 0), 0);
 
   return (
@@ -62,15 +69,16 @@ export default async function OutstandingReportPage() {
             <tr><th className="px-4 py-2">Customer</th><th className="px-4 py-2 text-right">Due Amount</th></tr>
           </thead>
           <tbody>
-            {(customers ?? []).filter((c) => (customerDue[c.id] ?? 0) > 0).map((c) => (
-              <tr key={c.id} className="border-t">
+            {dueRows.map((r) => (
+              <tr key={r.key} className="border-t">
                 <td className="px-4 py-2">
-                  <Link href={`/dashboard/sales/customer-ledger/${c.id}`} className="hover:underline hover:text-blue-700">{c.name}</Link>
+                  <Link href={ledgerHref(r)} className="hover:underline hover:text-blue-700">{r.name}</Link>
+                  {r.isGroup && <span className="ml-2 rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-500">গ্রুপ</span>}
                 </td>
-                <td className="px-4 py-2 text-right">{money((customerDue[c.id] ?? 0))}</td>
+                <td className="px-4 py-2 text-right">{money(r.value)}</td>
               </tr>
             ))}
-            {(customers ?? []).filter((c) => (customerDue[c.id] ?? 0) > 0).length === 0 && (
+            {dueRows.length === 0 && (
               <tr><td colSpan={2} className="px-4 py-3 text-gray-400 italic">কোনো বাকি নেই</td></tr>
             )}
           </tbody>

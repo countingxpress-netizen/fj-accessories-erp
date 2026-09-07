@@ -2,6 +2,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { formatDate } from "@/lib/formatDate";
 import { money } from "@/lib/format";
+import { loadGroupMap, displayEntity, ledgerHref } from "@/lib/customerGroups";
 
 export default async function ReceivableStatementPage() {
   const supabase = await createClient();
@@ -33,11 +34,21 @@ export default async function ReceivableStatementPage() {
     customerData[p.customer_id].paid += p.amount;
   });
 
-  const rows = (customers ?? [])
-    .map((c) => {
-      const d = customerData[c.id] ?? { invoiced: 0, paid: 0, lastInvoiceDate: null };
-      return { ...c, ...d, due: d.invoiced - d.paid };
-    })
+  // গ্রুপভুক্ত কাস্টমার এক পার্টি — invoiced/paid একসাথে যোগ, শেষ ইনভয়েস তারিখ = সর্বশেষ।
+  const gm = await loadGroupMap(supabase);
+  type Agg = { key: string; id: string; name: string; isGroup: boolean; invoiced: number; paid: number; lastInvoiceDate: string | null };
+  const aggByKey: Record<string, Agg> = {};
+  (customers ?? []).forEach((c: any) => {
+    const d = customerData[c.id] ?? { invoiced: 0, paid: 0, lastInvoiceDate: null };
+    const e = displayEntity(gm, c.id, c.name);
+    const a = (aggByKey[e.key] ??= { key: e.key, id: e.id, name: e.name, isGroup: e.isGroup, invoiced: 0, paid: 0, lastInvoiceDate: null });
+    a.invoiced += d.invoiced;
+    a.paid += d.paid;
+    if (d.lastInvoiceDate && (!a.lastInvoiceDate || d.lastInvoiceDate > a.lastInvoiceDate)) a.lastInvoiceDate = d.lastInvoiceDate;
+  });
+
+  const rows = Object.values(aggByKey)
+    .map((a) => ({ ...a, due: a.invoiced - a.paid }))
     .filter((r) => r.due > 0)
     .sort((a, b) => b.due - a.due);
 
@@ -68,9 +79,10 @@ export default async function ReceivableStatementPage() {
           </thead>
           <tbody>
             {rows.map((r) => (
-              <tr key={r.id} className="border-t">
+              <tr key={r.key} className="border-t">
                 <td className="px-4 py-2">
-                  <Link href={`/dashboard/sales/customer-ledger/${r.id}`} className="hover:underline hover:text-blue-700">{r.name}</Link>
+                  <Link href={ledgerHref(r)} className="hover:underline hover:text-blue-700">{r.name}</Link>
+                  {r.isGroup && <span className="ml-2 rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-500">গ্রুপ</span>}
                 </td>
                 <td className="px-4 py-2 text-gray-500">{r.lastInvoiceDate ? formatDate(r.lastInvoiceDate) : "-"}</td>
                 <td className="px-4 py-2 text-right">{money(r.invoiced)}</td>
