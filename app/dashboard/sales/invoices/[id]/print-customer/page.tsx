@@ -3,7 +3,7 @@ import { formatDate } from "@/lib/formatDate";
 import { notFound } from "next/navigation";
 import PrintButton from "@/app/dashboard/PrintButton";
 import { amountInWords } from "@/lib/numberToWords";
-import { AT_DEFAULT_MARKUP_PERCENTAGE, AT_COMMISSION_LBS_DIVISOR, calcAtCustomerLine } from "@/lib/atCommission";
+import { AT_DEFAULT_MARKUP_PERCENTAGE, calcAtCustomerLine } from "@/lib/atCommission";
 
 function fmt(n: number) {
   return n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -57,13 +57,11 @@ export default async function InvoicePrintCustomerPage({ params }: { params: Pro
     const orderLbs = item.bookings?.required_lbs || 0;
     const markupPct = item.bookings?.buyer_id ? (markupMap[item.bookings.buyer_id] ?? AT_DEFAULT_MARKUP_PERCENTAGE) : AT_DEFAULT_MARKUP_PERCENTAGE;
     const { customerUnitPrice, customerAmount } = calcAtCustomerLine(actualPrice, qty, orderLbs, markupPct);
-    const commissionLbs = orderLbs / AT_COMMISSION_LBS_DIVISOR;
-    return { ...item, customerUnitPrice, customerAmount, orderLbs, commissionLbs };
+    return { ...item, customerUnitPrice, customerAmount, orderLbs };
   });
 
   const total = items.reduce((s: number, i: any) => s + i.customerAmount, 0);
   const totalOrderLbs = items.reduce((s: number, i: any) => s + i.orderLbs, 0);
-  const totalCommissionLbs = items.reduce((s: number, i: any) => s + i.commissionLbs, 0);
 
   const signatureUrl = invoice.creator?.signature_url || company?.signature_url;
 
@@ -133,7 +131,7 @@ export default async function InvoicePrintCustomerPage({ params }: { params: Pro
       </table>
 
       <p className="text-sm text-gray-700 mb-3">
-        Total Order Lbs + Commission Lbs = {fmt(totalOrderLbs)} + {fmt(totalCommissionLbs)} = <strong>{fmt(totalOrderLbs + totalCommissionLbs)} Lbs</strong>
+        Total Order Lbs = <strong>{fmt(totalOrderLbs)} Lbs</strong>
       </p>
 
       <div className="mb-8">

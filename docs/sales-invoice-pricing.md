@@ -185,7 +185,7 @@ customerAmount    = round( customerUnitPrice × Qty )
 - **Markup%** = ওই booking-এর buyer-এর `markup_percentage` (default **2%**)।
 - **0.05** = প্রতি পিস fixed freight (`AT_FREIGHT_PER_PIECE`)।
 - **Commission** = (Submit-to-Customer Total − আসল Total) → Sales Invoice লিস্টে আলাদা কলামে দেখায়, PI-র সাথে মেলানোর জন্য।
-- **Commission Lbs** = Order Lbs ÷ 116 → শুধু customer print-এ, কোনো হিসাবে যায় না।
+- Customer print-এ ফুটার লাইনে শুধু **Total Order Lbs** দেখানো হয় (Commission Lbs আর দেখানো হয় না — `AT_COMMISSION_LBS_DIVISOR` = 116 কনস্ট্যান্টটা রাখা আছে কিন্তু কোথাও ব্যবহার হয় না)।
 
 ### Commission (সব customer) — শুধু রিপোর্ট, কোনো JV নয়
 
