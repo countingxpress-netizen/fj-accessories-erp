@@ -129,7 +129,10 @@ export default function AddCustomerForm() {
             LBS Invoicing
           </label>
           {lbsInvoicingEnabled && (
-            <input type="number" step="0.01" value={makingCuttingRate} onChange={(e) => setMakingCuttingRate(e.target.value)} className="w-32 rounded-lg border px-3 py-2 text-sm" placeholder="Making-Cutting Rate" title="Making + Cutting চার্জ — BDT / Lb" />
+            <>
+              <input type="number" step="0.01" value={makingCuttingRate} onChange={(e) => setMakingCuttingRate(e.target.value)} className="w-32 rounded-lg border px-3 py-2 text-sm" placeholder="Making-Cutting Rate" title="Making + Cutting চার্জ — BDT / Lb" />
+              <p className="text-[11px] text-gray-400 mt-1 max-w-[13rem]">Powder Bill rate = উপরের <b>Price/Lbs</b> — সেটাও দিন।</p>
+            </>
           )}
         </div>
         <button type="submit" disabled={loading} className="rounded-lg bg-gray-900 px-4 py-2 text-sm text-white disabled:opacity-50">

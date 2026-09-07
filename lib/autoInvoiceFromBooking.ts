@@ -1,7 +1,6 @@
 import { createClient } from "@/lib/supabase/client";
 import { generateNextDocNo } from "@/lib/docNumber";
 import { getCurrentUserId } from "@/lib/currentUser";
-import { resolveRate } from "@/lib/rateHistory";
 import { buildLbsLines, type LbsBooking } from "@/lib/lbsInvoice";
 
 type SupabaseClient = ReturnType<typeof createClient>;
@@ -175,11 +174,9 @@ export async function syncAutoInvoiceForGroup(
   let totalAmount: number;
 
   if (isLbs) {
-    const { data: rh } = await supabase
-      .from("rate_history")
-      .select("effective_from, rate")
-      .eq("customer_id", first.customer_id);
-    const materialRatePerLbs = resolveRate(rh ?? [], first.booking_date, customer?.price_per_lbs ?? 0);
+    // LBS-এ Powder/Material rate = customers.price_per_lbs (সরাসরি, তারিখ-ভিত্তিক নয়)।
+    // Making-Cutting rate-এর মতোই LBS ব্লকে হাতে বসানো একটা সাধারণ মান।
+    const materialRatePerLbs = Number(customer?.price_per_lbs ?? 0);
 
     const { productLines, chargeLines, total } = buildLbsLines(
       rows as unknown as LbsBooking[],

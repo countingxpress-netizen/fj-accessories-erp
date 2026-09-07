@@ -36,6 +36,8 @@ export default function CustomerRow({
   const [commissionPercentage, setCommissionPercentage] = useState(customer.commission_percentage != null ? String(customer.commission_percentage) : "1");
   const [lbsInvoicingEnabled, setLbsInvoicingEnabled] = useState(!!customer.lbs_invoicing_enabled);
   const [makingCuttingRate, setMakingCuttingRate] = useState(customer.making_cutting_rate != null ? String(customer.making_cutting_rate) : "0");
+  // LBS customer-এর Powder/Material rate = price_per_lbs (LBS ব্লক থেকেই সরাসরি বসে)।
+  const [lbsMaterialRate, setLbsMaterialRate] = useState(customer.price_per_lbs != null ? String(customer.price_per_lbs) : "");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const router = useRouter();
@@ -43,7 +45,8 @@ export default function CustomerRow({
 
   async function handleSave() {
     setLoading(true);
-    // Price/Lbs আর এখান থেকে বদলায় না — "Price History" থেকে তারিখ-ভিত্তিক ভাবে বদলাতে হয়।
+    // সাধারণ customer-এর Price/Lbs এখান থেকে বদলায় না — "Price History" থেকে তারিখ-ভিত্তিক।
+    // কিন্তু LBS Invoicing চালু থাকলে Powder/Material rate সরাসরি price_per_lbs-এ বসে।
     const { error } = await supabase
       .from("customers")
       .update({
@@ -55,6 +58,7 @@ export default function CustomerRow({
         commission_percentage: parseFloat(commissionPercentage) || 0,
         lbs_invoicing_enabled: lbsInvoicingEnabled,
         making_cutting_rate: parseFloat(makingCuttingRate) || 0,
+        ...(lbsInvoicingEnabled ? { price_per_lbs: parseFloat(lbsMaterialRate) || 0 } : {}),
       })
       .eq("id", customer.id);
     if (error) { setLoading(false); setError(error.message); return; }
@@ -124,7 +128,10 @@ export default function CustomerRow({
               LBS Invoice
             </label>
             {lbsInvoicingEnabled && (
-              <input type="number" step="0.01" value={makingCuttingRate} onChange={(e) => setMakingCuttingRate(e.target.value)} className="mt-1 w-20 rounded border px-2 py-1 text-xs" placeholder="M/C Rate" title="Making + Cutting চার্জ — BDT / Lb" />
+              <div className="mt-1 space-y-1">
+                <input type="number" step="0.01" value={lbsMaterialRate} onChange={(e) => setLbsMaterialRate(e.target.value)} className="w-20 rounded border px-2 py-1 text-xs" placeholder="Powder Rate" title="Powder / Material চার্জ — BDT / Lb  (Powder Bill এই rate দিয়ে হয়)" />
+                <input type="number" step="0.01" value={makingCuttingRate} onChange={(e) => setMakingCuttingRate(e.target.value)} className="w-20 rounded border px-2 py-1 text-xs" placeholder="M/C Rate" title="Making + Cutting চার্জ — BDT / Lb" />
+              </div>
             )}
           </td>
           <td className="px-4 py-2 text-right whitespace-nowrap">
@@ -162,7 +169,9 @@ export default function CustomerRow({
           {!customer.commission_enabled ? "—" : customer.code === "AT" ? "AT নিয়ম" : `${customer.commission_percentage ?? 1}%`}
         </td>
         <td className="px-4 py-2 text-gray-500 text-xs">
-          {customer.lbs_invoicing_enabled ? `M/C ${customer.making_cutting_rate ?? 0}` : "—"}
+          {customer.lbs_invoicing_enabled
+            ? `Powder ${customer.price_per_lbs ?? 0} · M/C ${customer.making_cutting_rate ?? 0}`
+            : "—"}
         </td>
         <td className="px-4 py-2 text-right whitespace-nowrap">
           <GuardedAction table="customers" recordId={customer.id} recordLabel={customer.name} action="edit"
