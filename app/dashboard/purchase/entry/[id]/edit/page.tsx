@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { notFound } from "next/navigation";
 import PurchaseEntryForm from "../../new/PurchaseEntryForm";
+import { loadPaidViaAccounts } from "@/lib/paidViaAccounts";
 
 export default async function EditPurchaseEntryPage({
   params,
@@ -13,6 +14,7 @@ export default async function EditPurchaseEntryPage({
   const { data: suppliers } = await supabase.from("suppliers").select("id, name").order("name");
   const { data: warehouses } = await supabase.from("warehouses").select("id, name").order("name");
   const { data: materials } = await supabase.from("raw_materials").select("id, material_name, inventory_account_code").order("material_name");
+  const paidViaAccounts = await loadPaidViaAccounts(supabase);
 
   const { data: entry } = await supabase.from("purchase_entries").select("*").eq("id", id).single();
   if (!entry) return notFound();
@@ -43,6 +45,16 @@ export default async function EditPurchaseEntryPage({
     if (code === "3000") paymentSource = "md_jafor";
   }
 
+  // ফর্ম থেকে দেওয়া 'with_purchase' freight — prefill (আলাদা ফর্মের 'separate' নয়)
+  const { data: wpFreight } = await supabase
+    .from("purchase_freight_charges")
+    .select("amount, paid_via_account_id, description")
+    .eq("purchase_entry_id", id)
+    .eq("source", "with_purchase")
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+
   const initialLines = (items ?? []).map((it: any) => ({
     material_id: it.material_id,
     quantity: String(it.entered_quantity ?? 0),
@@ -59,8 +71,10 @@ export default async function EditPurchaseEntryPage({
         suppliers={suppliers ?? []}
         warehouses={warehouses ?? []}
         materials={materials ?? []}
+        paidViaAccounts={paidViaAccounts}
         mode="edit"
         entryId={entry.id}
+        entryNo={entry.entry_no}
         initialVoucherId={entry.voucher_id}
         initialSupplierId={entry.supplier_id ?? ""}
         initialWarehouseId={warehouseId}
@@ -72,6 +86,9 @@ export default async function EditPurchaseEntryPage({
         initialLcDate={entry.lc_date ?? ""}
         initialBillOfEntryNo={entry.bill_of_entry_no ?? ""}
         initialLines={initialLines.length ? initialLines : undefined}
+        initialFreightAmount={wpFreight ? String(wpFreight.amount) : ""}
+        initialFreightPaidViaId={wpFreight?.paid_via_account_id ?? ""}
+        initialFreightDesc={wpFreight?.description ?? ""}
       />
     </div>
   );

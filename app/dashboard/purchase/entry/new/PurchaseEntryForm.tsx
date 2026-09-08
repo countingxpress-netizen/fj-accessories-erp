@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { generateNextDocNo } from "@/lib/docNumber";
 import { recomputeRawAvgCost } from "@/lib/inventoryCost";
+import { postFreightJv, deleteWithPurchaseFreight, repostFreightForEntry } from "@/lib/purchaseFreight";
 import { getCurrentUserId } from "@/lib/currentUser";
 import { money } from "@/lib/format";
 
@@ -12,6 +13,7 @@ const LBS_PER_BAG = 55;
 type Supplier = { id: string; name: string };
 type Warehouse = { id: string; name: string };
 type Material = { id: string; material_name: string; inventory_account_code: string | null };
+type PaidViaAccount = { id: string; account_code: string; account_name: string };
 type Unit = "lbs" | "bags";
 type PaymentSource = "cash" | "md_jafor" | "credit";
 type Line = { material_id: string; quantity: string; unit: Unit; rate: string };
@@ -63,8 +65,10 @@ export default function PurchaseEntryForm({
   suppliers,
   warehouses,
   materials,
+  paidViaAccounts,
   mode = "create",
   entryId,
+  entryNo: initialEntryNo,
   initialVoucherId,
   initialSupplierId,
   initialWarehouseId,
@@ -76,12 +80,17 @@ export default function PurchaseEntryForm({
   initialLcDate,
   initialBillOfEntryNo,
   initialLines,
+  initialFreightAmount,
+  initialFreightPaidViaId,
+  initialFreightDesc,
 }: {
   suppliers: Supplier[];
   warehouses: Warehouse[];
   materials: Material[];
+  paidViaAccounts: PaidViaAccount[];
   mode?: "create" | "edit";
   entryId?: string;
+  entryNo?: string | null;
   initialVoucherId?: string | null;
   initialSupplierId?: string;
   initialWarehouseId?: string;
@@ -93,6 +102,9 @@ export default function PurchaseEntryForm({
   initialLcDate?: string;
   initialBillOfEntryNo?: string;
   initialLines?: Line[];
+  initialFreightAmount?: string;
+  initialFreightPaidViaId?: string;
+  initialFreightDesc?: string;
 }) {
   const [supplierId, setSupplierId] = useState(initialSupplierId ?? "");
   const [warehouseId, setWarehouseId] = useState(initialWarehouseId ?? "");
@@ -104,6 +116,9 @@ export default function PurchaseEntryForm({
   const [lcDate, setLcDate] = useState(initialLcDate ?? "");
   const [billOfEntryNo, setBillOfEntryNo] = useState(initialBillOfEntryNo ?? "");
   const [lines, setLines] = useState<Line[]>(initialLines ?? [{ material_id: "", quantity: "", unit: "lbs", rate: "" }]);
+  const [freightAmount, setFreightAmount] = useState(initialFreightAmount ?? "");
+  const [freightPaidViaId, setFreightPaidViaId] = useState(initialFreightPaidViaId ?? "");
+  const [freightDesc, setFreightDesc] = useState(initialFreightDesc ?? "");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const router = useRouter();
@@ -120,6 +135,7 @@ export default function PurchaseEntryForm({
   }
 
   const totalAmount = lines.reduce((sum, l) => sum + lineAmount(l), 0);
+  const freightNum = parseFloat(freightAmount) || 0;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -132,6 +148,10 @@ export default function PurchaseEntryForm({
     }
     if (purchaseSource === "import" && !lcNo) {
       setError("Import Purchase-এর জন্য LC No দিতে হবে।");
+      return;
+    }
+    if (freightNum > 0 && !freightPaidViaId) {
+      setError("Freight amount দিলে 'Freight Paid Via' বাছতে হবে।");
       return;
     }
 
@@ -160,6 +180,10 @@ export default function PurchaseEntryForm({
       }
       await supabase.from("stock_ledger").delete().eq("reference_type", "purchase").eq("reference_id", entryId);
       await supabase.from("purchase_entry_items").delete().eq("entry_id", entryId);
+
+      // form থেকে আসা 'with_purchase' freight পুরনোটা মুছুন (আলাদা ফর্মের 'separate'
+      // charge-গুলো অক্ষত থাকে — নিচে repostFreightForEntry নতুন অনুপাতে ঠিক করে)
+      await deleteWithPurchaseFreight(supabase, entryId);
 
       // ২. purchase_entries-এর মূল ফিল্ড আপডেট করুন (entry_no অপরিবর্তিত থাকে)
       const { error: updateError } = await supabase
@@ -233,12 +257,29 @@ export default function PurchaseEntryForm({
         });
       }
 
-      // ৫. পুরনো + নতুন — দুই দিকেই থাকা সব material-এর avg cost আবার হিসাব করুন
+      // ৫. Freight — form-এ amount থাকলে নতুন 'with_purchase' charge, তারপর ওই
+      //    entry-র সব freight charge-এর JV নতুন Lbs-অনুপাতে আবার পোস্ট করুন
+      const createdBy = await getCurrentUserId(supabase);
+      if (freightNum > 0 && freightPaidViaId) {
+        await supabase.from("purchase_freight_charges").insert({
+          purchase_entry_id: entryId,
+          charge_date: entryDate,
+          amount: freightNum,
+          paid_via_account_id: freightPaidViaId,
+          description: freightDesc || null,
+          source: "with_purchase",
+          created_by: createdBy,
+        });
+      }
+      await repostFreightForEntry(supabase, entryId, initialEntryNo);
+
+      // ৬. পুরনো + নতুন — দুই দিকেই থাকা সব material-এর avg cost আবার হিসাব করুন
+      //    (freight যোগ হওয়ার পরে, যাতে ভাগ করা freight ধরা পড়ে)
       for (const mid of touchedMaterialIds) {
         await recomputeRawAvgCost(supabase, mid);
       }
 
-      // ৬. Journal Voucher পুনর্গঠন করুন
+      // ৭. Journal Voucher পুনর্গঠন করুন
       const code = creditAccountCode(paymentSource);
       const { data: creditAccount } = await supabase
         .from("chart_of_accounts")
@@ -279,7 +320,6 @@ export default function PurchaseEntryForm({
         await supabase.from("journal_entry_lines").delete().eq("voucher_id", voucherId);
       } else if (debitLines.length > 0) {
         const voucherNo = await generateNextDocNo(supabase, "journal_vouchers", "voucher_no", "JV", "voucher_date", entryDate);
-        const createdBy = await getCurrentUserId(supabase);
         const { data: newVoucher } = await supabase
           .from("journal_vouchers")
           .insert({ voucher_no: voucherNo, voucher_date: entryDate, narration, created_by: createdBy })
@@ -387,12 +427,44 @@ export default function PurchaseEntryForm({
         reference_id: entry.id,
         txn_date: entryDate,
       });
-
-      // এই material-এর weighted average খরচ নতুন করে হিসাব করুন (perpetual costing)
-      await recomputeRawAvgCost(supabase, l.material_id);
     }
 
-    // ৪. Cash হলে Cash (1000), Md Abu Jafor থেকে হলে 3000, না হলে Accounts Payable (2000) অ্যাকাউন্ট খুঁজুন
+    // ৪. Freight/Labour — amount থাকলে 'with_purchase' charge + তার JV
+    //    (Dr material inv accounts Lbs-অনুপাতে / Cr paid via)
+    if (freightNum > 0 && freightPaidViaId) {
+      const { data: fc } = await supabase
+        .from("purchase_freight_charges")
+        .insert({
+          purchase_entry_id: entry.id,
+          charge_date: entryDate,
+          amount: freightNum,
+          paid_via_account_id: freightPaidViaId,
+          description: freightDesc || null,
+          source: "with_purchase",
+          created_by: createdBy,
+        })
+        .select()
+        .single();
+      if (fc) {
+        await postFreightJv(supabase, {
+          chargeId: fc.id,
+          purchaseEntryId: entry.id,
+          entryNo,
+          date: entryDate,
+          amount: freightNum,
+          paidViaAccountId: freightPaidViaId,
+          description: freightDesc || null,
+        });
+      }
+    }
+
+    // ৫. এই এন্ট্রিতে থাকা প্রতিটা material-এর weighted average খরচ নতুন করে
+    //    হিসাব করুন (freight যোগ হওয়ার পরে — perpetual costing)
+    for (const mid of new Set(validLines.map((l) => l.material_id))) {
+      await recomputeRawAvgCost(supabase, mid);
+    }
+
+    // ৬. Cash হলে Cash (1000), Md Abu Jafor থেকে হলে 3000, না হলে Accounts Payable (2000) অ্যাকাউন্ট খুঁজুন
     const code = creditAccountCode(paymentSource);
     const { data: creditAccount } = await supabase
       .from("chart_of_accounts")
@@ -622,6 +694,32 @@ export default function PurchaseEntryForm({
       <button type="button" onClick={addLine} className="rounded-lg border border-dashed px-3 py-2 text-sm text-gray-600 hover:bg-gray-50">
         + আরেকটি লাইন যোগ করুন
       </button>
+
+      {/* Freight / Labour — কাঁচামালের দামে যোগ হয় (Lbs-অনুপাতে ভাগ)। ঐচ্ছিক। */}
+      <div className="rounded-lg border bg-gray-50 p-3">
+        <span className="block text-sm font-medium text-gray-700 mb-2">Freight / Labour (ঐচ্ছিক — কাঁচামালের দামে যোগ হবে)</span>
+        <div className="flex flex-wrap items-end gap-4">
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Amount</label>
+            <input type="number" step="0.01" value={freightAmount} onChange={(e) => setFreightAmount(e.target.value)} className="w-40 rounded-lg border px-3 py-2 text-sm" placeholder="0.00" />
+          </div>
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Paid Via</label>
+            <select value={freightPaidViaId} onChange={(e) => setFreightPaidViaId(e.target.value)} className="rounded-lg border px-3 py-2 text-sm min-w-[180px]" disabled={freightNum <= 0}>
+              <option value="">-- বাছুন --</option>
+              {paidViaAccounts.map((a) => <option key={a.id} value={a.id}>{a.account_code} - {a.account_name}</option>)}
+            </select>
+          </div>
+          <div className="flex-1 min-w-[160px]">
+            <label className="block text-xs text-gray-500 mb-1">Description (ঐচ্ছিক)</label>
+            <input value={freightDesc} onChange={(e) => setFreightDesc(e.target.value)} className="w-full rounded-lg border px-3 py-2 text-sm" placeholder="যেমন: Freight + Labour" disabled={freightNum <= 0} />
+          </div>
+        </div>
+        <p className="mt-2 text-xs text-gray-400">
+          পরে আলাদাভাবে আরও Freight যোগ করা যাবে —{" "}
+          <span className="text-gray-500">Purchase → Freight Charges</span>
+        </p>
+      </div>
 
       {error && <p className="text-sm text-red-600">{error}</p>}
 

@@ -9,7 +9,8 @@ import { getCurrentUserId } from "@/lib/currentUser";
 //   Delivery       Dr 5050 COGS          / Cr 1210 FG Inventory
 //   Wastage        Dr 5600 Wastage Loss (+Dr 1203 recycled) / Cr 1220 WIP
 //
-// খরচ: raw material — সব purchase-এর weighted average per lb (raw_materials.avg_cost_per_lbs);
+// খরচ: raw material — সব purchase-এর weighted average per lb, ক্রয়ের ভাগ করা
+//      freight/labour সহ (raw_materials.avg_cost_per_lbs; দেখুন lib/purchaseFreight.ts);
 //      finished good — issue করা WIP cost ÷ pcs, moving average (finished_goods.avg_cost_per_pc)।
 
 export const WIP_CODE = "1220";          // Work-in-Process Inventory
@@ -23,14 +24,16 @@ type Client = any;
 const round2 = (n: number) => Math.round(n * 100) / 100;
 const round4 = (n: number) => Math.round(n * 10000) / 10000;
 
-async function accountIdByCode(supabase: Client, code: string): Promise<string | null> {
+export async function accountIdByCode(supabase: Client, code: string): Promise<string | null> {
   if (!code) return null;
   const { data } = await supabase
     .from("chart_of_accounts").select("id").eq("account_code", code).maybeSingle();
   return data?.id ?? null;
 }
 
-async function makeVoucher(
+// JV + lines তৈরি করে (ব্যালেন্সড না হলে বা 2টার কম লাইন হলে null)। inventoryCost ও
+// purchaseFreight — দুই জায়গার auto-JV এই একই হেল্পার ব্যবহার করে।
+export async function makeVoucher(
   supabase: Client,
   date: string,
   narration: string,
@@ -55,20 +58,52 @@ async function makeVoucher(
   return voucher.id;
 }
 
-/** সব purchase history থেকে material-টার weighted average খরচ আবার হিসাব করে বসায়। */
+/**
+ * সব purchase history থেকে material-টার weighted average খরচ আবার হিসাব করে বসায়।
+ *
+ *   avg_cost_per_lbs = ( Σ(qty×rate) + Σ ভাগ করা freight ) ÷ Σ qty
+ *
+ * ভাগ করা freight: এই material যেসব purchase entry-তে আছে, সেগুলোর প্রতিটা
+ * freight charge ওই entry-র মোট Lbs-এর সাপেক্ষে এই material-এর Lbs-অনুপাতে।
+ * (freight পরে যোগ/সরানো হলেও পুরো recompute বলে এমনিতেই ধরা পড়ে।)
+ */
 export async function recomputeRawAvgCost(supabase: Client, materialId: string): Promise<number> {
-  const { data: items } = await supabase
+  const { data: myItems } = await supabase
     .from("purchase_entry_items")
-    .select("quantity_lbs, rate_per_lbs")
+    .select("entry_id, quantity_lbs, rate_per_lbs")
     .eq("material_id", materialId);
 
   let qty = 0, value = 0;
-  (items ?? []).forEach((it: any) => {
+  const myQtyByEntry = new Map<string, number>();
+  (myItems ?? []).forEach((it: any) => {
     const q = Number(it.quantity_lbs) || 0;
     qty += q;
     value += q * (Number(it.rate_per_lbs) || 0);
+    if (it.entry_id) myQtyByEntry.set(it.entry_id, (myQtyByEntry.get(it.entry_id) ?? 0) + q);
   });
-  const avg = qty > 0 ? round4(value / qty) : 0;
+
+  let freightShare = 0;
+  const entryIds = [...myQtyByEntry.keys()];
+  if (entryIds.length > 0) {
+    const [{ data: freightRows }, { data: allItems }] = await Promise.all([
+      supabase.from("purchase_freight_charges").select("purchase_entry_id, amount").in("purchase_entry_id", entryIds),
+      supabase.from("purchase_entry_items").select("entry_id, quantity_lbs").in("entry_id", entryIds),
+    ]);
+    if ((freightRows ?? []).length > 0) {
+      const totalQtyByEntry = new Map<string, number>();
+      (allItems ?? []).forEach((it: any) => {
+        if (!it.entry_id) return;
+        totalQtyByEntry.set(it.entry_id, (totalQtyByEntry.get(it.entry_id) ?? 0) + (Number(it.quantity_lbs) || 0));
+      });
+      (freightRows ?? []).forEach((fr: any) => {
+        const totalQ = totalQtyByEntry.get(fr.purchase_entry_id) ?? 0;
+        const myQ = myQtyByEntry.get(fr.purchase_entry_id) ?? 0;
+        if (totalQ > 0) freightShare += (Number(fr.amount) || 0) * (myQ / totalQ);
+      });
+    }
+  }
+
+  const avg = qty > 0 ? round4((value + freightShare) / qty) : 0;
   await supabase.from("raw_materials").update({ avg_cost_per_lbs: avg }).eq("id", materialId);
   return avg;
 }

@@ -62,11 +62,21 @@ Uses `Order Thickness` (not Production Thickness or PI Thickness — there are T
 
 Uses `pi\_thickness\_mm` (separate from order/production thickness). Buyer-level pricing rules stored on `buyers` table: `pricing\_rule` (manual/percentage/rate\_per\_lbs), `percentage\_value`, `rate\_per\_lbs\_value`.
 
+### Raw material weighted-average cost (`raw_materials.avg_cost_per_lbs`)
+
+```
+avg_cost_per_lbs = ( Σ(qty × rate)  +  Σ allocated freight ) / Σ qty
+```
+
+* Recomputed from full purchase history every time by `recomputeRawAvgCost` (`lib/inventoryCost.ts`) — never incremental.
+* **Freight is capitalised into inventory cost** (not a period expense). Each `purchase_freight_charges` row is split across that purchase entry's material lines **by Lbs proportion**; JV = Dr Raw Material Inventory (1200–1203/1299, per material) / Cr Cash-Bank / Md Abu Jafor (never credit/payable). Logic: `lib/purchaseFreight.ts`. Two entry points — a field on the Purchase Entry form (`source='with_purchase'`) and a standalone `/dashboard/purchase/freight` form (`source='separate'`); one purchase can carry many freight charges.
+* Adding/removing freight after material was already issued to production does NOT retroactively fix past WIP/COGS (normal moving-average limitation).
+
 ### 1 Bag = 25 Kg = 55 Lbs (conversion constant, LBS\_PER\_BAG = 55)
 
 ### Chart of Accounts codes (VERIFY before writing any JV code — these are the real account\_codes)
 
-`1000` Cash in Hand · `1010` Uttara Bank · `1011` BRAC Bank · `1012` EBL · `1100` Accounts Receivable · `1200/1201/1202/1203` Raw Material Inventory (LLDPE/LDPE/PP/Recycled Chips) · `1210` Finished Goods Inventory · `1220` Work-in-Process Inventory · `1260` Advance to Employees · `1299` Other Raw Material Inventory · `2000` Accounts Payable · `2200` Salary Payable · `3000` Owner's Capital · `3100` Retained Earnings · `3900` Opening Balance Equity · `4000` Sales Revenue-Local · `4010` Sales Revenue-Export · `5050` Cost of Goods Sold · `5100` Salary Expense · `5400` Bank Charges · `5410` LC Charges · `5600` Wastage Loss. New-account inserts use `on conflict (account_code) do nothing` — so a wrong code silently no-ops and the JV posts to whatever real account holds that code. Shared JV-posting logic: `lib/payrollJv.ts`, `lib/inventoryCost.ts`.
+`1000` Cash in Hand · `1010` Uttara Bank · `1011` BRAC Bank · `1012` EBL · `1100` Accounts Receivable · `1200/1201/1202/1203` Raw Material Inventory (LLDPE/LDPE/PP/Recycled Chips) · `1210` Finished Goods Inventory · `1220` Work-in-Process Inventory · `1260` Advance to Employees · `1299` Other Raw Material Inventory · `2000` Accounts Payable · `2200` Salary Payable · `3000` Owner's Capital · `3100` Retained Earnings · `3900` Opening Balance Equity · `4000` Sales Revenue-Local · `4010` Sales Revenue-Export · `5050` Cost of Goods Sold · `5100` Salary Expense · `5400` Bank Charges · `5410` LC Charges · `5600` Wastage Loss. New-account inserts use `on conflict (account_code) do nothing` — so a wrong code silently no-ops and the JV posts to whatever real account holds that code. Shared JV-posting logic: `lib/payrollJv.ts`, `lib/inventoryCost.ts`, `lib/purchaseFreight.ts`.
 
 ## Database structure notes
 

@@ -1,11 +1,13 @@
 import { createClient } from "@/lib/supabase/server";
 import PurchaseEntryForm from "./PurchaseEntryForm";
+import { loadPaidViaAccounts } from "@/lib/paidViaAccounts";
 
 export default async function NewPurchaseEntryPage() {
   const supabase = await createClient();
   const { data: suppliers } = await supabase.from("suppliers").select("id, name").order("name");
   const { data: warehouses } = await supabase.from("warehouses").select("id, name").order("name");
   const { data: materials } = await supabase.from("raw_materials").select("id, material_name, inventory_account_code").order("material_name");
+  const paidViaAccounts = await loadPaidViaAccounts(supabase);
 
   return (
     <div>
@@ -14,6 +16,7 @@ export default async function NewPurchaseEntryPage() {
         suppliers={suppliers ?? []}
         warehouses={warehouses ?? []}
         materials={materials ?? []}
+        paidViaAccounts={paidViaAccounts}
       />
     </div>
   );
