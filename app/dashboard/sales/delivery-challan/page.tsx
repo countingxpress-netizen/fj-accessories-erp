@@ -7,7 +7,7 @@ export default async function DeliveryChallanListPage() {
 
   const { data: challans, error } = await supabase
     .from("delivery_challans")
-    .select("*, customers(name), bookings(booking_no), delivery_challan_items(booking_id, quantity_pcs, finished_goods(product_name)), creator:app_users!delivery_challans_created_by_fkey(full_name)")
+    .select("*, customers(name), bookings(booking_no), delivery_challan_items(booking_id, quantity_pcs, print_label, finished_goods(product_name)), creator:app_users!delivery_challans_created_by_fkey(full_name)")
     .order("challan_date", { ascending: false })
     .order("created_at", { ascending: false });
 
@@ -16,6 +16,7 @@ export default async function DeliveryChallanListPage() {
   }
 
   const challanList = challans ?? [];
+  const latestChallanNo = challanList.reduce((mx: string, c: any) => (c.challan_no > mx ? c.challan_no : mx), "");
 
   // PI No — প্রতিটা challan-এর item booking_id → pi_items → proforma_invoices.pi_no
   // (এক বুকিং একাধিক PI/revision-এ থাকতে পারে — সব PI No কমা দিয়ে দেখাই)
@@ -63,7 +64,7 @@ export default async function DeliveryChallanListPage() {
         </Link>
       </div>
 
-      <ChallanTable challans={challanList} piNoByChallan={piNoByChallan} />
+      <ChallanTable challans={challanList} piNoByChallan={piNoByChallan} latestChallanNo={latestChallanNo} />
     </div>
   );
 }

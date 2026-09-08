@@ -1,0 +1,137 @@
+"use client";
+import { useEffect, useRef } from "react";
+import { createClient } from "@/lib/supabase/client";
+import ChallanPrintButton from "./ChallanPrintButton";
+
+const nf = new Intl.NumberFormat("en-US");
+
+export default function ChallanPrintView({
+  challan, company, challanDateLabel,
+}: { challan: any; company: any; challanDateLabel: string }) {
+  const supabase = createClient();
+  const sheetRef = useRef<HTMLDivElement>(null);
+  const warnRef = useRef<HTMLSpanElement>(null);
+
+  const items: any[] = challan.delivery_challan_items ?? [];
+  const totalQty = items.reduce((s, i) => s + Number(i.quantity_pcs || 0), 0);
+  const totalPackets = items.reduce((s, i) => s + Number(i.packets || 0), 0);
+  const hasPackets = items.some((i) => i.packets != null);
+
+  // এক পেজে না আঁটলে (আনুমানিক A4 উচ্চতা) নন-প্রিন্ট ওয়ার্নিং — re-render ছাড়াই DOM-এ
+  useEffect(() => {
+    if (sheetRef.current && warnRef.current && sheetRef.current.scrollHeight > 1050) {
+      warnRef.current.style.display = "inline";
+    }
+  }, []);
+
+  async function saveLabel(itemId: string, text: string, fallback: string) {
+    const clean = text.trim();
+    await supabase
+      .from("delivery_challan_items")
+      .update({ print_label: clean && clean !== fallback ? clean : null })
+      .eq("id", itemId);
+  }
+
+  return (
+    <div className="mx-auto max-w-[210mm] bg-white text-gray-900 challan-root">
+      <style>{`
+        @page { size: A4; margin: 0; }
+        .challan-sheet { padding: 13mm 15mm; }
+        .cell-edit:focus { outline: 1px dashed #9ca3af; outline-offset: 2px; border-radius: 2px; }
+        @media print {
+          .no-print { display: none !important; }
+          .challan-root { max-width: none; }
+          .challan-sheet { max-height: 296mm; overflow: hidden; }
+        }
+      `}</style>
+
+      <div className="no-print flex items-center justify-end gap-3 px-4 pt-4">
+        <span ref={warnRef} style={{ display: "none" }} className="text-xs text-red-600">
+          ⚠ এই চালান এক পেজে আঁটছে না — লাইন কমান
+        </span>
+        <ChallanPrintButton challanId={challan.id} currentStatus={challan.delivery_status ?? "challan_ready"} />
+      </div>
+
+      <div ref={sheetRef} className="challan-sheet">
+        <div className="mb-4 flex items-center justify-center gap-4 border-b pb-3">
+          {company?.logo_url && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={company.logo_url} alt="" className="h-14 w-14 shrink-0 object-contain" />
+          )}
+          <div className="text-center">
+            <h1 className="text-2xl font-bold">{company?.name}</h1>
+            <p className="text-xs text-gray-600">{company?.address}</p>
+            <p className="text-xs text-gray-600">Phone: {company?.phone} | Email: {company?.email}</p>
+          </div>
+        </div>
+
+        <h2 className="mb-3 text-center text-lg font-semibold">Delivery Challan</h2>
+
+        <div className="mb-4 flex justify-between text-sm">
+          <div>
+            <p className="font-medium">Deliver To:</p>
+            <p className="text-gray-700">{challan.delivery_point || challan.customers?.name || "-"}</p>
+            {challan.buyer_name && <p className="text-gray-600">Buyer: {challan.buyer_name}</p>}
+            {challan.merchant_name && <p className="text-gray-600">Merchant: {challan.merchant_name}</p>}
+            {challan.style && <p className="text-gray-600">Style: {challan.style}</p>}
+            {challan.customer_booking_ref && <p className="text-gray-600">Customer Booking Ref: {challan.customer_booking_ref}</p>}
+          </div>
+          <div className="text-right">
+            <p><span className="text-gray-600">Challan No: </span><strong>{challan.challan_no}</strong></p>
+            <p><span className="text-gray-600">Date: </span>{challanDateLabel}</p>
+          </div>
+        </div>
+
+        <table className="mb-6 w-full border-collapse text-sm">
+          <thead>
+            <tr className="border-b-2 border-gray-800">
+              <th className="py-1.5 text-left">Product</th>
+              <th className="w-40 py-1.5 text-right">Quantity</th>
+              {hasPackets && <th className="w-28 py-1.5 text-right">Packets</th>}
+            </tr>
+          </thead>
+          <tbody>
+            {items.map((item) => {
+              const fallback = item.finished_goods?.product_name || "-";
+              return (
+                <tr key={item.id} className="border-b">
+                  <td className="py-1.5 pr-3">
+                    <span
+                      className="cell-edit inline-block min-w-[3rem]"
+                      contentEditable
+                      suppressContentEditableWarning
+                      onBlur={(e) => saveLabel(item.id, e.currentTarget.textContent || "", fallback)}
+                    >
+                      {item.print_label || fallback}
+                    </span>
+                  </td>
+                  <td className="py-1.5 text-right">{nf.format(Number(item.quantity_pcs || 0))} Pcs</td>
+                  {hasPackets && <td className="py-1.5 text-right">{Number(item.packets || 0)} Pkts</td>}
+                </tr>
+              );
+            })}
+          </tbody>
+          <tfoot>
+            <tr className="border-t-2 border-gray-800 font-semibold">
+              <td className="py-1.5 text-right">Total</td>
+              <td className="py-1.5 text-right">{nf.format(totalQty)} Pcs</td>
+              {hasPackets && <td className="py-1.5 text-right">{totalPackets} Pkts</td>}
+            </tr>
+          </tfoot>
+        </table>
+
+        <p className="mb-16 text-sm">Received the above goods as per order with good condition.</p>
+
+        <div className="flex items-start justify-between text-sm">
+          <div className="w-56">
+            <div className="border-t border-gray-500 pt-1 font-medium">Receiver&apos;s Signature</div>
+            <div className="text-gray-600">Name Seal</div>
+          </div>
+          <div className="w-56 text-right">
+            <div className="border-t border-gray-500 pt-1 font-medium">Authorized By</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

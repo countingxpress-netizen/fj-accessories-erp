@@ -5,9 +5,8 @@ import { createClient } from "@/lib/supabase/client";
 import { generateNextDocNo } from "@/lib/docNumber";
 import { recalcBookingStatus } from "@/lib/recalcBookingStatus";
 import { formatStyle } from "@/lib/formatStyle";
-import { postChallanCogsJv } from "@/lib/inventoryCost";
-import { fulfilBookingForChallan } from "@/lib/challanProduction";
 import { getCurrentUserId } from "@/lib/currentUser";
+import { applyChallanLines, reverseChallanDerived, MAX_CHALLAN_LINES } from "@/lib/challanWrite";
 
 type Booking = {
   id: string; booking_no: string; quantity_pcs: number; product_id: string; customer_id: string;
@@ -19,22 +18,45 @@ type Booking = {
 type Customer = { id: string; name: string };
 type Warehouse = { id: string; name: string };
 
+export type EditChallanContext = {
+  id: string;
+  challanNo: string;
+  challanDate: string;
+  customerId: string;
+  lines: { bookingId: string; qty: number; packets: number; printLabel: string; warehouseId: string }[];
+};
+
 export default function DeliveryChallanForm({
-  customers, bookings, warehouses, deliveredMap, stockByProduct,
+  customers, bookings, warehouses, deliveredMap, stockByProduct, editChallan,
 }: {
   customers: Customer[]; bookings: Booking[]; warehouses: Warehouse[];
   deliveredMap: Record<string, number>;
   stockByProduct: Record<string, Record<string, number>>;
+  editChallan?: EditChallanContext;
 }) {
-  const [customerId, setCustomerId] = useState("");
+  const isEdit = !!editChallan;
+  const editLines = editChallan?.lines ?? [];
+  const editBookingIds = useMemo(() => new Set(editLines.map((l) => l.bookingId)), [editLines]);
+
+  const [customerId, setCustomerId] = useState(editChallan?.customerId ?? "");
   const [buyerFilter, setBuyerFilter] = useState("");
   const [merchantFilter, setMerchantFilter] = useState("");
   const [styleFilter, setStyleFilter] = useState("");
   const [garmentsFilter, setGarmentsFilter] = useState("");
-  const [challanDate, setChallanDate] = useState(new Date().toISOString().slice(0, 10));
-  const [selectedQty, setSelectedQty] = useState<Record<string, string>>({});
-  const [selectedPackets, setSelectedPackets] = useState<Record<string, string>>({});
-  const [lineWarehouse, setLineWarehouse] = useState<Record<string, string>>({});
+  const [challanDate, setChallanDate] = useState(editChallan?.challanDate ?? new Date().toISOString().slice(0, 10));
+  const [selectedQty, setSelectedQty] = useState<Record<string, string>>(
+    () => Object.fromEntries(editLines.filter((l) => l.qty).map((l) => [l.bookingId, String(l.qty)])),
+  );
+  const [selectedPackets, setSelectedPackets] = useState<Record<string, string>>(
+    () => Object.fromEntries(editLines.filter((l) => l.packets).map((l) => [l.bookingId, String(l.packets)])),
+  );
+  const [lineWarehouse, setLineWarehouse] = useState<Record<string, string>>(
+    () => Object.fromEntries(editLines.filter((l) => l.warehouseId).map((l) => [l.bookingId, l.warehouseId])),
+  );
+  const linePrintLabel = useMemo(
+    () => Object.fromEntries(editLines.map((l) => [l.bookingId, l.printLabel])) as Record<string, string>,
+    [editLines],
+  );
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const router = useRouter();
@@ -48,8 +70,6 @@ export default function DeliveryChallanForm({
       .sort((a, b) => b.qty - a.qty);
   }
 
-  // ডিফল্ট warehouse: যেখানে এই product-এর স্টক সবচেয়ে বেশি → নাহলে booking-এর
-  // warehouse → নাহলে তালিকার প্রথমটা
   function defaultWarehouseFor(b: Booking) {
     const rows = warehouseRowsFor(b.product_id);
     const withStock = rows.filter((r) => r.qty > 0);
@@ -70,12 +90,13 @@ export default function DeliveryChallanForm({
         const remaining = b.quantity_pcs - delivered;
         return { ...b, delivered, remaining };
       })
-      .filter((b) => b.remaining > 0)
+      // Edit মোডে এই চালানের বুকিং-গুলো সবসময় দেখাই (remaining 0 হলেও)
+      .filter((b) => b.remaining > 0 || editBookingIds.has(b.id))
       .filter((b) => !buyerFilter || b.buyers?.name === buyerFilter)
       .filter((b) => !merchantFilter || b.merchants?.name === merchantFilter)
       .filter((b) => !styleFilter || b.style === styleFilter)
       .filter((b) => !garmentsFilter || b.garments_name === garmentsFilter);
-  }, [bookings, customerId, deliveredMap, buyerFilter, merchantFilter, styleFilter, garmentsFilter]);
+  }, [bookings, customerId, deliveredMap, buyerFilter, merchantFilter, styleFilter, garmentsFilter, editBookingIds]);
 
   const availableBuyers = useMemo(
     () => Array.from(new Set(bookings.filter((b) => b.customer_id === customerId).map((b) => b.buyers?.name).filter(Boolean))) as string[],
@@ -95,11 +116,10 @@ export default function DeliveryChallanForm({
   );
 
   function updateQty(id: string, value: string) {
-    setSelectedQty((prev) => ({ ...prev, [id]: value }));
+    setSelectedQty((prev) => ({ ...prev, [id]: value.replace(/[^0-9]/g, "") }));
   }
-
   function updatePackets(id: string, value: string) {
-    setSelectedPackets((prev) => ({ ...prev, [id]: value }));
+    setSelectedPackets((prev) => ({ ...prev, [id]: value.replace(/[^0-9]/g, "") }));
   }
 
   const lineItems = customerBookings
@@ -117,6 +137,10 @@ export default function DeliveryChallanForm({
       setError("Customer এবং অন্তত একটা বুকিং-এ Quantity দিন।");
       return;
     }
+    if (lineItems.length > MAX_CHALLAN_LINES) {
+      setError(`একটা চালানে সর্বোচ্চ ${MAX_CHALLAN_LINES}টা লাইন — এর বেশি হলে প্রিন্ট দুই পেজে চলে যায়। বাকিগুলো আলাদা চালানে দিন।`);
+      return;
+    }
     for (const li of lineItems) {
       if (li.qty > li.booking.remaining) {
         setError(`${li.booking.booking_no}-এ বাকি আছে মাত্র ${li.booking.remaining} পিস।`);
@@ -130,22 +154,56 @@ export default function DeliveryChallanForm({
 
     setLoading(true);
 
-    const challanNo = await generateNextDocNo(supabase, "delivery_challans", "challan_no", "DC", "challan_date", challanDate);
     const isPartial = lineItems.some((li) => li.qty < li.booking.remaining);
     const firstBooking = lineItems[0].booking;
     const bookingRefs = Array.from(new Set(lineItems.map((li) => li.booking.customer_booking_ref).filter(Boolean))).join(", ");
+    const headerFields = {
+      customer_id: customerId,
+      challan_date: challanDate,
+      is_partial: isPartial,
+      buyer_name: firstBooking.buyers?.name ?? null,
+      style: firstBooking.style ?? null,
+      customer_booking_ref: bookingRefs || null,
+      delivery_point: firstBooking.delivery_point ?? null,
+    };
+    const toLine = (li: (typeof lineItems)[number]) => ({
+      bookingId: li.booking.id,
+      productId: li.booking.product_id,
+      warehouseId: resolveWarehouse(li.booking),
+      qtyPcs: li.qty,
+      packets: li.packets,
+      printLabel: linePrintLabel[li.booking.id] ?? null,
+    });
 
+    if (isEdit && editChallan) {
+      // পুরনো derived সব উল্টে, header আপডেট করে, নতুন লাইন প্রয়োগ
+      const oldBookingIds = await reverseChallanDerived(supabase, editChallan.id, { removeItems: true });
+      await supabase.from("delivery_challans").update({
+        ...headerFields,
+        booking_id: firstBooking.id,
+        delivery_status: "challan_ready",
+        printed_at: null,
+      }).eq("id", editChallan.id);
+
+      await applyChallanLines(supabase, {
+        challanId: editChallan.id, challanNo: editChallan.challanNo, challanDate,
+        lines: lineItems.map(toLine),
+      });
+
+      const affected = new Set([...oldBookingIds, ...lineItems.map((li) => li.booking.id)]);
+      for (const bId of affected) await recalcBookingStatus(supabase, bId);
+
+      setLoading(false);
+      router.push("/dashboard/sales/delivery-challan");
+      router.refresh();
+      return;
+    }
+
+    const challanNo = await generateNextDocNo(supabase, "delivery_challans", "challan_no", "DC", "challan_date", challanDate);
     const createdBy = await getCurrentUserId(supabase);
     const { data: challan, error: challanError } = await supabase
       .from("delivery_challans")
-      .insert({
-        challan_no: challanNo, booking_id: firstBooking.id, customer_id: customerId,
-        challan_date: challanDate, is_partial: isPartial,
-        buyer_name: firstBooking.buyers?.name ?? null, style: firstBooking.style ?? null,
-        customer_booking_ref: bookingRefs || null,
-        delivery_point: firstBooking.delivery_point ?? null,
-        created_by: createdBy,
-      })
+      .insert({ challan_no: challanNo, booking_id: firstBooking.id, created_by: createdBy, ...headerFields })
       .select().single();
 
     if (challanError || !challan) {
@@ -154,55 +212,16 @@ export default function DeliveryChallanForm({
       return;
     }
 
-    for (const li of lineItems) {
-      const wId = resolveWarehouse(li.booking);
-
-      await supabase.from("delivery_challan_items").insert({
-        challan_id: challan.id, booking_id: li.booking.id, product_id: li.booking.product_id,
-        quantity_pcs: li.qty, packets: li.packets || null,
+    try {
+      await applyChallanLines(supabase, {
+        challanId: challan.id, challanNo, challanDate, lines: lineItems.map(toLine),
       });
-
-      // নতুন নিয়ম — চালান = ঐ qty উৎপাদিত: production order finished + এই qty FG-তে receive
-      // (Dr 1210 / Cr 1220 + finished_goods_receive + stock ↑)। এরপর নিচে shipment COGS + stock ↓।
-      await fulfilBookingForChallan(supabase, {
-        bookingId: li.booking.id,
-        productId: li.booking.product_id,
-        warehouseId: wId,
-        challanId: challan.id,
-        challanNo,
-        qtyPcs: li.qty,
-        date: challanDate,
-      });
-
-      const { data: stock } = await supabase
-        .from("finished_goods_stock").select("*")
-        .eq("product_id", li.booking.product_id).eq("warehouse_id", wId).maybeSingle();
-
-      if (stock) {
-        await supabase.from("finished_goods_stock")
-          .update({ quantity_pcs: stock.quantity_pcs - li.qty, updated_at: new Date().toISOString() })
-          .eq("id", stock.id);
-      } else {
-        await supabase.from("finished_goods_stock")
-          .insert({ product_id: li.booking.product_id, warehouse_id: wId, quantity_pcs: -li.qty });
-      }
-
-      await supabase.from("stock_ledger").insert({
-        item_type: "finished_goods", item_id: li.booking.product_id, warehouse_id: wId,
-        txn_type: "out", quantity: li.qty, reference_type: "delivery", reference_id: challan.id, txn_date: challanDate,
-      });
-
-      await recalcBookingStatus(supabase, li.booking.id);
-    }
-
-    // Perpetual — shipment-এর COGS (Dr 5000 COGS / Cr 1400 FG Inventory)
-    const cogsVoucherId = await postChallanCogsJv(supabase, {
-      date: challanDate,
-      challanNo,
-      lines: lineItems.map((li) => ({ productId: li.booking.product_id, pcs: li.qty })),
-    });
-    if (cogsVoucherId) {
-      await supabase.from("delivery_challans").update({ inventory_voucher_id: cogsVoucherId }).eq("id", challan.id);
+    } catch (err: any) {
+      // লাইন সেভ ব্যর্থ — orphan header মুছে দিই
+      await supabase.from("delivery_challans").delete().eq("id", challan.id);
+      setLoading(false);
+      setError(err?.message ?? "চালান সেভ ব্যর্থ হয়েছে।");
+      return;
     }
 
     setLoading(false);
@@ -215,7 +234,13 @@ export default function DeliveryChallanForm({
       <div className="flex flex-wrap gap-4 items-end">
         <div className="flex-1 max-w-xs">
           <label className="block text-sm text-gray-600 mb-1">Customer</label>
-          <select value={customerId} onChange={(e) => { setCustomerId(e.target.value); setSelectedQty({}); setSelectedPackets({}); setLineWarehouse({}); setBuyerFilter(""); setMerchantFilter(""); setStyleFilter(""); setGarmentsFilter(""); }} className="w-full rounded-lg border px-3 py-2 text-sm" required>
+          <select
+            value={customerId}
+            disabled={isEdit}
+            onChange={(e) => { setCustomerId(e.target.value); setSelectedQty({}); setSelectedPackets({}); setLineWarehouse({}); setBuyerFilter(""); setMerchantFilter(""); setStyleFilter(""); setGarmentsFilter(""); }}
+            className="w-full rounded-lg border px-3 py-2 text-sm disabled:bg-gray-100 disabled:text-gray-500"
+            required
+          >
             <option value="">-- বাছুন --</option>
             {customers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
@@ -269,9 +294,9 @@ export default function DeliveryChallanForm({
                 <th className="px-3 py-2">Buyer</th>
                 <th className="px-3 py-2">Product</th>
                 <th className="px-3 py-2 text-right">Remaining</th>
-                <th className="px-3 py-2 w-28">Qty</th>
-                <th className="px-3 py-2 w-24">Packets</th>
-                <th className="px-3 py-2 w-56">Warehouse (এখানে receive হয়ে ডেলিভারি হবে)</th>
+                <th className="px-3 py-2 w-44">Qty</th>
+                <th className="px-3 py-2 w-36">Packets</th>
+                <th className="px-3 py-2 w-52">Warehouse (এখানে receive হয়ে ডেলিভারি হবে)</th>
               </tr>
             </thead>
             <tbody>
@@ -286,10 +311,18 @@ export default function DeliveryChallanForm({
                     <td className="px-3 py-2">{b.finished_goods?.product_name}</td>
                     <td className="px-3 py-2 text-right">{b.remaining}</td>
                     <td className="px-3 py-2">
-                      <input type="number" step="1" min="0" max={b.remaining} value={selectedQty[b.id] || ""} onChange={(e) => updateQty(b.id, e.target.value)} className="w-full rounded border px-2 py-1 text-sm" />
+                      <input
+                        type="text" inputMode="numeric" value={selectedQty[b.id] || ""}
+                        onChange={(e) => updateQty(b.id, e.target.value)}
+                        className="w-full rounded border px-2 py-1.5 text-sm"
+                      />
                     </td>
                     <td className="px-3 py-2">
-                      <input type="number" step="1" min="0" value={selectedPackets[b.id] || ""} onChange={(e) => updatePackets(b.id, e.target.value)} className="w-full rounded border px-2 py-1 text-sm" />
+                      <input
+                        type="text" inputMode="numeric" value={selectedPackets[b.id] || ""}
+                        onChange={(e) => updatePackets(b.id, e.target.value)}
+                        className="w-full rounded border px-2 py-1.5 text-sm"
+                      />
                     </td>
                     <td className="px-3 py-2">
                       <select
@@ -324,10 +357,13 @@ export default function DeliveryChallanForm({
         </div>
       )}
 
+      {lineItems.length > MAX_CHALLAN_LINES && (
+        <p className="text-sm text-red-600">লাইন সংখ্যা {lineItems.length} — সর্বোচ্চ {MAX_CHALLAN_LINES}টা রাখা যাবে (এক পেজ চালান)।</p>
+      )}
       {error && <p className="text-sm text-red-600">{error}</p>}
 
       <button type="submit" disabled={loading || lineItems.length === 0} className="rounded-lg bg-gray-900 px-5 py-2 text-sm text-white disabled:opacity-40">
-        {loading ? "সেভ হচ্ছে..." : "Delivery Challan তৈরি করুন"}
+        {loading ? "সেভ হচ্ছে..." : isEdit ? "চালান আপডেট করুন" : "Delivery Challan তৈরি করুন"}
       </button>
     </form>
   );

@@ -1,155 +1,45 @@
 import { createClient } from "@/lib/supabase/server";
 import { formatDate } from "@/lib/formatDate";
 import { notFound } from "next/navigation";
-import ChallanPrintButton from "./ChallanPrintButton";
+import ChallanPrintView from "./ChallanPrintView";
 
-function formatMeasurement(booking: any, finishedGood: any) {
-  // ১. বুকিং ডাটা থাকলে সেটা দেখাবে
-  if (booking) {
-    const unit = booking.measurement_unit || "cm";
-    const L = booking.length_val, W = booking.width_val, F = booking.flap_val, G = booking.gusset_val, P = booking.pillow_val;
-
-    if (booking.measurement_type === "simple") return `L-${L} x W-${W} ${unit}`;
-    if (booking.measurement_type === "gusset") return `L-${L} x W-${W} + G-${G} ${unit}`;
-    if (booking.measurement_type === "adhesive") return `L-${L} + F-${F} x W-${W} ${unit}`;
-    if (booking.measurement_type === "flap_gusset") return `L-${L} + F-${F} + G-${G} x W-${W} ${unit}`;
-    if (booking.measurement_type === "pillow") return `L-${L} + P-${P} x W-${W} ${unit}`;
-  }
-
-  // ২. বুকিং ডাটা না থাকলে finished_goods টেবিলের ডাটা (Fallback) দেখাবে
-  if (finishedGood?.length_cm || finishedGood?.width_cm) {
-    const L = finishedGood.length_cm || 0;
-    const W = finishedGood.width_cm || 0;
-    return `L-${L} x W-${W} cm`;
-  }
-
-  return "-";
+export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const supabase = await createClient();
+  const { data } = await supabase.from("delivery_challans").select("challan_no").eq("id", id).maybeSingle();
+  return { title: data?.challan_no ? `Challan ${data.challan_no}` : "Delivery Challan" };
 }
 
 export default async function ChallanPrintPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const supabase = await createClient();
 
-  // ১. Challan-এর সাথে items এবং item-এর product_id সহ ফেচ করা হলো
   const { data: challan } = await supabase
     .from("delivery_challans")
     .select(`
       *,
       customers(name, address, phone),
-      creator:app_users!delivery_challans_created_by_fkey(signature_url),
       delivery_challan_items(
-        product_id,
+        id,
+        print_label,
         quantity_pcs,
         packets,
-        finished_goods(product_name, length_cm, width_cm, thickness)
+        finished_goods(product_name)
       )
     `)
     .eq("id", id)
+    .order("id", { referencedTable: "delivery_challan_items", ascending: true })
     .single();
 
   if (!challan) return notFound();
 
-  // ২. Related Bookings লোড করা
-  let bookingByProduct: Record<string, any> = {};
-  
-  if (challan.booking_id) {
-    const { data: relatedBookings } = await supabase
-      .from("bookings")
-      .select("product_id, measurement_type, length_val, width_val, flap_val, gusset_val, pillow_val, measurement_unit")
-      .eq("id", challan.booking_id);
-
-    (relatedBookings ?? []).forEach((b: any) => { 
-      if (b.product_id) {
-        bookingByProduct[b.product_id] = b; 
-      }
-    });
-  }
-
   const { data: company } = await supabase.from("company_profile").select("*").single();
-  const signatureUrl = challan.creator?.signature_url || company?.signature_url;
-
-  const items = challan.delivery_challan_items ?? [];
-  const totalQty = items.reduce((s: number, i: any) => s + Number(i.quantity_pcs || 0), 0);
-  const totalPackets = items.reduce((s: number, i: any) => s + Number(i.packets || 0), 0);
-  const hasPackets = items.some((i: any) => i.packets != null);
 
   return (
-    <div className="min-h-[297mm] flex flex-col max-w-3xl mx-auto p-8 bg-white text-gray-900 print:p-0">
-      <ChallanPrintButton challanId={challan.id} currentStatus={challan.delivery_status ?? "challan_ready"} />
-
-      <div className="flex-1">
-        <div className="mb-6 border-b pb-4 flex items-center justify-center gap-4">
-          {company?.logo_url && (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={company.logo_url} alt="Logo" className="h-16 w-16 object-contain shrink-0" />
-          )}
-          <div className="text-center">
-            <h1 className="text-2xl font-bold">{company?.name}</h1>
-            <p className="text-sm text-gray-600">{company?.address}</p>
-            <p className="text-sm text-gray-600">Phone: {company?.phone} | Email: {company?.email}</p>
-          </div>
-        </div>
-
-        <h2 className="text-xl font-semibold text-center mb-4">Delivery Challan</h2>
-
-        <div className="flex justify-between mb-6 text-sm">
-          <div>
-            <p className="font-medium">Deliver To:</p>
-            <p className="text-gray-700">{challan.delivery_point || "-"}</p>
-            {challan.buyer_name && <p className="text-gray-600">Buyer: {challan.buyer_name}</p>}
-            {challan.merchant_name && <p className="text-gray-600">Merchant: {challan.merchant_name}</p>}
-            {challan.style && <p className="text-gray-600">Style: {challan.style}</p>}
-            {challan.customer_booking_ref && <p className="text-gray-600">Customer Booking Ref: {challan.customer_booking_ref}</p>}
-          </div>
-          <div className="text-right">
-            <p><span className="text-gray-600">Challan No: </span><strong>{challan.challan_no}</strong></p>
-            <p><span className="text-gray-600">Date: </span>{formatDate(challan.challan_date)}</p>
-          </div>
-        </div>
-
-        <table className="w-full text-sm border-collapse mb-6">
-          <thead>
-            <tr className="border-b-2 border-gray-800">
-              <th className="text-left py-2">Product</th>
-              <th className="text-left py-2">Measurement</th>
-              <th className="text-right py-2">Quantity (Pcs)</th>
-              {hasPackets && <th className="text-right py-2">Packets</th>}
-            </tr>
-          </thead>
-          <tbody>
-            {items.map((item: any, i: number) => {
-              const bookingData = bookingByProduct[item.product_id];
-              return (
-                <tr key={i} className="border-b">
-                  <td className="py-2">{item.finished_goods?.product_name || "-"}</td>
-                  <td className="py-2">{formatMeasurement(bookingData, item.finished_goods)}</td>
-                  <td className="text-right py-2">{item.quantity_pcs}</td>
-                  {hasPackets && <td className="text-right py-2">{item.packets ?? "-"}</td>}
-                </tr>
-              );
-            })}
-          </tbody>
-          <tfoot>
-            <tr className="border-t-2 border-gray-800 font-semibold">
-              <td className="text-right py-2" colSpan={2}>Total</td>
-              <td className="text-right py-2">{totalQty}</td>
-              {hasPackets && <td className="text-right py-2">{totalPackets}</td>}
-            </tr>
-          </tfoot>
-        </table>
-      </div>
-
-      <div className="flex justify-between items-end text-sm pb-4">
-        <div className="border-t border-gray-400 pt-2 w-40 text-center">Received By</div>
-        <div className="w-40 text-center">
-          {signatureUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={signatureUrl} alt="Authorised Signature" className="h-16 mx-auto object-contain" />
-          ) : (
-            <div className="border-t border-gray-400 pt-2">Authorised Signature</div>
-          )}
-        </div>
-      </div>
-    </div>
+    <ChallanPrintView
+      challan={challan}
+      company={company}
+      challanDateLabel={formatDate(challan.challan_date)}
+    />
   );
 }
