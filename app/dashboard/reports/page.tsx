@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 const links = [
+  { label: "DayBook (দৈনিক জমা খরচ)", href: "/dashboard/reports/daybook", desc: "হাতে-লেখা 'দৈনিক জমা খরচের হিসাব' খাতার রূপ — নগদ বই + বিক্রি + স্টক + সিলিং + পার্টি বাঁকি, প্রিন্টযোগ্য" },
   { label: "Profit & Loss", href: "/dashboard/accounting/profit-loss", desc: "নির্দিষ্ট সময়ের আয়-ব্যয় ও নিট লাভ/ক্ষতি" },
   { label: "Balance Sheet", href: "/dashboard/accounting/balance-sheet", desc: "সম্পদ, দায় ও ইকুইটির অবস্থা" },
   { label: "Stock Report", href: "/dashboard/reports/stock-report", desc: "Raw Material ও Finished Goods-এর সার্বিক স্টক অবস্থা" },
