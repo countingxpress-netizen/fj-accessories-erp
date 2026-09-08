@@ -16,7 +16,7 @@ export default async function FinishedGoodsReceivePage() {
 
   const { data: receives } = await supabase
     .from("finished_goods_receive")
-    .select("*, finished_goods(product_name), production_orders(production_no)")
+    .select("*, finished_goods(product_name), production_orders(production_no), delivery_challans(challan_no)")
     .order("received_date", { ascending: false });
 
   return (
@@ -36,6 +36,7 @@ export default async function FinishedGoodsReceivePage() {
               <th className="px-4 py-2">Production No</th>
               <th className="px-4 py-2">Product</th>
               <th className="px-4 py-2 text-right">Quantity (Pcs)</th>
+              <th className="px-4 py-2">Source</th>
             </tr>
           </thead>
           <tbody>
@@ -45,10 +46,21 @@ export default async function FinishedGoodsReceivePage() {
                 <td className="px-4 py-2">{r.production_orders?.production_no ?? "-"}</td>
                 <td className="px-4 py-2">{r.finished_goods?.product_name ?? "-"}</td>
                 <td className="px-4 py-2 text-right">{r.quantity_pcs?.toLocaleString("en-IN")}</td>
+                <td className="px-4 py-2">
+                  {r.delivery_challan_id ? (
+                    <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs text-blue-700">
+                      চালান {r.delivery_challans?.challan_no ?? ""}
+                    </span>
+                  ) : (
+                    <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600">
+                      Cutting / Manual
+                    </span>
+                  )}
+                </td>
               </tr>
             ))}
             {(!receives || receives.length === 0) && (
-              <tr><td colSpan={4} className="px-4 py-3 text-gray-400 italic">এখনো কোনো Receive এন্ট্রি নেই</td></tr>
+              <tr><td colSpan={5} className="px-4 py-3 text-gray-400 italic">এখনো কোনো Receive এন্ট্রি নেই</td></tr>
             )}
           </tbody>
         </table>
