@@ -27,22 +27,12 @@ export default function ChallanRow({
 
   return (
     <>
-      <tr className="border-t">
-        <td className="px-3 py-2 text-center">
-          <button
-            type="button"
-            onClick={() => setOpen((v) => !v)}
-            aria-label={open ? "বন্ধ করুন" : "বিস্তারিত"}
-            className="text-gray-400 hover:text-gray-700"
-          >
-            {open ? "▾" : "▸"}
-          </button>
-        </td>
-        <td className="px-4 py-2 font-medium">
-          <button type="button" onClick={() => setOpen((v) => !v)} className="hover:underline">
-            {challan.challan_no}
-          </button>
-        </td>
+      <tr
+        className="border-t cursor-pointer hover:bg-gray-50"
+        onClick={() => setOpen((v) => !v)}
+      >
+        <td className="px-3 py-2 text-center text-gray-400">{open ? "▾" : "▸"}</td>
+        <td className="px-4 py-2 font-medium">{challan.challan_no}</td>
         <td className="px-4 py-2 text-gray-500">
           {formatDate(challan.challan_date)}
           {challan.creator?.full_name && <div className="text-[11px] text-gray-400">by {challan.creator.full_name}</div>}
@@ -60,7 +50,7 @@ export default function ChallanRow({
         <td className="px-4 py-2">
           <DeliveryStatusBadge currentStatus={challan.delivery_status ?? "challan_ready"} />
         </td>
-        <td className="px-4 py-2 text-right whitespace-nowrap">
+        <td className="px-4 py-2 text-right whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
           {isLatest && challan.delivery_status !== "challan_received" && (
             <Link
               href={`/dashboard/sales/delivery-challan/${challan.id}/edit`}
