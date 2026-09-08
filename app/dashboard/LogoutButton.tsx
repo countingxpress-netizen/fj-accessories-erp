@@ -1,6 +1,7 @@
 "use client";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import NavIcon from "./NavIcon";
 
 export default function LogoutButton() {
   const router = useRouter();
@@ -15,9 +16,10 @@ export default function LogoutButton() {
   return (
     <button
       onClick={handleLogout}
-      className="mt-2 w-full rounded px-3 py-2 text-left text-sm text-gray-300 hover:bg-gray-800"
+      className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm text-gray-300 hover:bg-gray-800 hover:text-white transition-colors"
     >
-      🚪 Logout
+      <NavIcon name="logout" />
+      <span>Logout</span>
     </button>
   );
 }

@@ -4,6 +4,7 @@ import { getCurrentAppUser } from "@/lib/supabase/getCurrentAppUser";
 import LogoutButton from "./LogoutButton";
 import SidebarMenu from "./SidebarMenu";
 import PermissionProvider from "./PermissionProvider";
+import NavIcon from "./NavIcon";
 import Link from "next/link";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -16,28 +17,38 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
   return (
     <div className="flex min-h-screen">
-      <aside className="print:hidden sticky top-0 h-screen w-64 shrink-0 overflow-y-auto border-r bg-gray-900 text-white p-4 flex flex-col">
-        <h2 className="mb-1 text-lg font-bold">F & J ERP</h2>
-        {appUser && (
-          <p className="mb-4 text-xs text-gray-400">
-            {appUser.full_name} ({appUser.designation})
-          </p>
-        )}
-        <SidebarMenu />
-                {isAdmin && (
-          <div className="border-t border-gray-700 pt-4 mt-4 space-y-1">
-            <Link href="/dashboard/settings" className="block rounded px-3 py-2 hover:bg-gray-800">
-              ⚙ Settings
-            </Link>
-            <Link href="/dashboard/settings/permission-requests" className="block rounded px-3 py-2 hover:bg-gray-800">
-              🔓 Permission Requests
-            </Link>
+      <aside className="print:hidden sticky top-0 h-screen w-64 shrink-0 overflow-y-auto border-r border-gray-800 bg-gray-900 text-white p-3 flex flex-col">
+        <div className="flex items-center gap-2 px-2 py-2 mb-2">
+          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/10 text-sm font-bold">FJ</span>
+          <div className="min-w-0">
+            <p className="text-sm font-semibold leading-tight">F &amp; J ERP</p>
+            {appUser && (
+              <p className="truncate text-[11px] text-gray-400 leading-tight">
+                {appUser.full_name} · {appUser.designation}
+              </p>
+            )}
           </div>
-        )}
-        <Link href="/dashboard/settings/change-password" className={`block rounded px-3 py-2 hover:bg-gray-800 ${!isAdmin ? "border-t border-gray-700 pt-4 mt-4" : ""}`}>
-          🔒 Change Password
-        </Link>
-        <LogoutButton />
+        </div>
+        <SidebarMenu />
+        <div className="mt-3 border-t border-gray-800 pt-3 space-y-0.5">
+          {isAdmin && (
+            <>
+              <Link href="/dashboard/settings" className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-gray-300 hover:bg-gray-800 hover:text-white transition-colors">
+                <NavIcon name="settings" />
+                <span>Settings</span>
+              </Link>
+              <Link href="/dashboard/settings/permission-requests" className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-gray-300 hover:bg-gray-800 hover:text-white transition-colors">
+                <NavIcon name="permissions" />
+                <span>Permission Requests</span>
+              </Link>
+            </>
+          )}
+          <Link href="/dashboard/settings/change-password" className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-gray-300 hover:bg-gray-800 hover:text-white transition-colors">
+            <NavIcon name="lock" />
+            <span>Change Password</span>
+          </Link>
+          <LogoutButton />
+        </div>
       </aside>
       <main className="flex-1 bg-gray-50 p-6 print:p-0 print:bg-white">
         <PermissionProvider isAdmin={isAdmin} userId={appUser?.id ?? ""}>
