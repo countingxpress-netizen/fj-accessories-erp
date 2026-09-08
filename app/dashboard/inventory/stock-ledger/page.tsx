@@ -7,6 +7,7 @@ const referenceLabels: Record<string, string> = {
   manual_adjustment: "Manual Adjustment",
   purchase: "Purchase Entry",
   production: "Production",
+  challan_receive: "Challan Receive",
   delivery: "Delivery",
   wastage: "Wastage",
   stock_transfer: "Warehouse Transfer",

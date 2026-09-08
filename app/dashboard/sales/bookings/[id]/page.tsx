@@ -33,7 +33,7 @@ export default async function BookingViewPage({ params }: { params: Promise<{ id
 
   const { data: allChallanItems } = await supabase
     .from("delivery_challan_items")
-    .select("quantity_pcs, delivery_challans(booking_id, challan_no, challan_date)");
+    .select("quantity_pcs, booking_id, delivery_challans(booking_id, challan_no, challan_date)");
 
   const deliveredMap: Record<string, number> = {};
   const challanNosByBooking: Record<string, Set<string>> = {};
@@ -41,11 +41,12 @@ export default async function BookingViewPage({ params }: { params: Promise<{ id
 
   (allChallanItems ?? []).forEach((item: any) => {
     const dc = item.delivery_challans;
-    if (!dc || !bookingIds.includes(dc.booking_id)) return;
-    deliveredMap[dc.booking_id] = (deliveredMap[dc.booking_id] ?? 0) + item.quantity_pcs;
-    if (!challanNosByBooking[dc.booking_id]) challanNosByBooking[dc.booking_id] = new Set();
-    if (!challanNosByBooking[dc.booking_id].has(dc.challan_no)) {
-      challanNosByBooking[dc.booking_id].add(dc.challan_no);
+    const bId = item.booking_id ?? dc?.booking_id;
+    if (!dc || !bId || !bookingIds.includes(bId)) return;
+    deliveredMap[bId] = (deliveredMap[bId] ?? 0) + item.quantity_pcs;
+    if (!challanNosByBooking[bId]) challanNosByBooking[bId] = new Set();
+    if (!challanNosByBooking[bId].has(dc.challan_no)) {
+      challanNosByBooking[bId].add(dc.challan_no);
       challanListForGroup.push({ challan_no: dc.challan_no, challan_date: dc.challan_date });
     }
   });

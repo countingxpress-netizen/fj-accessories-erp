@@ -7,7 +7,7 @@ export default async function DeliveryChallanListPage() {
 
   const { data: challans, error } = await supabase
     .from("delivery_challans")
-    .select("*, customers(name), bookings(booking_no), delivery_challan_items(quantity_pcs, finished_goods(product_name)), creator:app_users!delivery_challans_created_by_fkey(full_name)")
+    .select("*, customers(name), bookings(booking_no), delivery_challan_items(booking_id, quantity_pcs, finished_goods(product_name)), creator:app_users!delivery_challans_created_by_fkey(full_name)")
     .order("challan_date", { ascending: false })
     .order("created_at", { ascending: false });
 
@@ -16,6 +16,40 @@ export default async function DeliveryChallanListPage() {
   }
 
   const challanList = challans ?? [];
+
+  // PI No — প্রতিটা challan-এর item booking_id → pi_items → proforma_invoices.pi_no
+  // (এক বুকিং একাধিক PI/revision-এ থাকতে পারে — সব PI No কমা দিয়ে দেখাই)
+  const allBookingIds = Array.from(
+    new Set(
+      challanList.flatMap((c: any) =>
+        (c.delivery_challan_items ?? []).map((i: any) => i.booking_id).filter(Boolean),
+      ),
+    ),
+  );
+
+  const piNosByBooking: Record<string, string[]> = {};
+  if (allBookingIds.length) {
+    const { data: piRows } = await supabase
+      .from("pi_items")
+      .select("booking_id, proforma_invoices(pi_no)")
+      .in("booking_id", allBookingIds);
+    (piRows ?? []).forEach((r: any) => {
+      const piNo = r.proforma_invoices?.pi_no;
+      if (!r.booking_id || !piNo) return;
+      const arr = (piNosByBooking[r.booking_id] ??= []);
+      if (!arr.includes(piNo)) arr.push(piNo);
+    });
+  }
+
+  const piNoByChallan: Record<string, string> = {};
+  challanList.forEach((c: any) => {
+    const nos = Array.from(
+      new Set(
+        (c.delivery_challan_items ?? []).flatMap((i: any) => piNosByBooking[i.booking_id] ?? []),
+      ),
+    );
+    piNoByChallan[c.id] = nos.join(", ");
+  });
 
   return (
     <div className="p-6">
@@ -29,7 +63,7 @@ export default async function DeliveryChallanListPage() {
         </Link>
       </div>
 
-      <ChallanTable challans={challanList} />
+      <ChallanTable challans={challanList} piNoByChallan={piNoByChallan} />
     </div>
   );
 }

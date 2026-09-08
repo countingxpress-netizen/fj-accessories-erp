@@ -11,7 +11,7 @@ export default async function BookingsListPage() {
 
   const { data: allChallanItems } = await supabase
     .from("delivery_challan_items")
-    .select("quantity_pcs, delivery_challans(booking_id, challan_no)");
+    .select("quantity_pcs, booking_id, delivery_challans(booking_id, challan_no)");
 
   // PI No — pi_items দিয়ে (pi_bookings টেবিল কোথাও populate হয় না, তাই সেটা ব্যবহার করা যাবে না)
   const { data: piItemRows } = await supabase
@@ -28,7 +28,7 @@ export default async function BookingsListPage() {
   const deliveredMap: Record<string, number> = {};
   const challanNosByBookingSet: Record<string, Set<string>> = {};
   (allChallanItems ?? []).forEach((item: any) => {
-    const bId = item.delivery_challans?.booking_id;
+    const bId = item.booking_id ?? item.delivery_challans?.booking_id;
     if (!bId) return;
     deliveredMap[bId] = (deliveredMap[bId] ?? 0) + item.quantity_pcs;
     if (!challanNosByBookingSet[bId]) challanNosByBookingSet[bId] = new Set();

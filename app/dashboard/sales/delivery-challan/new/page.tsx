@@ -14,11 +14,11 @@ export default async function NewDeliveryChallanPage() {
 
   const { data: allItems } = await supabase
     .from("delivery_challan_items")
-    .select("quantity_pcs, delivery_challans(booking_id)");
+    .select("quantity_pcs, booking_id, delivery_challans(booking_id)");
 
   const deliveredMap: Record<string, number> = {};
   (allItems ?? []).forEach((item: any) => {
-    const bId = item.delivery_challans?.booking_id;
+    const bId = item.booking_id ?? item.delivery_challans?.booking_id;
     if (!bId) return;
     deliveredMap[bId] = (deliveredMap[bId] ?? 0) + item.quantity_pcs;
   });

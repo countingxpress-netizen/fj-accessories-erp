@@ -8,8 +8,8 @@ import { deleteChallanCascade } from "@/lib/challanDelete";
 import GuardedAction from "@/app/dashboard/GuardedAction";
 
 export default function ChallanRow({
-  challan, selected, onToggleSelect,
-}: { challan: any; selected?: boolean; onToggleSelect?: () => void }) {
+  challan, piNo, selected, onToggleSelect,
+}: { challan: any; piNo?: string; selected?: boolean; onToggleSelect?: () => void }) {
   const router = useRouter();
   const supabase = createClient();
 
@@ -45,6 +45,7 @@ export default function ChallanRow({
       </td>
       <td className="px-4 py-2">{challan.customers?.name ?? "-"}</td>
       <td className="px-4 py-2">{challan.bookings?.booking_no ?? "-"}</td>
+      <td className="px-4 py-2">{piNo || <span className="text-gray-400">-</span>}</td>
       <td className="px-4 py-2">{productNames}</td>
       <td className="px-4 py-2 text-right">{totalQty}</td>
       <td className="px-4 py-2">
@@ -52,7 +53,7 @@ export default function ChallanRow({
       </td>
 
     <td className="px-4 py-2">
-        <DeliveryStatusBadge challanId={challan.id} currentStatus={challan.delivery_status ?? "challan_ready"} />
+        <DeliveryStatusBadge currentStatus={challan.delivery_status ?? "challan_ready"} />
       </td>
 
       <td className="px-4 py-2 text-right whitespace-nowrap">

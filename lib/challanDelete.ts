@@ -2,18 +2,24 @@ import { createClient } from "@/lib/supabase/client";
 import { DeleteResult, friendlyDeleteError } from "@/lib/deleteResult";
 import { recalcBookingStatus } from "@/lib/recalcBookingStatus";
 import { reverseInventoryJv } from "@/lib/inventoryCost";
+import { reverseChallanFulfilment } from "@/lib/challanProduction";
 
 type SupabaseClient = ReturnType<typeof createClient>;
 
 /**
- * Deletes a Delivery Challan, restores finished_goods_stock for every
- * stock_ledger entry it created, then recalculates the linked booking's
- * status (delivered/partial state depends on remaining challans).
+ * Deletes a Delivery Challan and undoes everything it created:
+ *   • shipment COGS JV (Dr 5050 / Cr 1210) reversed
+ *   • challan-triggered FG Receive(s) reversed — WIP cost back to the production
+ *     order, finished_goods_receive rows removed, production stage rolled back if
+ *     this challan was the only reason it finished (lib/challanProduction.ts)
+ *   • finished_goods_stock restored for every stock_ledger entry (both the
+ *     'challan_receive' in and the 'delivery' out)
+ *   • linked bookings' statuses recalculated (one challan may span many bookings)
  */
 export async function deleteChallanCascade(
   supabase: SupabaseClient,
   challanId: string,
-  bookingId?: string | null
+  _bookingId?: string | null,
 ): Promise<DeleteResult> {
   // shipment-এর COGS JV উল্টে দিন (voucher delete-এর আগে challan-এর
   // inventory_voucher_id null করে, নাহলে plain FK-এ আটকে orphan থেকে যায়)
@@ -23,6 +29,10 @@ export async function deleteChallanCascade(
     unlink: { table: "delivery_challans", column: "inventory_voucher_id", id: challanId },
   });
 
+  // চালান-ট্রিগার করা FG Receive + production completion উল্টান
+  await reverseChallanFulfilment(supabase, challanId);
+
+  // shipment (out) ledger থেকে finished_goods_stock ফেরত
   const { data: ledgerEntries } = await supabase
     .from("stock_ledger").select("*").eq("reference_type", "delivery").eq("reference_id", challanId);
 
@@ -41,11 +51,22 @@ export async function deleteChallanCascade(
     }
   }
   await supabase.from("stock_ledger").delete().eq("reference_type", "delivery").eq("reference_id", challanId);
+
+  // এই challan-এর সব booking (item.booking_id) — delete-এর আগে সংগ্রহ করে রাখি
+  const { data: itemRows } = await supabase
+    .from("delivery_challan_items").select("booking_id").eq("challan_id", challanId);
+  const bookingIds = Array.from(
+    new Set([
+      ...(itemRows ?? []).map((i: any) => i.booking_id).filter(Boolean),
+      ...(_bookingId ? [_bookingId] : []),
+    ]),
+  );
+
   await supabase.from("delivery_challan_items").delete().eq("challan_id", challanId);
   const { error } = await supabase.from("delivery_challans").delete().eq("id", challanId);
 
   if (error) return { ok: false, error: friendlyDeleteError(error) };
 
-  if (bookingId) await recalcBookingStatus(supabase, bookingId);
+  for (const bId of bookingIds) await recalcBookingStatus(supabase, bId as string);
   return { ok: true };
 }

@@ -7,7 +7,9 @@ import { deleteChallanCascade } from "@/lib/challanDelete";
 import { useBulkDeletePermission } from "@/app/dashboard/PermissionProvider";
 import ChallanRow from "./ChallanRow";
 
-export default function ChallanTable({ challans }: { challans: any[] }) {
+export default function ChallanTable({
+  challans, piNoByChallan = {},
+}: { challans: any[]; piNoByChallan?: Record<string, string> }) {
   const router = useRouter();
   const supabase = createClient();
   const { partition, markFulfilled } = useBulkDeletePermission("delivery_challans");
@@ -53,6 +55,7 @@ export default function ChallanTable({ challans }: { challans: any[] }) {
               <th className="px-4 py-2">Date</th>
               <th className="px-4 py-2">Customer</th>
               <th className="px-4 py-2">Booking</th>
+              <th className="px-4 py-2">PI No</th>
               <th className="px-4 py-2">Product</th>
               <th className="px-4 py-2 text-right">Qty</th>
               <th className="px-4 py-2">Type</th>
@@ -62,11 +65,11 @@ export default function ChallanTable({ challans }: { challans: any[] }) {
           </thead>
           <tbody>
             {challans.map((c: any) => (
-              <ChallanRow key={c.id} challan={c} selected={isSelected(c.id)} onToggleSelect={() => toggle(c.id)} />
+              <ChallanRow key={c.id} challan={c} piNo={piNoByChallan[c.id] ?? ""} selected={isSelected(c.id)} onToggleSelect={() => toggle(c.id)} />
             ))}
             {challans.length === 0 && (
               <tr>
-                <td colSpan={10} className="px-4 py-4 text-center text-gray-400 italic">
+                <td colSpan={11} className="px-4 py-4 text-center text-gray-400 italic">
                   এখনো কোনো Delivery Challan নেই
                 </td>
               </tr>

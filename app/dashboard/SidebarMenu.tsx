@@ -52,6 +52,7 @@ const menu: MenuGroup[] = [
       { label: "Quotation", href: "/dashboard/sales/quotations" },
       { label: "Sales Invoice", href: "/dashboard/sales/invoices" },
       { label: "Delivery Challan", href: "/dashboard/sales/delivery-challan" },
+      { label: "Challan Received", href: "/dashboard/sales/challan-received" },
       { label: "Payment Received", href: "/dashboard/sales/payment-received" },
       { label: "Customer Ledger", href: "/dashboard/sales/customer-ledger" },
     ],

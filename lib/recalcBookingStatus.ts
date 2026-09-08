@@ -4,14 +4,11 @@ export async function recalcBookingStatus(supabase: SupabaseClient, bookingId: s
   const { data: booking } = await supabase.from("bookings").select("quantity_pcs, status").eq("id", bookingId).single();
   if (!booking) return;
 
-  const { data: challans } = await supabase.from("delivery_challans").select("id").eq("booking_id", bookingId);
-  const challanIds = (challans ?? []).map((c: any) => c.id);
-
-  let delivered = 0;
-  if (challanIds.length) {
-    const { data: items } = await supabase.from("delivery_challan_items").select("quantity_pcs").in("challan_id", challanIds);
-    delivered = (items ?? []).reduce((s: number, i: any) => s + i.quantity_pcs, 0);
-  }
+  // delivered = এই বুকিং-এর সব challan item (item.booking_id দিয়ে — এক challan-এ
+  // একাধিক বুকিং থাকতে পারে, তাই challan header-এর booking_id নয়)
+  const { data: items } = await supabase
+    .from("delivery_challan_items").select("quantity_pcs").eq("booking_id", bookingId);
+  const delivered = (items ?? []).reduce((s: number, i: any) => s + Number(i.quantity_pcs || 0), 0);
 
   let newStatus = booking.status;
   if (delivered <= 0) newStatus = "in_production";

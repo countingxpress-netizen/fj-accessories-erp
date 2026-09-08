@@ -36,7 +36,9 @@ export default function ProductionStageRow({ row, isAdmin }: { row: StageRow; is
   const supabase = createClient();
 
   const cumulativeProduced = row.produced || 0;
-  const isDone = cumulativeProduced >= row.target && row.target > 0;
+  // Target পূরণ হলে — অথবা চালানের মাধ্যমে স্টেজ finish হয়ে গেলে (আংশিক হলেও
+  // completed_at বসে) — "OK" দেখাই।
+  const isDone = row.completed || (cumulativeProduced >= row.target && row.target > 0);
   const remaining = Math.max(0, row.target - cumulativeProduced);
 
   async function applyUpdate(newTotal: number) {

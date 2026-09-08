@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { formatDate } from "@/lib/formatDate";
 import { notFound } from "next/navigation";
-import PrintButton from "@/app/dashboard/PrintButton";
+import ChallanPrintButton from "./ChallanPrintButton";
 
 function formatMeasurement(booking: any, finishedGood: any) {
   // ১. বুকিং ডাটা থাকলে সেটা দেখাবে
@@ -75,7 +75,7 @@ export default async function ChallanPrintPage({ params }: { params: Promise<{ i
 
   return (
     <div className="min-h-[297mm] flex flex-col max-w-3xl mx-auto p-8 bg-white text-gray-900 print:p-0">
-      <PrintButton />
+      <ChallanPrintButton challanId={challan.id} currentStatus={challan.delivery_status ?? "challan_ready"} />
 
       <div className="flex-1">
         <div className="mb-6 border-b pb-4 flex items-center justify-center gap-4">

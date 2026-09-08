@@ -6,6 +6,7 @@ import { generateNextDocNo } from "@/lib/docNumber";
 import { recalcBookingStatus } from "@/lib/recalcBookingStatus";
 import { formatStyle } from "@/lib/formatStyle";
 import { postChallanCogsJv } from "@/lib/inventoryCost";
+import { fulfilBookingForChallan } from "@/lib/challanProduction";
 import { getCurrentUserId } from "@/lib/currentUser";
 
 type Booking = {
@@ -157,8 +158,20 @@ export default function DeliveryChallanForm({
       const wId = resolveWarehouse(li.booking);
 
       await supabase.from("delivery_challan_items").insert({
-        challan_id: challan.id, product_id: li.booking.product_id, quantity_pcs: li.qty,
-        packets: li.packets || null,
+        challan_id: challan.id, booking_id: li.booking.id, product_id: li.booking.product_id,
+        quantity_pcs: li.qty, packets: li.packets || null,
+      });
+
+      // নতুন নিয়ম — চালান = ঐ qty উৎপাদিত: production order finished + এই qty FG-তে receive
+      // (Dr 1210 / Cr 1220 + finished_goods_receive + stock ↑)। এরপর নিচে shipment COGS + stock ↓।
+      await fulfilBookingForChallan(supabase, {
+        bookingId: li.booking.id,
+        productId: li.booking.product_id,
+        warehouseId: wId,
+        challanId: challan.id,
+        challanNo,
+        qtyPcs: li.qty,
+        date: challanDate,
       });
 
       const { data: stock } = await supabase
@@ -258,16 +271,13 @@ export default function DeliveryChallanForm({
                 <th className="px-3 py-2 text-right">Remaining</th>
                 <th className="px-3 py-2 w-28">Qty</th>
                 <th className="px-3 py-2 w-24">Packets</th>
-                <th className="px-3 py-2 w-56">Warehouse (স্টক থেকে কাটবে)</th>
+                <th className="px-3 py-2 w-56">Warehouse (এখানে receive হয়ে ডেলিভারি হবে)</th>
               </tr>
             </thead>
             <tbody>
               {customerBookings.map((b) => {
                 const wId = resolveWarehouse(b);
                 const rows = warehouseRowsFor(b.product_id);
-                const selectedRow = rows.find((r) => r.id === wId);
-                const qty = parseFloat(selectedQty[b.id] || "0");
-                const short = qty > 0 && selectedRow && qty > selectedRow.qty;
                 return (
                   <tr key={b.id} className="border-t align-top">
                     <td className="px-3 py-2 font-medium">{b.booking_no}</td>
@@ -285,18 +295,13 @@ export default function DeliveryChallanForm({
                       <select
                         value={wId}
                         onChange={(e) => setLineWarehouse((prev) => ({ ...prev, [b.id]: e.target.value }))}
-                        className={`w-full rounded border px-2 py-1 text-sm ${short ? "border-red-400 bg-red-50" : ""}`}
+                        className="w-full rounded border px-2 py-1 text-sm"
                       >
                         {warehouses.length === 0 && <option value="">-- কোনো Warehouse নেই --</option>}
                         {rows.map((r) => (
-                          <option key={r.id} value={r.id}>{r.name} — {r.qty} pcs</option>
+                          <option key={r.id} value={r.id}>{r.name}{r.qty > 0 ? ` — স্টক ${r.qty}` : ""}</option>
                         ))}
                       </select>
-                      {short && (
-                        <p className="text-xs text-red-600 mt-0.5">
-                          ⚠ এই গুদামে মাত্র {selectedRow?.qty ?? 0} pcs আছে — স্টক ঋণাত্মক হবে
-                        </p>
-                      )}
                     </td>
                   </tr>
                 );

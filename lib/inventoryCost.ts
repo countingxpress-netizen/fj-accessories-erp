@@ -167,7 +167,7 @@ export async function postBookingConsumptionJv(
  */
 export async function postFgReceiveJv(
   supabase: Client,
-  args: { date: string; productionOrderId: string; productionNo: string; productId: string; pcs: number }
+  args: { date: string; productionOrderId: string; productionNo: string; productId: string; pcs: number; alreadyReceivedPcs?: number }
 ): Promise<{ voucherId: string | null; unitCost: number; totalCost: number }> {
   const nil = { voucherId: null as string | null, unitCost: 0, totalCost: 0 };
   if (!(args.pcs > 0)) return nil;
@@ -178,9 +178,11 @@ export async function postFgReceiveJv(
   const orderPcs = Number(po?.quantity_pcs) || 0;
   if (wipCost <= 0) return nil;
 
-  // পুরো অর্ডার একবারে এলে সব WIP সরে; আংশিক এলে অনুপাতে
-  const transfer = orderPcs > 0 && args.pcs < orderPcs
-    ? round2(wipCost * (args.pcs / orderPcs))
+  // wip_cost = এখন পর্যন্ত বাকি WIP (আগের receive-গুলোতে কমেছে)। এই দফায় যতটুকু pcs
+  // আসছে তার অনুপাতে বাকি WIP সরে; শেষ দফায় (বাকি সব pcs) পুরো বাকি WIP সরে যায়।
+  const remainingPcs = Math.max(0, orderPcs - (Number(args.alreadyReceivedPcs) || 0));
+  const transfer = remainingPcs > 0 && args.pcs < remainingPcs
+    ? round2(wipCost * (args.pcs / remainingPcs))
     : round2(wipCost);
   if (transfer <= 0) return nil;
 
