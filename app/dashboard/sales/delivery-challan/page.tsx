@@ -7,7 +7,7 @@ export default async function DeliveryChallanListPage() {
 
   const { data: challans, error } = await supabase
     .from("delivery_challans")
-    .select("*, customers(name), bookings(booking_no), delivery_challan_items(booking_id, quantity_pcs, print_label, finished_goods(product_name)), creator:app_users!delivery_challans_created_by_fkey(full_name)")
+    .select("*, customers(name), bookings(booking_no), delivery_challan_items(id, booking_id, quantity_pcs, packets, print_label, finished_goods(product_name)), creator:app_users!delivery_challans_created_by_fkey(full_name)")
     .order("challan_date", { ascending: false })
     .order("created_at", { ascending: false });
 
@@ -52,6 +52,16 @@ export default async function DeliveryChallanListPage() {
     piNoByChallan[c.id] = nos.join(", ");
   });
 
+  // প্রতিটা লাইনের Measurement দেখাতে — booking_id → measurement fields
+  const bkById: Record<string, any> = {};
+  if (allBookingIds.length) {
+    const { data: bks } = await supabase
+      .from("bookings")
+      .select("id, booking_no, measurement_type, measurement_unit, length_val, width_val, flap_val, gusset_val, pillow_val")
+      .in("id", allBookingIds);
+    (bks ?? []).forEach((b: any) => { bkById[b.id] = b; });
+  }
+
   return (
     <div className="p-6">
       <div className="flex items-center justify-between mb-4">
@@ -64,7 +74,7 @@ export default async function DeliveryChallanListPage() {
         </Link>
       </div>
 
-      <ChallanTable challans={challanList} piNoByChallan={piNoByChallan} latestChallanNo={latestChallanNo} />
+      <ChallanTable challans={challanList} piNoByChallan={piNoByChallan} latestChallanNo={latestChallanNo} bkById={bkById} />
     </div>
   );
 }

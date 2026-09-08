@@ -8,7 +8,7 @@ export default async function ChallanReceivedPage() {
 
   const { data: challans } = await supabase
     .from("delivery_challans")
-    .select("id, challan_no, challan_date, delivery_status, received_date, received_note, printed_at, customers(name), delivery_challan_items(quantity_pcs)")
+    .select("id, challan_no, challan_date, delivery_status, received_date, received_note, received_file_url, printed_at, customers(name), delivery_challan_items(quantity_pcs)")
     .in("delivery_status", ["delivery_done", "challan_received"])
     .order("challan_date", { ascending: false })
     .order("created_at", { ascending: false });
@@ -31,7 +31,8 @@ export default async function ChallanReceivedPage() {
       </div>
       <p className="text-sm text-gray-500 mb-4">
         Print করা (Delivery Done) চালানের কাস্টমার-স্বাক্ষরিত কপি ফেরত এলে এখানে সিলেক্ট করে
-        &quot;Received&quot; দিন — Delivery Challans লিস্টে স্ট্যাটাস &quot;Challan Received&quot; হয়ে যাবে।
+        &quot;Received&quot; দিন — চাইলে স্ক্যান কপি/ছবি আপলোড করুন। Delivery Challans লিস্টে স্ট্যাটাস
+        &quot;Challan Received&quot; হয়ে যাবে।
       </p>
 
       <ChallanReceivedForm pending={pending} />
@@ -47,6 +48,7 @@ export default async function ChallanReceivedPage() {
               <th className="px-4 py-2 text-right">Qty</th>
               <th className="px-4 py-2">Received Date</th>
               <th className="px-4 py-2">Note</th>
+              <th className="px-4 py-2 text-right">Action</th>
             </tr>
           </thead>
           <tbody>
@@ -58,10 +60,26 @@ export default async function ChallanReceivedPage() {
                 <td className="px-4 py-2 text-right">{c.totalQty}</td>
                 <td className="px-4 py-2 text-gray-500">{c.received_date ? formatDate(c.received_date) : "-"}</td>
                 <td className="px-4 py-2 text-gray-500">{c.received_note || "-"}</td>
+                <td className="px-4 py-2 text-right whitespace-nowrap">
+                  <Link
+                    href={`/dashboard/sales/delivery-challan/${c.id}/print`}
+                    target="_blank"
+                    className="text-blue-700 hover:underline text-xs mr-3"
+                  >
+                    View
+                  </Link>
+                  {c.received_file_url ? (
+                    <a href={c.received_file_url} target="_blank" rel="noreferrer" className="text-gray-700 hover:underline text-xs">
+                      রিসিট কপি
+                    </a>
+                  ) : (
+                    <span className="text-gray-300 text-xs">রিসিট নেই</span>
+                  )}
+                </td>
               </tr>
             ))}
             {received.length === 0 && (
-              <tr><td colSpan={6} className="px-4 py-4 text-center text-gray-400 italic">এখনো কোনো চালান Received হয়নি</td></tr>
+              <tr><td colSpan={7} className="px-4 py-4 text-center text-gray-400 italic">এখনো কোনো চালান Received হয়নি</td></tr>
             )}
           </tbody>
         </table>
