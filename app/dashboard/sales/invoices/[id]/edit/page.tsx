@@ -94,7 +94,7 @@ export default async function EditInvoicePage({ params }: { params: Promise<{ id
     supabase.from("customers").select("*").order("name"),
     supabase
       .from("bookings")
-      .select("id, booking_no, booking_date, quantity_pcs, product_id, customer_id, style, garments_name, buyers(name), merchants(name), delivery_point, customer_booking_ref, has_print, print_colors, rate_per_color, rate_per_inch, measurement_type, measurement_unit, length_val, width_val, flap_val, gusset_val, pillow_val, thickness_mm, material_type, finished_goods(product_name, length_cm, width_cm, thickness)")
+      .select("id, booking_no, booking_date, quantity_pcs, product_id, customer_id, style, garments_name, buyers(name), merchants(name), delivery_point, customer_booking_ref, has_print, print_colors, rate_per_color, rate_per_inch, measurement_type, measurement_unit, length_val, width_val, flap_val, gusset_val, pillow_val, thickness_mm, material_type, plain_cm_conversion, finished_goods(product_name, length_cm, width_cm, thickness)")
       .order("booking_date", { ascending: false }),
     supabase.from("rate_history").select("customer_id, effective_from, rate").not("customer_id", "is", null),
     supabase.from("sales_invoice_items").select("booking_id, quantity_pcs"),

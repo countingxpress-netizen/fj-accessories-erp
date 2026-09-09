@@ -115,7 +115,7 @@ export default function OpeningInventoryForm({
     const createdBy = await getCurrentUserId(supabase);
     const { data: voucher, error: vErr } = await supabase
       .from("journal_vouchers")
-      .insert({ voucher_no: voucherNo, voucher_date: date, narration: "Opening inventory reconciliation", created_by: createdBy })
+      .insert({ voucher_no: voucherNo, voucher_date: date, narration: "Opening inventory reconciliation", created_by: createdBy, source: "opening" })
       .select("id").single();
     if (vErr || !voucher) { setLoading(false); setError(vErr?.message ?? "Voucher তৈরি ব্যর্থ।"); return; }
 

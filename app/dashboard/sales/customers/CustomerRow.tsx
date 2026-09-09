@@ -15,9 +15,10 @@ type Customer = {
   opening_balance: number | null;
   commission_enabled: boolean | null; commission_percentage: number | null;
   lbs_invoicing_enabled: boolean | null; making_cutting_rate: number | null;
+  plain_cm_conversion: boolean | null;
 };
 
-const COL_SPAN = 12;
+const COL_SPAN = 13;
 
 export default function CustomerRow({
   customer, selected, onToggleSelect,
@@ -36,6 +37,7 @@ export default function CustomerRow({
   const [commissionPercentage, setCommissionPercentage] = useState(customer.commission_percentage != null ? String(customer.commission_percentage) : "1");
   const [lbsInvoicingEnabled, setLbsInvoicingEnabled] = useState(!!customer.lbs_invoicing_enabled);
   const [makingCuttingRate, setMakingCuttingRate] = useState(customer.making_cutting_rate != null ? String(customer.making_cutting_rate) : "0");
+  const [plainCmConversion, setPlainCmConversion] = useState(!!customer.plain_cm_conversion);
   // LBS customer-এর Powder/Material rate = price_per_lbs (LBS ব্লক থেকেই সরাসরি বসে)।
   const [lbsMaterialRate, setLbsMaterialRate] = useState(customer.price_per_lbs != null ? String(customer.price_per_lbs) : "");
   const [error, setError] = useState("");
@@ -58,6 +60,7 @@ export default function CustomerRow({
         commission_percentage: parseFloat(commissionPercentage) || 0,
         lbs_invoicing_enabled: lbsInvoicingEnabled,
         making_cutting_rate: parseFloat(makingCuttingRate) || 0,
+        plain_cm_conversion: plainCmConversion,
         ...(lbsInvoicingEnabled ? { price_per_lbs: parseFloat(lbsMaterialRate) || 0 } : {}),
       })
       .eq("id", customer.id);
@@ -134,6 +137,12 @@ export default function CustomerRow({
               </div>
             )}
           </td>
+          <td className="px-4 py-2">
+            <label className="flex items-center gap-1 text-xs" title="cm মাপ inch-এ ডাই-সাইজ টেবিল বাদ দিয়ে সরল ÷2.54 (আইরিশ / দেবনিয়ার ধরনের কাস্টমার)">
+              <input type="checkbox" checked={plainCmConversion} onChange={(e) => setPlainCmConversion(e.target.checked)} />
+              ÷2.54
+            </label>
+          </td>
           <td className="px-4 py-2 text-right whitespace-nowrap">
             <button onClick={handleSave} disabled={loading} className="rounded bg-green-600 px-3 py-1 text-xs text-white mr-1">সেভ</button>
             <button onClick={() => setEditing(false)} className="rounded bg-gray-200 px-3 py-1 text-xs text-gray-700">বাতিল</button>
@@ -172,6 +181,11 @@ export default function CustomerRow({
           {customer.lbs_invoicing_enabled
             ? `Powder ${customer.price_per_lbs ?? 0} · M/C ${customer.making_cutting_rate ?? 0}`
             : "—"}
+        </td>
+        <td className="px-4 py-2 text-center">
+          {customer.plain_cm_conversion
+            ? <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-800">÷2.54</span>
+            : <span className="text-gray-300 text-xs">টেবিল</span>}
         </td>
         <td className="px-4 py-2 text-right whitespace-nowrap">
           <GuardedAction table="customers" recordId={customer.id} recordLabel={customer.name} action="edit"

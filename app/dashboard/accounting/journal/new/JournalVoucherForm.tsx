@@ -158,7 +158,7 @@ export default function JournalVoucherForm({
     const createdBy = await getCurrentUserId(supabase);
     const { data: voucher, error: voucherError } = await supabase
       .from("journal_vouchers")
-      .insert({ voucher_no: voucherNo, voucher_date: date, narration, created_by: createdBy })
+      .insert({ voucher_no: voucherNo, voucher_date: date, narration, created_by: createdBy, source: "manual" })
       .select()
       .single();
 

@@ -43,7 +43,7 @@ export default function BankChargesForm({ lcs }: { lcs: LC[] }) {
       const voucherNo = await generateNextDocNo(supabase, "journal_vouchers", "voucher_no", "JV", "voucher_date", chargeDate);
       const { data: voucher } = await supabase
         .from("journal_vouchers")
-        .insert({ voucher_no: voucherNo, voucher_date: chargeDate, narration: `Bank Charge — ${description || "N/A"}`, created_by: createdBy })
+        .insert({ voucher_no: voucherNo, voucher_date: chargeDate, narration: `Bank Charge — ${description || "N/A"}`, created_by: createdBy, source: "bank_charge" })
         .select().single();
 
       if (voucher) {

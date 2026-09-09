@@ -117,6 +117,7 @@ export default function EditOtherInvoiceForm({
           voucher_date: invoiceDate,
           narration: `Sales Invoice ${invoiceRow?.invoice_no} — ${customerName} (Other, ${paymentReceived ? "Cash" : "Credit"}, edited)`,
           created_by: createdBy,
+          source: "sales_invoice",
         })
         .select()
         .single();

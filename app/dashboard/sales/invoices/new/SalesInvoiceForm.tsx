@@ -17,6 +17,7 @@ type Booking = {
   measurement_type: string; measurement_unit: string;
   length_val: number; width_val: number; flap_val: number | null; gusset_val: number | null; pillow_val: number | null; thickness_mm: number;
   material_type: string;
+  plain_cm_conversion?: boolean | null;
   finished_goods: { product_name: string; length_cm: number; width_cm: number; thickness: number } | null;
 };
 type Customer = {
@@ -173,7 +174,7 @@ export default function SalesInvoiceForm({
     if (!pricePerLbs || !b.thickness_mm) return 0;
 
     const { tube, cutting } = calcTubeCutting(b);
-    const { tubeInch, cuttingInch } = toInches(tube, cutting, b.measurement_unit, b.material_type, b.has_print);
+    const { tubeInch, cuttingInch } = toInches(tube, cutting, b.measurement_unit, b.material_type, b.has_print, !!b.plain_cm_conversion);
 
     const baseUnitPrice = (pricePerLbs * tubeInch * cuttingInch * b.thickness_mm) / 75000;
     const { printCharge, adhesiveCharge } = getSurcharge(b, cuttingInch);
@@ -288,7 +289,7 @@ export default function SalesInvoiceForm({
         .insert({
           voucher_no: voucherNo, voucher_date: invoiceDate,
           narration: `Sales Invoice ${invoiceNo} — ${selectedCustomer?.name} (${paymentReceived ? "Cash" : "Credit"})`,
-          created_by: createdBy,
+          created_by: createdBy, source: "sales_invoice",
         })
         .select().single();
 
@@ -387,7 +388,7 @@ export default function SalesInvoiceForm({
         .insert({
           voucher_no: voucherNo, voucher_date: invoiceDate,
           narration: `Sales Invoice ${editInvoice.invoiceNo} — ${selectedCustomer?.name ?? ""} (${paymentReceived ? "Cash" : "Credit"}, edited)`,
-          created_by: createdBy,
+          created_by: createdBy, source: "sales_invoice",
         })
         .select().single();
       if (voucher) {
@@ -471,7 +472,7 @@ export default function SalesInvoiceForm({
         .insert({
           voucher_no: voucherNo, voucher_date: invoiceDate,
           narration: `Sales Invoice ${invoiceNo} — ${selectedCustomer?.name} (LBS, ${paymentReceived ? "Cash" : "Credit"})`,
-          created_by: createdBy,
+          created_by: createdBy, source: "sales_invoice",
         })
         .select().single();
       if (voucher) {

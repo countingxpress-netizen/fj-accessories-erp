@@ -114,6 +114,7 @@ export default function OtherSalesInvoiceForm({ customers }: { customers: Custom
           voucher_date: invoiceDate,
           narration: `Sales Invoice ${invoiceNo} — ${customerName} (Other, ${paymentReceived ? "Cash" : "Credit"})`,
           created_by: createdBy,
+          source: "sales_invoice",
         })
         .select()
         .single();

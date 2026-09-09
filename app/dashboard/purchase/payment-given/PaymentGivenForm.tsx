@@ -45,7 +45,7 @@ export default function PaymentGivenForm({ suppliers, cashBankAccounts }: { supp
       .insert({
         voucher_no: voucherNo, voucher_date: paymentDate,
         narration: `Payment given to ${supplierName}${note ? " — " + note : ""}`,
-        created_by: createdBy,
+        created_by: createdBy, source: "payment_out",
       })
       .select().single();
 

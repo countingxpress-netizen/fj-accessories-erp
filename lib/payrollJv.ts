@@ -48,7 +48,7 @@ async function makeVoucher(
   const createdBy = await getCurrentUserId(supabase);
   const { data: voucher } = await supabase
     .from("journal_vouchers")
-    .insert({ voucher_no: voucherNo, voucher_date: date, narration, created_by: createdBy })
+    .insert({ voucher_no: voucherNo, voucher_date: date, narration, created_by: createdBy, source: "payroll" })
     .select("id")
     .single();
   if (!voucher) return null;

@@ -322,7 +322,7 @@ export default function PurchaseEntryForm({
         const voucherNo = await generateNextDocNo(supabase, "journal_vouchers", "voucher_no", "JV", "voucher_date", entryDate);
         const { data: newVoucher } = await supabase
           .from("journal_vouchers")
-          .insert({ voucher_no: voucherNo, voucher_date: entryDate, narration, created_by: createdBy })
+          .insert({ voucher_no: voucherNo, voucher_date: entryDate, narration, created_by: createdBy, source: "purchase" })
           .select()
           .single();
         if (newVoucher) {
@@ -513,6 +513,7 @@ export default function PurchaseEntryForm({
         voucher_date: entryDate,
         narration: `Purchase from ${supplierName}${invoiceNo ? ", Invoice " + invoiceNo : ""} (${paymentNarrationLabel(paymentSource)})`,
         created_by: createdBy,
+        source: "purchase",
       })
       .select()
       .single();

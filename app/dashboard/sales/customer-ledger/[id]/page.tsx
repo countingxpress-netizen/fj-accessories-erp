@@ -47,6 +47,12 @@ export default async function CustomerLedgerDetailPage({
     .select("*")
     .eq("customer_id", id);
 
+  const { data: wastageSales } = await supabase
+    .from("wastage_sales")
+    .select("sale_no, sale_date, amount")
+    .eq("customer_id", id)
+    .eq("payment_mode", "credit");
+
   type Row = { date: string; type: "opening" | "invoice" | "payment"; ref: string; desc: string; debit: number; credit: number };
   const rows: Row[] = [];
 
@@ -66,6 +72,10 @@ export default async function CustomerLedgerDetailPage({
 
   (payments ?? []).forEach((p: any) => {
     rows.push({ date: p.payment_date, type: "payment", ref: "Payment", desc: p.note || "Payment Received", debit: 0, credit: p.amount });
+  });
+
+  (wastageSales ?? []).forEach((w: any) => {
+    rows.push({ date: w.sale_date, type: "invoice", ref: w.sale_no, desc: "Wastage / Scrap বিক্রি (বাকি)", debit: Number(w.amount || 0), credit: 0 });
   });
 
   rows.sort((a, b) => a.date.localeCompare(b.date));

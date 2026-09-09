@@ -105,7 +105,7 @@ export async function postProfitDistribution(
   const createdBy = await getCurrentUserId(supabase);
   const { data: v, error: vErr } = await supabase
     .from("journal_vouchers")
-    .insert({ voucher_no: voucherNo, voucher_date: end, narration, created_by: createdBy })
+    .insert({ voucher_no: voucherNo, voucher_date: end, narration, created_by: createdBy, source: "profit_distribution" })
     .select("id")
     .single();
   if (vErr || !v) return { ok: false, error: vErr?.message ?? "Voucher তৈরি ব্যর্থ।" };

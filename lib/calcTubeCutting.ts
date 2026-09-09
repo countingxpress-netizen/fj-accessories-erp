@@ -28,14 +28,21 @@ export function hasAdhesiveCharge(measurementType: string) {
 //  • Tube    — PP হলে টেবিল (die সাইজ) অনুযায়ী, নাহলে ÷2.54
 //  • Cutting — material নির্বিশেষে: Print থাকলে টেবিল (die/print সাইজ) অনুযায়ী,
 //              Print না থাকলে ÷2.54
+//  • plainConversion (আইরিশ / দেবনিয়ার গার্মেন্টস) — die-size টেবিল পুরো বাদ,
+//    tube ও cutting দুটোই সরল ÷2.54।
 export function toInches(
   tube: number,
   cutting: number,
   unit: string,
   materialType: string,
-  hasPrint: boolean
+  hasPrint: boolean,
+  plainConversion = false
 ): { tubeInch: number; cuttingInch: number } {
   if (unit !== "cm") return { tubeInch: tube, cuttingInch: cutting };
+
+  if (plainConversion) {
+    return { tubeInch: tube / CM_PER_INCH, cuttingInch: cutting / CM_PER_INCH };
+  }
 
   const isPP = materialType === "pp";
   const tubeInch = isPP ? cmToInch(tube) : tube / CM_PER_INCH;
@@ -47,7 +54,7 @@ export function toInches(
 export function calcRequiredLbs(booking: any, thicknessMm: number): number {
   if (!thicknessMm || !booking.quantity_pcs) return 0;
   const { tube, cutting } = calcTubeCutting(booking);
-  const { tubeInch, cuttingInch } = toInches(tube, cutting, booking.measurement_unit, booking.material_type, booking.has_print);
+  const { tubeInch, cuttingInch } = toInches(tube, cutting, booking.measurement_unit, booking.material_type, booking.has_print, !!booking.plain_cm_conversion);
   const baseLbs = (booking.quantity_pcs * tubeInch * cuttingInch * thicknessMm) / 75000;
   return Math.ceil(baseLbs);
 }
@@ -55,7 +62,7 @@ export function calcRequiredLbs(booking: any, thicknessMm: number): number {
 export function calcPiWeightLbs(booking: any, piThicknessMm: number): number {
   if (!piThicknessMm || !booking.quantity_pcs) return 0;
   const { tube, cutting } = calcTubeCutting(booking);
-  const { tubeInch, cuttingInch } = toInches(tube, cutting, booking.measurement_unit, booking.material_type, booking.has_print);
+  const { tubeInch, cuttingInch } = toInches(tube, cutting, booking.measurement_unit, booking.material_type, booking.has_print, !!booking.plain_cm_conversion);
   return (booking.quantity_pcs * tubeInch * cuttingInch * piThicknessMm) / 75000;
 }
 
@@ -67,7 +74,7 @@ export function calcQuotedUnitPrice(booking: any, pricePerLbs: number, orderThic
   const thickness = orderThicknessMm ?? booking.thickness_mm;
   if (!thickness || !pricePerLbs) return 0;
   const { tube, cutting } = calcTubeCutting(booking);
-  const { tubeInch, cuttingInch } = toInches(tube, cutting, booking.measurement_unit, booking.material_type, booking.has_print);
+  const { tubeInch, cuttingInch } = toInches(tube, cutting, booking.measurement_unit, booking.material_type, booking.has_print, !!booking.plain_cm_conversion);
   if (!tubeInch || !cuttingInch) return 0;
   const base = (pricePerLbs * tubeInch * cuttingInch * thickness) / 75000;
   const printCharge = booking.has_print
@@ -83,7 +90,7 @@ export function calcPiUnitPrice(booking: any, pricePerLbs: number, piThicknessMm
   const thickness = piThicknessMm ?? booking.pi_thickness_mm;
   if (!thickness || !pricePerLbs) return 0;
   const { tube, cutting } = calcTubeCutting(booking);
-  const { tubeInch, cuttingInch } = toInches(tube, cutting, booking.measurement_unit, booking.material_type, booking.has_print);
+  const { tubeInch, cuttingInch } = toInches(tube, cutting, booking.measurement_unit, booking.material_type, booking.has_print, !!booking.plain_cm_conversion);
   if (!tubeInch || !cuttingInch) return 0;
   return (pricePerLbs * tubeInch * cuttingInch * thickness) / 75000;
 }
@@ -107,7 +114,7 @@ export function calcPiUnitPriceWithMarkup(
   if (!thickness || !pricePerLbs) return 0;
 
   const { tube, cutting } = calcTubeCutting(booking);
-  const { tubeInch, cuttingInch } = toInches(tube, cutting, booking.measurement_unit, booking.material_type, booking.has_print);
+  const { tubeInch, cuttingInch } = toInches(tube, cutting, booking.measurement_unit, booking.material_type, booking.has_print, !!booking.plain_cm_conversion);
   if (!tubeInch || !cuttingInch) return 0;
 
   const baseBdt = (pricePerLbs * tubeInch * cuttingInch * thickness) / 75000;

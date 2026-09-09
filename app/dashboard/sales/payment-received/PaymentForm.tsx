@@ -119,7 +119,7 @@ export default function PaymentForm({
       .insert({
         voucher_no: voucherNo, voucher_date: paymentDate,
         narration: `Payment received from ${customerName}${note ? " — " + note : ""}`,
-        created_by: createdBy,
+        created_by: createdBy, source: "payment_in",
       })
       .select().single();
 

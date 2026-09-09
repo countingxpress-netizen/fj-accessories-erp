@@ -9,7 +9,7 @@ import { getCurrentUserId } from "@/lib/currentUser";
 import { resolveRate, type RateHistoryRow } from "@/lib/rateHistory";
 import { money, qty as qtyFmt } from "@/lib/format";
 
-type Customer = { id: string; name: string; address: string | null; default_print_rate: number | null; default_adhesive_rate: number | null; price_per_lbs: number | null };
+type Customer = { id: string; name: string; address: string | null; default_print_rate: number | null; default_adhesive_rate: number | null; price_per_lbs: number | null; plain_cm_conversion?: boolean | null };
 type PriceHistoryRow = RateHistoryRow & { customer_id: string };
 type Warehouse = { id: string; name: string };
 type Material = { id: string; material_name: string };
@@ -381,6 +381,9 @@ export default function BookingForm({
   const resolvedPricePerLbs = resolveRate(historyForCustomer, bookingDate, selectedCustomer?.price_per_lbs ?? 0);
   const pricePerLbs = parseFloat(priceOverride) || resolvedPricePerLbs;
 
+  // আইরিশ / দেবনিয়ার গার্মেন্টস (Customer) — cm→inch এ die-size টেবিল বাদ, সরল ÷2.54
+  const customerPlainCmConversion = !!customersList.find((c) => c.id === customerId)?.plain_cm_conversion;
+
   function updateRow(rowId: string, field: keyof MeasurementRow, value: string | boolean) {
     setRows((prev) => prev.map((r) => (r.rowId === rowId ? { ...r, [field]: value } : r)));
   }
@@ -476,7 +479,7 @@ export default function BookingForm({
 
     if (!qtyN || !tube || !cutting || !T || !PT) return null;
 
-    const { tubeInch, cuttingInch } = toInches(tube, cutting, row.unit, materialType, row.hasPrint);
+    const { tubeInch, cuttingInch } = toInches(tube, cutting, row.unit, materialType, row.hasPrint, customerPlainCmConversion);
     const baseLbs = (qtyN * tubeInch * cuttingInch * PT) / 75000;
     const finalLbs = Math.ceil(baseLbs);
 
@@ -636,12 +639,12 @@ export default function BookingForm({
     const { data, error } = await supabase
       .from("customers")
       .insert({ name: trimmedName })
-      .select("id, name, address, price_per_lbs")
+      .select("id, name, address, price_per_lbs, plain_cm_conversion")
       .single();
 
     if (error) throw error;
     if (data) {
-      setCustomersList((prev) => [...prev, { id: data.id, name: data.name, address: data.address ?? null, default_print_rate: null, default_adhesive_rate: null, price_per_lbs: data.price_per_lbs ?? null }]);
+      setCustomersList((prev) => [...prev, { id: data.id, name: data.name, address: data.address ?? null, default_print_rate: null, default_adhesive_rate: null, price_per_lbs: data.price_per_lbs ?? null, plain_cm_conversion: data.plain_cm_conversion ?? false }]);
       setCustomerId(data.id);
       setCustomerNameInput(data.name);
       return { customerId: data.id, customerName: data.name };
@@ -953,9 +956,11 @@ export default function BookingForm({
 
     const { buyerId: resolvedBuyerId } = await ensureBuyerForCurrentCustomer(resolvedCustomerId);
     const { garmentsId: resolvedGarmentsId, garmentsName: resolvedGarmentsName } = await ensureGarmentsForCurrentCustomer(resolvedCustomerId);
+    const resolvedPlainCmConversion = !!customersList.find((c) => c.id === resolvedCustomerId)?.plain_cm_conversion;
 
     const groupId = editContext ? editContext.groupId : crypto.randomUUID();
-    const effectiveBookingDate = editContext ? editContext.bookingDate : bookingDate;
+    // এডিটেও এখন তারিখ বদলানো যায় — state-এর bookingDate-ই চূড়ান্ত (editContext শুধু seed)।
+    const effectiveBookingDate = bookingDate;
     const sharedBookingNo = editContext
       ? editContext.bookingNo
       : await generateNextDocNo(supabase, "bookings", "booking_no", "BK", "booking_date", effectiveBookingDate);
@@ -994,6 +999,7 @@ export default function BookingForm({
       merchantId: resolvedMerchantId,
       garmentsId: resolvedGarmentsId,
       garmentsName: resolvedGarmentsName,
+      plainCmConversion: resolvedPlainCmConversion,
       deliveryPoint,
       paymentReceived,
       createdBy,
@@ -1444,8 +1450,8 @@ export default function BookingForm({
       <div className="flex flex-wrap gap-4">
         <div>
           <label className="block text-sm text-gray-600 mb-1">Booking Date</label>
-          <input type="date" value={bookingDate} onChange={(e) => setBookingDate(e.target.value)} disabled={isEdit} className="rounded-lg border px-3 py-2 text-sm disabled:bg-gray-100 disabled:text-gray-500" required />
-          {isEdit && <p className="mt-1 text-xs text-gray-400">এডিটে তারিখ বদলানো যায় না</p>}
+          <input type="date" value={bookingDate} onChange={(e) => setBookingDate(e.target.value)} className="rounded-lg border px-3 py-2 text-sm" required />
+          {isEdit && <p className="mt-1 text-xs text-amber-600">তারিখ বদলালে Production Order / স্টক / WIP JV / auto Sales Invoice সব নতুন তারিখে হবে (Booking No অপরিবর্তিত)</p>}
         </div>
         <div className="flex-1 min-w-[280px]">
           <label className="block text-sm text-gray-600 mb-1">Delivery Point (পূর্ণ ঠিকানা)</label>

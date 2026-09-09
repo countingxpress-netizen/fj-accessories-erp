@@ -82,7 +82,7 @@ export default function EditPaymentForm({
       const createdBy = await getCurrentUserId(supabase);
       const { data: voucher } = await supabase
         .from("journal_vouchers")
-        .insert({ voucher_no: voucherNo, voucher_date: paymentDate, narration: `Payment received (edited) — ${note || ""}`, created_by: createdBy })
+        .insert({ voucher_no: voucherNo, voucher_date: paymentDate, narration: `Payment received (edited) — ${note || ""}`, created_by: createdBy, source: "payment_in" })
         .select().single();
 
       if (voucher) {

@@ -5,8 +5,10 @@ import { createClient } from "@/lib/supabase/client";
 import { money } from "@/lib/format";
 import { calcQuotedUnitPrice } from "@/lib/calcTubeCutting";
 import { syncAutoInvoiceForGroup } from "@/lib/autoInvoiceFromBooking";
+import { changeBookingGroupDate } from "@/lib/bookingDateChange";
 
 export default function EditBookingForm({ booking, pricePerLbs }: { booking: any; pricePerLbs: number }) {
+  const [bookingDate, setBookingDate] = useState<string>(booking.booking_date ?? "");
   const [style, setStyle] = useState(booking.style ?? "");
   const [customerBookingRef, setCustomerBookingRef] = useState(booking.customer_booking_ref ?? "");
   const [productDetails, setProductDetails] = useState(booking.product_details ?? "");
@@ -50,10 +52,22 @@ export default function EditBookingForm({ booking, pricePerLbs }: { booking: any
     const { error } = await supabase.from("bookings").update(patch).eq("id", booking.id);
     if (error) { setLoading(false); setError(error.message); return; }
 
-    // এই booking group-এর auto Sales Invoice + JV আপডেট (header + লাইন + দাম)
+    // তারিখ বদলালে — booking + production order + RM-issue JV + stock ledger নতুন তারিখে
+    const dateChanged = bookingDate && bookingDate !== booking.booking_date;
+    if (dateChanged) {
+      const dr = await changeBookingGroupDate(
+        supabase,
+        { groupId: booking.booking_group_id ?? null, bookingId: booking.id },
+        bookingDate,
+      );
+      if (!dr.ok) { setLoading(false); setError(`তারিখ আপডেটে সমস্যা: ${dr.error}`); return; }
+    }
+    const effectiveDate = dateChanged ? bookingDate : booking.booking_date;
+
+    // এই booking group-এর auto Sales Invoice + JV আপডেট (header + লাইন + দাম + তারিখ)
     if (booking.booking_group_id) {
       const r = await syncAutoInvoiceForGroup(supabase, booking.booking_group_id, {
-        invoiceDate: booking.booking_date,
+        invoiceDate: effectiveDate,
       });
       if (!r.ok) { setLoading(false); setError(`পরিবর্তন সেভ হয়েছে কিন্তু Sales Invoice আপডেটে সমস্যা: ${r.error}`); return; }
     }
@@ -76,6 +90,15 @@ export default function EditBookingForm({ booking, pricePerLbs }: { booking: any
       <p className="text-xs text-orange-600 bg-orange-50 border border-orange-200 rounded-lg p-2">
         নোট: উপরের তথ্যগুলো (Quantity, Measurement, Material, Thickness) সরাসরি এখান থেকে বদলানো যাবে না — এসব বদলাতে হলে বুকিং মুছে নতুন করে দিন। নিচের ফিল্ডগুলো বদলানো যাবে।
       </p>
+      <div>
+        <label className="block text-sm text-gray-600 mb-1">Booking Date</label>
+        <input type="date" value={bookingDate} onChange={(e) => setBookingDate(e.target.value)} className="rounded-lg border px-3 py-2 text-sm" required />
+        {bookingDate && bookingDate !== booking.booking_date && (
+          <p className="mt-1 text-xs text-amber-600">
+            তারিখ বদলালে এই group-এর সব Booking, Production Order, কাঁচামাল-ইস্যু JV, স্টক লেজার ও auto Sales Invoice নতুন তারিখে হবে। FG Receive / Wastage / Delivery Challan / PI অপরিবর্তিত থাকবে।
+          </p>
+        )}
+      </div>
       <div className="flex flex-wrap gap-4">
         <div className="flex-1 min-w-[160px]">
           <label className="block text-sm text-gray-600 mb-1">Style</label>

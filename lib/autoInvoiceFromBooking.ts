@@ -53,7 +53,7 @@ async function postInvoiceJv(
     .insert({
       voucher_no: voucherNo, voucher_date: args.invoiceDate,
       narration: `Sales Invoice ${args.invoiceNo} — ${args.customerName} (Booking থেকে অটো, ${args.paymentReceived ? "Cash" : "Credit"})`,
-      created_by: args.createdBy,
+      created_by: args.createdBy, source: "sales_invoice",
     })
     .select().single();
   if (!voucher) return null;
@@ -68,7 +68,7 @@ async function postInvoiceJv(
 async function findAutoInvoice(supabase: SupabaseClient, groupId: string) {
   const { data } = await supabase
     .from("sales_invoices")
-    .select("id, invoice_no, voucher_id, payment_received")
+    .select("id, invoice_no, voucher_id, payment_received, invoice_date")
     .eq("source_booking_group_id", groupId)
     .eq("auto_generated", true)
     .order("created_at", { ascending: true })
@@ -114,7 +114,7 @@ export async function syncAutoInvoiceForGroup(
     .select(`id, product_id, quantity_pcs, quoted_unit_price, booking_date, customer_id, style,
       delivery_point, customer_booking_ref, buyers(name), merchants(name),
       thickness_mm, material_type, measurement_type, measurement_unit,
-      length_val, width_val, flap_val, gusset_val, pillow_val,
+      length_val, width_val, flap_val, gusset_val, pillow_val, plain_cm_conversion,
       has_print, print_colors, rate_per_color, rate_per_inch`)
     .eq("booking_group_id", groupId)
     .neq("status", "cancelled");
@@ -241,7 +241,8 @@ export async function syncAutoInvoiceForGroup(
     const oldTotal = (oldItems ?? []).reduce((s: number, i: any) => s + Number(i.amount || 0), 0);
     repostJv = !existing.voucher_id
       || oldTotal !== totalAmount
-      || Boolean(existing.payment_received) !== paymentReceived;
+      || Boolean(existing.payment_received) !== paymentReceived
+      || (existing.invoice_date ?? null) !== invoiceDate; // তারিখ বদলালে JV-ও নতুন তারিখে
 
     await supabase.from("sales_invoices").update(header).eq("id", invoiceId);
     if (repostJv) await clearInvoiceJv(supabase, invoiceId, existing.voucher_id);

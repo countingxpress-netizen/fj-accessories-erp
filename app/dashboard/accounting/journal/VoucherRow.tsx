@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/client";
 import { deleteSimpleRow } from "@/lib/simpleDelete";
 import GuardedAction from "@/app/dashboard/GuardedAction";
 import { money } from "@/lib/format";
+import { journalSourceLabel, isManualJournal } from "@/lib/journalSource";
 
 export default function VoucherRow({
   voucher, selected, onToggleSelect,
@@ -42,6 +43,13 @@ export default function VoucherRow({
       </td>
       <td className="px-4 py-2 font-medium">{voucher.voucher_no}</td>
       <td className="px-4 py-2 text-gray-500">{voucher.voucher_date}</td>
+      <td className="px-4 py-2">
+        <span className={`rounded-full px-2 py-0.5 text-xs ${
+          isManualJournal(voucher.source) ? "bg-emerald-100 text-emerald-800" : "bg-gray-100 text-gray-600"
+        }`}>
+          {journalSourceLabel(voucher.source)}
+        </span>
+      </td>
       <td className="px-4 py-2">{voucher.narration || "-"}</td>
       <td className="px-4 py-2 text-right">{money(total)}</td>
       <td className="px-4 py-2 text-gray-500 text-xs">{voucher.creator?.full_name ?? "-"}</td>

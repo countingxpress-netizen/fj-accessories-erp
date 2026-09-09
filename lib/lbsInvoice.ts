@@ -33,6 +33,7 @@ export type LbsBooking = {
   print_colors: number | null;
   rate_per_color: number | null;
   rate_per_inch: number | null;
+  plain_cm_conversion?: boolean | null; // আইরিশ / দেবনিয়ার গার্মেন্টস — die টেবিল বাদ
 };
 
 export type LbsRates = {
@@ -77,7 +78,7 @@ export function lbsRequiredLbs(b: LbsBooking): number {
   if (!thickness || !b.quantity_pcs) return 0;
   const { tube, cutting } = calcTubeCutting(b);
   const { tubeInch, cuttingInch } = toInches(
-    tube, cutting, b.measurement_unit, b.material_type ?? "", !!b.has_print,
+    tube, cutting, b.measurement_unit, b.material_type ?? "", !!b.has_print, !!b.plain_cm_conversion,
   );
   if (!tubeInch || !cuttingInch) return 0;
   return Math.ceil((b.quantity_pcs * tubeInch * cuttingInch * thickness) / 75000);
@@ -87,7 +88,7 @@ export function lbsRequiredLbs(b: LbsBooking): number {
 export function lbsCuttingInch(b: LbsBooking): number {
   const { tube, cutting } = calcTubeCutting(b);
   const { cuttingInch } = toInches(
-    tube, cutting, b.measurement_unit, b.material_type ?? "", !!b.has_print,
+    tube, cutting, b.measurement_unit, b.material_type ?? "", !!b.has_print, !!b.plain_cm_conversion,
   );
   return cuttingInch;
 }

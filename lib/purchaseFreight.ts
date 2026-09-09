@@ -101,7 +101,7 @@ export async function postFreightJv(
   const narration = `Freight/Labour — ${args.entryNo ? "Purchase " + args.entryNo : "Purchase"}${
     args.description ? " (" + args.description + ")" : ""
   }`;
-  const voucherId = await makeVoucher(supabase, args.date, narration, lines);
+  const voucherId = await makeVoucher(supabase, args.date, narration, lines, "freight");
   if (voucherId) {
     await supabase.from("purchase_freight_charges").update({ voucher_id: voucherId }).eq("id", args.chargeId);
   }

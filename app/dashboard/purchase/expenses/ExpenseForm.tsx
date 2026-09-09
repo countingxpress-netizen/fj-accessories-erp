@@ -40,7 +40,7 @@ export default function ExpenseForm({
       .insert({
         voucher_no: voucherNo, voucher_date: expenseDate,
         narration: `Expense — ${expenseAccountName}${payee ? " (" + payee + ")" : ""}${description ? " — " + description : ""}`,
-        created_by: createdBy,
+        created_by: createdBy, source: "expense",
       })
       .select().single();
 

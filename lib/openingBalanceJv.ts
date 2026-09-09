@@ -117,7 +117,7 @@ export async function syncOpeningBalanceJv(supabase: SupabaseClient): Promise<vo
     const createdBy = await getCurrentUserId(supabase);
     const { data: voucher } = await supabase
       .from("journal_vouchers")
-      .insert({ voucher_no: voucherNo, voucher_date: date, narration: ACCOUNT_OPENING_NARRATION, created_by: createdBy })
+      .insert({ voucher_no: voucherNo, voucher_date: date, narration: ACCOUNT_OPENING_NARRATION, created_by: createdBy, source: "opening" })
       .select("id")
       .single();
     if (!voucher) return;

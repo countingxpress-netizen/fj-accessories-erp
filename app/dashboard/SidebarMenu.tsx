@@ -14,6 +14,7 @@ const menu: MenuGroup[] = [
     items: [
       { label: "Chart of Accounts", href: "/dashboard/accounting" },
       { label: "Journal Vouchers", href: "/dashboard/accounting/journal" },
+      { label: "Manual Journal", href: "/dashboard/accounting/manual-journal" },
       { label: "General Ledger", href: "/dashboard/accounting/ledger" },
       { label: "Trial Balance", href: "/dashboard/accounting/trial-balance" },
       { label: "Cash Book", href: "/dashboard/accounting/cash-book" },
@@ -64,6 +65,7 @@ const menu: MenuGroup[] = [
       { label: "Complete Production", href: "/dashboard/production/complete" },
       { label: "Finished Goods Receive", href: "/dashboard/production/finished-goods-receive" },
       { label: "Wastage", href: "/dashboard/production/wastage" },
+      { label: "Wastage / Scrap বিক্রি", href: "/dashboard/production/wastage-sale" },
     ],
   },
   {

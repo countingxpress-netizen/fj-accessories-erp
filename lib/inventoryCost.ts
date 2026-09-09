@@ -37,7 +37,8 @@ export async function makeVoucher(
   supabase: Client,
   date: string,
   narration: string,
-  lines: { account_id: string; debit: number; credit: number; memo: string }[]
+  lines: { account_id: string; debit: number; credit: number; memo: string }[],
+  source = "inventory"
 ): Promise<string | null> {
   const clean = lines.filter((l) => l.account_id && (l.debit > 0 || l.credit > 0));
   const totalDr = clean.reduce((s, l) => s + l.debit, 0);
@@ -50,7 +51,7 @@ export async function makeVoucher(
   const createdBy = await getCurrentUserId(supabase);
   const { data: voucher } = await supabase
     .from("journal_vouchers")
-    .insert({ voucher_no: voucherNo, voucher_date: date, narration, created_by: createdBy })
+    .insert({ voucher_no: voucherNo, voucher_date: date, narration, created_by: createdBy, source })
     .select("id").single();
   if (!voucher) return null;
 

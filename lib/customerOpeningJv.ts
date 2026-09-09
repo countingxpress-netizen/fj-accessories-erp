@@ -74,7 +74,7 @@ export async function syncCustomerOpeningJv(supabase: SupabaseClient): Promise<v
     const createdBy = await getCurrentUserId(supabase);
     const { data: voucher } = await supabase
       .from("journal_vouchers")
-      .insert({ voucher_no: voucherNo, voucher_date: date, narration: CUSTOMER_OPENING_NARRATION, created_by: createdBy })
+      .insert({ voucher_no: voucherNo, voucher_date: date, narration: CUSTOMER_OPENING_NARRATION, created_by: createdBy, source: "opening" })
       .select("id")
       .single();
     if (!voucher) return;

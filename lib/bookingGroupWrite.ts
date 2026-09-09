@@ -56,6 +56,8 @@ export type BookingGroupInput = {
   merchantId: string | null;
   garmentsId: string | null;
   garmentsName: string | null;
+  /** আইরিশ / দেবনিয়ার গার্মেন্টস — cm→inch এ die টেবিল বাদ (garments টগল থেকে resolved)। */
+  plainCmConversion: boolean;
   deliveryPoint: string;
   paymentReceived: boolean;
   createdBy: string | null;
@@ -74,7 +76,7 @@ export async function writeBookingGroup(
 ): Promise<BookingGroupWriteResult> {
   const {
     groupId, bookingNo, bookingDate, customerId, buyerId, merchantId,
-    garmentsId, garmentsName, deliveryPoint, paymentReceived, createdBy, items,
+    garmentsId, garmentsName, plainCmConversion, deliveryPoint, paymentReceived, createdBy, items,
   } = input;
 
   const { data: allMaterials } = await supabase.from("raw_materials").select("id, material_name");
@@ -127,7 +129,8 @@ export async function writeBookingGroup(
         // হয় না — Booking Edit-এ পুরনো Adjustment implied ভাবে বের করা হয় (page.tsx দেখুন)।
         quoted_unit_price: item.unitPrice || null, quoted_amount: item.amount || null,
         garments_name: garmentsName ?? null,
-        garments_id: garmentsId || null, booking_group_id: groupId,
+        garments_id: garmentsId || null, plain_cm_conversion: plainCmConversion,
+        booking_group_id: groupId,
         customer_booking_ref: item.customerBookingRef || null,
         po_no: item.poNo || null,
         warehouse_id: item.warehouseId, status: "in_production",

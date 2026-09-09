@@ -23,6 +23,7 @@ export default function AddCustomerForm() {
   const [commissionPercentage, setCommissionPercentage] = useState("1");
   const [lbsInvoicingEnabled, setLbsInvoicingEnabled] = useState(false);
   const [makingCuttingRate, setMakingCuttingRate] = useState("0");
+  const [plainCmConversion, setPlainCmConversion] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const router = useRouter();
@@ -47,6 +48,7 @@ export default function AddCustomerForm() {
       commission_percentage: parseFloat(commissionPercentage) || 0,
       lbs_invoicing_enabled: lbsInvoicingEnabled,
       making_cutting_rate: parseFloat(makingCuttingRate) || 0,
+      plain_cm_conversion: plainCmConversion,
     }).select("id").single();
     if (error || !created) {
       setLoading(false);
@@ -74,6 +76,7 @@ export default function AddCustomerForm() {
     setOpeningBalance("0"); setOpeningBalanceDate(new Date().toISOString().slice(0, 10));
     setCommissionEnabled(false); setCommissionPercentage("1");
     setLbsInvoicingEnabled(false); setMakingCuttingRate("0");
+    setPlainCmConversion(false);
     router.refresh();
   }
 
@@ -139,6 +142,10 @@ export default function AddCustomerForm() {
           {loading ? "সেভ হচ্ছে..." : "যোগ করুন"}
         </button>
       </div>
+      <label className="flex items-center gap-2 text-sm text-gray-700" title="আইরিশ / দেবনিয়ার ধরনের কাস্টমার — cm মাপ inch-এ কারখানার ডাই-সাইজ টেবিল বাদ দিয়ে সরল ÷2.54">
+        <input type="checkbox" checked={plainCmConversion} onChange={(e) => setPlainCmConversion(e.target.checked)} />
+        cm→inch: সরাসরি ÷2.54 (ডাই-সাইজ টেবিল বাদ)
+      </label>
       {error && <p className="text-sm text-red-600">{error}</p>}
     </form>
   );
