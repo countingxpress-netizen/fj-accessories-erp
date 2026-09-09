@@ -2,12 +2,16 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { hourlyRate, todayLocal } from "@/lib/payroll";
+import { hourlyRate, todayLocal, salaryTypeOf } from "@/lib/payroll";
 
 type Employee = {
   id: string; name: string; employee_code: string;
   designation: string | null; department: string | null; basic_salary: number;
 };
+
+// ফিক্সড/মাসিক বেতনের কর্মীর OT ধরা হয় না — তাই Attendance sheet-এ তাদের OT Hours
+// ইনপুট দেখানো হয় না।
+const isFixed = (e: Employee) => salaryTypeOf(e.department, e.designation) === "fixed";
 
 const STATUSES = [
   { value: "present", label: "Present" },
@@ -67,7 +71,7 @@ export default function AttendanceForm({ employees }: { employees: Employee[] })
 
     // OT ঘণ্টা / comment থাকলে status না দিলে present ধরা হয়
     const effective = employees.map((emp) => {
-      const ot = parseFloat(otMap[emp.id] || "0") || 0;
+      const ot = isFixed(emp) ? 0 : (parseFloat(otMap[emp.id] || "0") || 0);
       const comment = (commentMap[emp.id] || "").trim();
       let status = statusMap[emp.id] || "";
       if (!status && (ot > 0 || comment)) status = "present";
@@ -147,9 +151,13 @@ export default function AttendanceForm({ employees }: { employees: Employee[] })
                   </select>
                 </td>
                 <td className="px-3 py-2">
-                  <input type="number" step="0.5" min="0" placeholder="0"
-                    value={otMap[emp.id] || ""} onChange={(e) => setOtMap((p) => ({ ...p, [emp.id]: e.target.value }))}
-                    className="w-20 rounded border px-2 py-1 text-sm" />
+                  {isFixed(emp) ? (
+                    <span className="text-gray-300" title="ফিক্সড বেতন — OT প্রযোজ্য নয়">—</span>
+                  ) : (
+                    <input type="number" step="0.5" min="0" placeholder="0"
+                      value={otMap[emp.id] || ""} onChange={(e) => setOtMap((p) => ({ ...p, [emp.id]: e.target.value }))}
+                      className="w-20 rounded border px-2 py-1 text-sm" />
+                  )}
                 </td>
                 <td className="px-3 py-2">
                   <input type="text" placeholder="—"
