@@ -7,14 +7,19 @@ import { createWastageSale, type WastageSaleSource } from "@/lib/wastageSale";
 import { money } from "@/lib/format";
 
 type Customer = { id: string; name: string };
-type Account = { id: string; account_code: string; account_name: string };
+type Account = { id: string; account_code: string; account_name: string; account_type: string };
 type Warehouse = { id: string; name: string };
 
+const TYPE_LABEL: Record<string, string> = {
+  asset: "Asset অ্যাকাউন্ট", liability: "Liability অ্যাকাউন্ট",
+  equity: "Equity অ্যাকাউন্ট", income: "Income অ্যাকাউন্ট",
+};
+
 export default function WastageSaleForm({
-  customers, cashBankAccounts, warehouses, availableWastageLbs, recycledStockByWarehouse, recycledAvgCost,
+  customers, partyAccounts, warehouses, availableWastageLbs, recycledStockByWarehouse, recycledAvgCost,
 }: {
   customers: Customer[];
-  cashBankAccounts: Account[];
+  partyAccounts: Account[];
   warehouses: Warehouse[];
   availableWastageLbs: number;
   recycledStockByWarehouse: Record<string, number>;
@@ -25,10 +30,7 @@ export default function WastageSaleForm({
   const [warehouseId, setWarehouseId] = useState("");
   const [quantity, setQuantity] = useState("");
   const [rate, setRate] = useState("");
-  const [paymentMode, setPaymentMode] = useState<"cash" | "credit">("cash");
-  const [depositAccountId, setDepositAccountId] = useState("");
-  const [customerId, setCustomerId] = useState("");
-  const [soldToName, setSoldToName] = useState("");
+  const [party, setParty] = useState(""); // "cust:<id>" | "acct:<id>"
   const [note, setNote] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -42,6 +44,11 @@ export default function WastageSaleForm({
   const cogsPreview = fromRecycled ? Math.round(qtyN * recycledAvgCost * 100) / 100 : 0;
   const availableInWarehouse = warehouseId ? (recycledStockByWarehouse[warehouseId] ?? 0) : 0;
 
+  const accountsByType = partyAccounts.reduce<Record<string, Account[]>>((acc, a) => {
+    (acc[a.account_type] ||= []).push(a);
+    return acc;
+  }, {});
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
@@ -49,8 +56,12 @@ export default function WastageSaleForm({
     if (!qtyN || qtyN <= 0) { setError("সঠিক Quantity দিন।"); return; }
     if (!rateN || rateN <= 0) { setError("সঠিক Rate/Lbs দিন।"); return; }
     if (fromRecycled && !warehouseId) { setError("কোন গুদামের Recycled Chips বিক্রি হচ্ছে বাছুন।"); return; }
-    if (paymentMode === "cash" && !depositAccountId) { setError("টাকা কোন Cash/Bank অ্যাকাউন্টে জমা হবে বাছুন।"); return; }
-    if (paymentMode === "credit" && !customerId) { setError("বাকিতে বিক্রি হলে Customer/পার্টি বাছুন।"); return; }
+    if (!party) { setError("কার কাছে বিক্রি হচ্ছে বাছুন।"); return; }
+
+    const [kind, id] = party.split(":");
+    const label = kind === "cust"
+      ? (customers.find((c) => c.id === id)?.name ?? "")
+      : (() => { const a = partyAccounts.find((x) => x.id === id); return a ? `${a.account_code} - ${a.account_name}` : ""; })();
 
     setLoading(true);
     const createdBy = await getCurrentUserId(supabase);
@@ -58,17 +69,17 @@ export default function WastageSaleForm({
       saleDate, source,
       warehouseId: fromRecycled ? warehouseId : null,
       quantityLbs: qtyN, ratePerLbs: rateN, amount,
-      paymentMode,
-      depositAccountId: paymentMode === "cash" ? depositAccountId : null,
-      customerId: paymentMode === "credit" ? customerId : null,
-      soldToName, note, createdBy,
+      party: kind === "cust"
+        ? { kind: "customer", customerId: id, label }
+        : { kind: "account", accountId: id, label },
+      note, createdBy,
     });
     setLoading(false);
 
     if (!result.ok) { setError(result.error ?? "সেভ ব্যর্থ হয়েছে।"); return; }
     if (result.error) setError(result.error);
 
-    setQuantity(""); setRate(""); setSoldToName(""); setNote("");
+    setQuantity(""); setRate(""); setParty(""); setNote("");
     router.refresh();
   }
 
@@ -146,38 +157,27 @@ export default function WastageSaleForm({
       </div>
 
       <div>
-        <label className="block text-sm text-gray-600 mb-1">কার কাছে বিক্রি (পার্টির নাম)</label>
-        <input value={soldToName} onChange={(e) => setSoldToName(e.target.value)} className="w-full rounded-lg border px-3 py-2 text-sm" placeholder="যেমন — ভাঙারি দোকান / পার্টির নাম" />
-      </div>
-
-      <div className="rounded-lg border p-4 bg-gray-50 space-y-3">
-        <div className="flex gap-4 text-sm">
-          <label className="flex items-center gap-2">
-            <input type="radio" checked={paymentMode === "cash"} onChange={() => setPaymentMode("cash")} />
-            নগদ / ব্যাংক
-          </label>
-          <label className="flex items-center gap-2">
-            <input type="radio" checked={paymentMode === "credit"} onChange={() => setPaymentMode("credit")} />
-            বাকি (পার্টি)
-          </label>
-        </div>
-        {paymentMode === "cash" ? (
-          <div>
-            <label className="block text-sm text-gray-600 mb-1">টাকা কোথায় জমা</label>
-            <select value={depositAccountId} onChange={(e) => setDepositAccountId(e.target.value)} className="rounded-lg border px-3 py-2 text-sm min-w-[220px]">
-              <option value="">-- বাছুন --</option>
-              {cashBankAccounts.map((a) => <option key={a.id} value={a.id}>{a.account_code} - {a.account_name}</option>)}
-            </select>
-          </div>
-        ) : (
-          <div>
-            <label className="block text-sm text-gray-600 mb-1">কোন Customer/পার্টির খাতায় (বাকি)</label>
-            <select value={customerId} onChange={(e) => setCustomerId(e.target.value)} className="rounded-lg border px-3 py-2 text-sm min-w-[220px]">
-              <option value="">-- বাছুন --</option>
-              {customers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
-          </div>
-        )}
+        <label className="block text-sm text-gray-600 mb-1">কার কাছে বিক্রি</label>
+        <select value={party} onChange={(e) => setParty(e.target.value)} className="w-full rounded-lg border px-3 py-2 text-sm" required>
+          <option value="">-- বাছুন --</option>
+          {customers.length > 0 && (
+            <optgroup label="Customer">
+              {customers.map((c) => <option key={c.id} value={`cust:${c.id}`}>{c.name}</option>)}
+            </optgroup>
+          )}
+          {["asset", "liability", "equity", "income"].map((t) => (
+            (accountsByType[t] ?? []).length > 0 && (
+              <optgroup key={t} label={TYPE_LABEL[t]}>
+                {accountsByType[t].map((a) => (
+                  <option key={a.id} value={`acct:${a.id}`}>{a.account_code} - {a.account_name}</option>
+                ))}
+              </optgroup>
+            )
+          ))}
+        </select>
+        <p className="mt-1 text-xs text-gray-400">
+          Customer বাছলে তার বাকির খাতায় (Dr 1100) যাবে; অ্যাকাউন্ট বাছলে সরাসরি ঐ অ্যাকাউন্টে Dr হবে (যেমন নগদ পেলে &quot;Cash in Hand&quot;)।
+        </p>
       </div>
 
       <div>

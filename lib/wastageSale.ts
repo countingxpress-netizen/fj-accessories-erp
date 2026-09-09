@@ -21,10 +21,10 @@ export type WastageSaleInput = {
   quantityLbs: number;
   ratePerLbs: number;
   amount: number;
-  paymentMode: "cash" | "credit";
-  depositAccountId: string | null; // paymentMode='cash'
-  customerId: string | null;       // paymentMode='credit'
-  soldToName: string;
+  /** "কার কাছে বিক্রি" — customer বা chart_of_accounts একটা। */
+  party:
+    | { kind: "customer"; customerId: string; label: string }
+    | { kind: "account"; accountId: string; label: string };
   note: string;
   createdBy: string | null;
 };
@@ -32,11 +32,9 @@ export type WastageSaleInput = {
 /**
  * Wastage / Scrap বিক্রি রেকর্ড + JV।
  *
- *   বিক্রি:  Dr <deposit acct | 1100 AR> amount / Cr 4020 amount   — সব উৎসেই
- *   COGS  :  Dr 5050 / Cr 1203  = qty × Recycled Chips avg_cost_per_lbs
- *            — শুধু source='recycled_chips' (স্টকও কমে)
- *   source='wastage_stock' — শুধু আয়ের JV; মূল্য আগেই 5600-এ গেছে
- *   source='loose'         — শুধু আয়ের JV; স্টকে ট্র্যাক নেই
+ *   Dr <party: customer হলে 1100 AR / account হলে ঐ account>  amount
+ *   Cr 4020 Wastage / Scrap Sales                             amount
+ *   + source='recycled_chips' হলে: Dr 5050 / Cr 1203 (COGS = qty × avg_cost) এবং স্টক কমে
  */
 export async function createWastageSale(
   supabase: Client,
@@ -65,10 +63,9 @@ export async function createWastageSale(
       sale_no: saleNo, sale_date: input.saleDate, source: input.source,
       warehouse_id: fromRecycled ? input.warehouseId : null,
       quantity_lbs: input.quantityLbs, rate_per_lbs: input.ratePerLbs, amount: input.amount,
-      payment_mode: input.paymentMode,
-      deposit_account_id: input.paymentMode === "cash" ? input.depositAccountId : null,
-      customer_id: input.paymentMode === "credit" ? input.customerId : null,
-      sold_to_name: input.soldToName || null, cogs_amount: cogs,
+      customer_id: input.party.kind === "customer" ? input.party.customerId : null,
+      party_account_id: input.party.kind === "account" ? input.party.accountId : null,
+      sold_to_name: input.party.label || null, cogs_amount: cogs,
       note: input.note || null, created_by: input.createdBy,
     })
     .select("id").single();
@@ -95,14 +92,16 @@ export async function createWastageSale(
   }
 
   // JV
-  const [salesId, arId, cogsId, recId] = await Promise.all([
+  const [salesId, cogsId, recId] = await Promise.all([
     accountIdByCode(supabase, SALES_CODE),
-    accountIdByCode(supabase, AR_CODE),
     accountIdByCode(supabase, COGS_CODE),
     accountIdByCode(supabase, RECYCLED_INV_CODE),
   ]);
-  const debitAccountId = input.paymentMode === "credit" ? arId : input.depositAccountId;
-  const memo = `Wastage Sale ${saleNo}${input.soldToName ? " — " + input.soldToName : ""}`;
+  const debitAccountId = input.party.kind === "account"
+    ? input.party.accountId
+    : await accountIdByCode(supabase, AR_CODE);
+
+  const memo = `Wastage Sale ${saleNo}${input.party.label ? " — " + input.party.label : ""}`;
   const lines = [
     { account_id: debitAccountId ?? "", debit: input.amount, credit: 0, memo },
     { account_id: salesId ?? "", debit: 0, credit: input.amount, memo },

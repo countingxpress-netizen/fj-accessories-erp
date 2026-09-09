@@ -50,8 +50,7 @@ export default async function CustomerLedgerDetailPage({
   const { data: wastageSales } = await supabase
     .from("wastage_sales")
     .select("sale_no, sale_date, amount")
-    .eq("customer_id", id)
-    .eq("payment_mode", "credit");
+    .eq("customer_id", id);
 
   type Row = { date: string; type: "opening" | "invoice" | "payment"; ref: string; desc: string; debit: number; credit: number };
   const rows: Row[] = [];

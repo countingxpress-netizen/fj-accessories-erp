@@ -26,13 +26,8 @@ export default function WastageSaleRow({ sale }: { sale: any }) {
       ? "Wastage stock"
       : "আলগা স্ক্র্যাপ";
 
-  const soldTo = sale.payment_mode === "credit"
-    ? (sale.customers?.name ?? sale.sold_to_name ?? "-")
-    : (sale.sold_to_name || "-");
-
-  const payment = sale.payment_mode === "credit"
-    ? <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-800">বাকি</span>
-    : <span className="text-xs text-gray-600">{sale.deposit?.account_code ?? ""} {sale.deposit?.account_name ?? "নগদ"}</span>;
+  const soldTo = sale.customers?.name
+    ?? (sale.party ? `${sale.party.account_code} - ${sale.party.account_name}` : (sale.sold_to_name || "-"));
 
   return (
     <tr className="border-t">
@@ -42,12 +37,14 @@ export default function WastageSaleRow({ sale }: { sale: any }) {
       </td>
       <td className="px-4 py-2 font-medium">{sale.sale_no}</td>
       <td className="px-4 py-2 text-gray-600">{sourceLabel}</td>
-      <td className="px-4 py-2 text-gray-600">{soldTo}</td>
+      <td className="px-4 py-2 text-gray-600">
+        {soldTo}
+        {sale.customers?.name && <span className="ml-1 rounded-full bg-amber-100 px-1.5 py-0.5 text-[11px] text-amber-800">বাকি</span>}
+      </td>
       <td className="px-4 py-2 text-right">{money(sale.quantity_lbs)}</td>
       <td className="px-4 py-2 text-right">{money(sale.rate_per_lbs)}</td>
       <td className="px-4 py-2 text-right font-medium">{money(sale.amount)}</td>
       <td className="px-4 py-2 text-right text-gray-500">{sale.source === "recycled_chips" ? money(sale.cogs_amount) : "-"}</td>
-      <td className="px-4 py-2">{payment}</td>
       <td className="px-4 py-2 text-right whitespace-nowrap">
         <GuardedAction
           table="wastage_sales" recordId={sale.id} recordLabel={sale.sale_no} action="delete"

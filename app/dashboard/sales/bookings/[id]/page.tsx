@@ -6,6 +6,7 @@ import { calcTubeCutting, calcRequiredLbs } from "@/lib/calcTubeCutting";
 import { notFound } from "next/navigation";
 import PrintButton from "@/app/dashboard/PrintButton";
 import BookingViewActions from "./BookingViewActions";
+import BookingWastageSection from "./BookingWastageSection";
 import { money } from "@/lib/format";
 
 export default async function BookingViewPage({ params }: { params: Promise<{ id: string }> }) {
@@ -19,7 +20,7 @@ export default async function BookingViewPage({ params }: { params: Promise<{ id
 
   const query = supabase
     .from("bookings")
-    .select("*, customers(name, address), buyers(name), merchants(name), garments:garments_id(name, address), finished_goods(product_name), production_orders(id, blowing_completed_at, printing_completed_at, cutting_completed_at)");
+    .select("*, customers(name, address), buyers(name), merchants(name), garments:garments_id(name, address), finished_goods(product_name), production_orders(id, blowing_completed_at, printing_completed_at, cutting_completed_at), booking_materials(material_id, quantity_lbs, raw_materials(id, material_name, inventory_account_code, avg_cost_per_lbs))");
 
   const { data: bookings } = currentBooking.booking_group_id
     ? await query.eq("booking_group_id", groupId).order("created_at", { ascending: true })
@@ -91,6 +92,34 @@ export default async function BookingViewPage({ params }: { params: Promise<{ id
     if (item.proforma_invoices?.pi_no) piNoSet.add(item.proforma_invoices.pi_no);
   });
   const piNos = Array.from(piNoSet).sort();
+
+  // ── Wastage Register (Booking-এর বিপরীতে অতিরিক্ত ওয়েস্টেজ) ──────────────
+  const poIds = bookings.flatMap((b: any) => (b.production_orders ?? []).map((p: any) => p.id)).filter(Boolean);
+  const [{ data: warehouses }, { data: extraWastages }] = await Promise.all([
+    supabase.from("warehouses").select("id, name").order("name"),
+    supabase.from("wastage")
+      .select("*, creator:app_users!wastage_created_by_fkey(full_name)")
+      .eq("deducts_stock", true)
+      .in("booking_id", bookingIds)
+      .order("wastage_date", { ascending: false }),
+  ]);
+
+  const wastageProducts = bookings.map((b: any) => ({
+    bookingId: b.id,
+    productionOrderId: b.production_orders?.[0]?.id ?? null,
+    label: b.product_details || b.finished_goods?.product_name || b.style || "Product",
+    requiredLbs: Number(b.required_lbs) || 0,
+    warehouseId: b.warehouse_id ?? "",
+    materials: (b.booking_materials ?? [])
+      .map((bm: any) => ({
+        materialId: bm.material_id,
+        name: bm.raw_materials?.material_name ?? "",
+        code: bm.raw_materials?.inventory_account_code ?? "1299",
+        avgCost: Number(bm.raw_materials?.avg_cost_per_lbs) || 0,
+        bookingQtyLbs: Number(bm.quantity_lbs) || 0,
+      }))
+      .filter((m: any) => m.materialId && m.bookingQtyLbs > 0),
+  }));
 
   const first = bookings[0];
 
@@ -315,6 +344,15 @@ export default async function BookingViewPage({ params }: { params: Promise<{ id
             )}
           </div>
         </div>
+      </div>
+
+      <div className="print:hidden">
+        <BookingWastageSection
+          bookingNo={first.booking_no}
+          products={wastageProducts}
+          warehouses={warehouses ?? []}
+          existing={extraWastages ?? []}
+        />
       </div>
 
       <div className="flex justify-end gap-2 mt-4 print:hidden">

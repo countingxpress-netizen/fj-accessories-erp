@@ -305,7 +305,23 @@ export async function reverseBookingGroupDerived(
         await reverseInventoryJv(supabase, w.inventory_voucher_id, {
           unlink: { table: "wastage", column: "inventory_voucher_id", id: w.id },
         });
-        if (w.recycled) {
+        if (w.deducts_stock) {
+          const { data: ledgers } = await supabase
+            .from("stock_ledger").select("*")
+            .eq("reference_type", "wastage").eq("reference_id", w.id);
+          for (const l of ledgers ?? []) {
+            const { data: stock } = await supabase
+              .from("raw_material_stock").select("*")
+              .eq("material_id", l.item_id).eq("warehouse_id", l.warehouse_id).maybeSingle();
+            if (stock) {
+              const delta = l.txn_type === "out" ? Number(l.quantity) : -Number(l.quantity);
+              await supabase.from("raw_material_stock")
+                .update({ quantity_lbs: stock.quantity_lbs + delta, updated_at: new Date().toISOString() })
+                .eq("id", stock.id);
+            }
+            await supabase.from("stock_ledger").delete().eq("id", l.id);
+          }
+        } else if (w.recycled) {
           const { data: ledgerEntry } = await supabase
             .from("stock_ledger").select("*")
             .eq("reference_type", "wastage").eq("reference_id", po.id).maybeSingle();

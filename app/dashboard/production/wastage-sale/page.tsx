@@ -7,12 +7,11 @@ import WastageSaleRow from "./WastageSaleRow";
 export default async function WastageSalePage() {
   const supabase = await createClient();
 
-  const [{ data: customers }, { data: cashBankAccounts }, { data: warehouses }, { data: recycled }, { data: wastages }, { data: soldFromWastage }] =
+  const [{ data: customers }, { data: partyAccounts }, { data: warehouses }, { data: recycled }, { data: wastages }, { data: soldFromWastage }] =
     await Promise.all([
       supabase.from("customers").select("id, name").order("name"),
-      supabase.from("chart_of_accounts").select("id, account_code, account_name")
-        .eq("account_type", "asset")
-        .or("account_name.ilike.%cash%,account_name.ilike.%bank%")
+      supabase.from("chart_of_accounts").select("id, account_code, account_name, account_type")
+        .in("account_type", ["asset", "liability", "equity", "income"])
         .order("account_code"),
       supabase.from("warehouses").select("id, name").order("name"),
       supabase.from("raw_materials").select("id, avg_cost_per_lbs").eq("material_name", "Recycled Chips").maybeSingle(),
@@ -37,7 +36,7 @@ export default async function WastageSalePage() {
 
   const { data: sales } = await supabase
     .from("wastage_sales")
-    .select("*, warehouses(name), customers(name), deposit:chart_of_accounts!wastage_sales_deposit_account_id_fkey(account_code, account_name), creator:app_users!wastage_sales_created_by_fkey(full_name)")
+    .select("*, warehouses(name), customers(name), party:chart_of_accounts!wastage_sales_party_account_id_fkey(account_code, account_name), creator:app_users!wastage_sales_created_by_fkey(full_name)")
     .order("sale_date", { ascending: false })
     .order("created_at", { ascending: false });
 
@@ -74,7 +73,7 @@ export default async function WastageSalePage() {
 
       <WastageSaleForm
         customers={customers ?? []}
-        cashBankAccounts={cashBankAccounts ?? []}
+        partyAccounts={partyAccounts ?? []}
         warehouses={warehouses ?? []}
         availableWastageLbs={availableWastageLbs}
         recycledStockByWarehouse={Object.fromEntries(recycledStock.map((r) => [r.warehouse_id, Number(r.quantity_lbs || 0)]))}
@@ -93,7 +92,6 @@ export default async function WastageSalePage() {
               <th className="px-4 py-2 text-right">Rate</th>
               <th className="px-4 py-2 text-right">Amount</th>
               <th className="px-4 py-2 text-right">COGS</th>
-              <th className="px-4 py-2">পেমেন্ট</th>
               <th className="px-4 py-2 text-right">Action</th>
             </tr>
           </thead>
@@ -102,7 +100,7 @@ export default async function WastageSalePage() {
               <WastageSaleRow key={s.id} sale={s} />
             ))}
             {(!sales || sales.length === 0) && (
-              <tr><td colSpan={10} className="px-4 py-3 text-gray-400 italic">এখনো কোনো Wastage বিক্রি নেই</td></tr>
+              <tr><td colSpan={9} className="px-4 py-3 text-gray-400 italic">এখনো কোনো Wastage বিক্রি নেই</td></tr>
             )}
           </tbody>
         </table>
