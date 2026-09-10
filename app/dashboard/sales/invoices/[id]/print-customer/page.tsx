@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import PrintButton from "@/app/dashboard/PrintButton";
 import { amountInWords } from "@/lib/numberToWords";
 import { AT_DEFAULT_MARKUP_PERCENTAGE, calcAtCustomerLine } from "@/lib/atCommission";
+import InvoiceSummary from "../InvoiceSummary";
 
 function fmt(n: number) {
   return n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -27,7 +28,7 @@ export default async function InvoicePrintCustomerPage({ params }: { params: Pro
 
   const { data: invoice } = await supabase
     .from("sales_invoices")
-    .select(`*, customers(name, address, phone),
+    .select(`*, customers(name, address, phone, opening_balance, opening_balance_date),
       creator:app_users!sales_invoices_created_by_fkey(signature_url),
       sales_invoice_items(quantity_pcs, unit_price,
         bookings(booking_no, style, required_lbs, buyer_id, measurement_type, measurement_unit, length_val, width_val, flap_val, gusset_val, pillow_val),
@@ -62,6 +63,42 @@ export default async function InvoicePrintCustomerPage({ params }: { params: Pro
 
   const total = items.reduce((s: number, i: any) => s + i.customerAmount, 0);
   const totalOrderLbs = items.reduce((s: number, i: any) => s + i.orderLbs, 0);
+
+  // --- নিচের শর্ট সামারির অটো মান (regular print page-এর মতোই — কাস্টমার ledger) ---
+  const [{ data: allInvoices }, { data: payments }] = await Promise.all([
+    supabase.from("sales_invoices")
+      .select("id, invoice_no, invoice_date, sales_invoice_items(amount)")
+      .eq("customer_id", invoice.customer_id),
+    supabase.from("customer_payments")
+      .select("amount, payment_date")
+      .eq("customer_id", invoice.customer_id),
+  ]);
+
+  const invoicesWithTotal = (allInvoices ?? [])
+    .map((inv: any) => ({
+      id: inv.id, invoice_no: inv.invoice_no, invoice_date: inv.invoice_date,
+      total: (inv.sales_invoice_items ?? []).reduce((s: number, i: any) => s + (i.amount || 0), 0),
+    }))
+    .sort((a: any, b: any) =>
+      a.invoice_date === b.invoice_date ? a.invoice_no.localeCompare(b.invoice_no) : a.invoice_date.localeCompare(b.invoice_date),
+    );
+  const currentIndex = invoicesWithTotal.findIndex((inv: any) => inv.id === invoice.id);
+  const previousInvoice = currentIndex > 0 ? invoicesWithTotal[currentIndex - 1] : null;
+  const openingBalance = invoice.customers?.opening_balance || 0;
+  const openingDate = invoice.customers?.opening_balance_date || "2000-01-01";
+  const previousDate = previousInvoice ? previousInvoice.invoice_date : openingDate;
+  const sumInvoicesUpToPrevious = (currentIndex > 0 ? invoicesWithTotal.slice(0, currentIndex) : [])
+    .reduce((s: number, inv: any) => s + inv.total, 0);
+  const paymentsUpToPrevious = (payments ?? []).filter((p: any) => p.payment_date <= previousDate)
+    .reduce((s: number, p: any) => s + p.amount, 0);
+  const previousDue = openingBalance + sumInvoicesUpToPrevious - paymentsUpToPrevious;
+  const paidBetween = (payments ?? [])
+    .filter((p: any) => p.payment_date > previousDate && p.payment_date <= invoice.invoice_date)
+    .reduce((s: number, p: any) => s + p.amount, 0);
+  const paymentDatesBetween = (payments ?? [])
+    .filter((p: any) => p.payment_date > previousDate && p.payment_date <= invoice.invoice_date)
+    .map((p: any) => p.payment_date).sort();
+  const lastPaymentDate = paymentDatesBetween.length ? paymentDatesBetween[paymentDatesBetween.length - 1] : null;
 
   const signatureUrl = invoice.creator?.signature_url || company?.signature_url;
 
@@ -134,10 +171,24 @@ export default async function InvoicePrintCustomerPage({ params }: { params: Pro
         Total Order Lbs = <strong>{fmt(totalOrderLbs)} Lbs</strong>
       </p>
 
-      <div className="mb-8">
+      <div className="mb-6">
         <p className="text-sm font-semibold mb-1">Amount In Word (BDT):</p>
         <div className="border rounded px-3 py-2 text-sm">{amountInWords(total, "BDT")}</div>
       </div>
+
+      <InvoiceSummary
+        invoiceId={invoice.id}
+        invoiceNo={invoice.invoice_no}
+        previousLabel={`Previous Bill${previousInvoice ? `-${previousInvoice.invoice_no}` : " (Opening Balance)"}`}
+        lastPaymentDate={lastPaymentDate}
+        autoPrevDue={previousDue}
+        autoThisBill={total}
+        autoPaid={paidBetween}
+        savedPrevDue={invoice.summary_prev_due ?? null}
+        savedThisBill={invoice.summary_this_bill ?? null}
+        savedPaid={invoice.summary_paid ?? null}
+        savedNote={invoice.summary_note ?? null}
+      />
 
       <div className="flex justify-between items-end text-sm pb-4">
         <div className="border-t border-gray-400 pt-2 w-40 text-center">Received By</div>

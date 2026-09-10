@@ -4,6 +4,7 @@ import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import PrintButton from "@/app/dashboard/PrintButton";
 import { amountInWords } from "@/lib/numberToWords";
+import InvoiceSummary from "../InvoiceSummary";
 
 function fmt(n: number) {
   return n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -183,38 +184,19 @@ export default async function InvoicePrintPage({ params }: { params: Promise<{ i
         <div className="border rounded px-3 py-2 text-sm">{amountInWords(total, "BDT")}</div>
       </div>
 
-      <table className="text-xs border-collapse w-full max-w-sm ml-auto mb-8" style={{ tableLayout: "fixed" }}>
-        <colgroup>
-          <col style={{ width: "65%" }} />
-          <col style={{ width: "35%" }} />
-        </colgroup>
-        <tbody>
-          <tr>
-            <td className="py-1 pr-2 whitespace-nowrap overflow-hidden text-ellipsis">
-              Previous Bill{previousInvoice ? `-${previousInvoice.invoice_no}` : " (Opening Balance)"} Due =
-            </td>
-            <td className="py-1 text-right whitespace-nowrap">BDT {fmt(previousDue)}</td>
-          </tr>
-          <tr>
-            <td className="py-1 pr-2 whitespace-nowrap overflow-hidden text-ellipsis">This Bill-{invoice.invoice_no} =</td>
-            <td className="py-1 text-right whitespace-nowrap">BDT {fmt(thisBillAmount)}</td>
-          </tr>
-          <tr className="font-semibold border-t">
-            <td className="py-1 pr-2 whitespace-nowrap">Total Due =</td>
-            <td className="py-1 text-right whitespace-nowrap">BDT {fmt(totalDue)}</td>
-          </tr>
-          <tr>
-            <td className="py-1 pr-2 whitespace-nowrap overflow-hidden text-ellipsis">
-              Paid{lastPaymentDate ? ` on ${formatDate(lastPaymentDate)}` : ""} =
-            </td>
-            <td className="py-1 text-right whitespace-nowrap">{paidBetween > 0 ? `BDT ${fmt(paidBetween)}` : ""}</td>
-          </tr>
-          <tr className="font-bold border-t-2">
-            <td className="py-1 pr-2 whitespace-nowrap">Running Due =</td>
-            <td className="py-1 text-right whitespace-nowrap">BDT {fmt(runningDue)}</td>
-          </tr>
-        </tbody>
-      </table>
+      <InvoiceSummary
+        invoiceId={invoice.id}
+        invoiceNo={invoice.invoice_no}
+        previousLabel={`Previous Bill${previousInvoice ? `-${previousInvoice.invoice_no}` : " (Opening Balance)"}`}
+        lastPaymentDate={lastPaymentDate}
+        autoPrevDue={previousDue}
+        autoThisBill={thisBillAmount}
+        autoPaid={paidBetween}
+        savedPrevDue={invoice.summary_prev_due ?? null}
+        savedThisBill={invoice.summary_this_bill ?? null}
+        savedPaid={invoice.summary_paid ?? null}
+        savedNote={invoice.summary_note ?? null}
+      />
 
       <div className="flex justify-between items-end text-sm pb-4">
         <div className="border-t border-gray-400 pt-2 w-40 text-center">Received By</div>
