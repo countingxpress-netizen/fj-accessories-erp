@@ -20,11 +20,11 @@ export default async function ExpensesPage({
     .or("account_name.ilike.%cash%,account_name.ilike.%bank%")
     .order("account_code");
 
-  // Md Abu Jafor (3000) থেকে টাকা নিয়ে খরচ করা হলেও "Paid Via"-তে বাছা যায়
-  const { data: mdJaforAccount } = await supabase
+  // Md Abu Jafor (3000) / রিপন থিনার (1500) দিয়ে খরচ করা হলেও "Paid Via"-তে বাছা যায়
+  const { data: extraPaidVia } = await supabase
     .from("chart_of_accounts").select("id, account_code, account_name")
-    .eq("account_code", "3000").maybeSingle();
-  const paidViaAccounts = mdJaforAccount ? [...(cashBankAccounts ?? []), mdJaforAccount] : (cashBankAccounts ?? []);
+    .in("account_code", ["1500", "3000"]).order("account_code");
+  const paidViaAccounts = [...(cashBankAccounts ?? []), ...(extraPaidVia ?? [])];
 
   let query = supabase
     .from("expenses")

@@ -89,7 +89,7 @@ export default function ExpenseForm({
 
       <div className="flex flex-wrap gap-4">
         <div className="flex-1 min-w-[200px]">
-          <label className="block text-sm text-gray-600 mb-1">Paid Via (Cash/Bank)</label>
+          <label className="block text-sm text-gray-600 mb-1">Paid Via (Cash / Bank / পার্টি)</label>
           <select value={paidViaAccountId} onChange={(e) => setPaidViaAccountId(e.target.value)} className="w-full rounded-lg border px-3 py-2 text-sm" required>
             <option value="">-- বাছুন --</option>
             {cashBankAccounts.map((a) => <option key={a.id} value={a.id}>{a.account_code} - {a.account_name}</option>)}
