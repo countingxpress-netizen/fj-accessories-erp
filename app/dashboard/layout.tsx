@@ -18,8 +18,14 @@ export default async function DashboardLayout({ children }: { children: React.Re
   return (
     <div className="flex min-h-screen">
       <aside className="print:hidden sticky top-0 h-screen w-64 shrink-0 overflow-y-auto border-r border-gray-800 bg-gray-900 text-white p-3 flex flex-col">
-        <div className="flex items-center gap-2 px-2 py-2 mb-2">
-          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/10 text-sm font-bold">FJ</span>
+        <div className="flex items-center gap-2.5 px-2 py-2 mb-2">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/branding/logo.png"
+            alt="F & J"
+            className="h-10 w-10 shrink-0 rounded-xl object-contain shadow-md ring-1 ring-white/20"
+            style={{ background: "#1F3F8F" }}
+          />
           <div className="min-w-0">
             <p className="text-sm font-semibold leading-tight">F &amp; J ERP</p>
             {appUser && (
