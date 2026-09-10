@@ -46,6 +46,8 @@ export default function ChallanPrintView({
         @media print {
           .no-print { display: none !important; }
           .challan-root { max-width: none; }
+          /* চালান নিজের 12mm sheet padding রাখে — dashboard <main>-এর print padding বাদ */
+          main { padding: 0 !important; }
         }
       `}</style>
 

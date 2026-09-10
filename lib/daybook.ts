@@ -108,6 +108,19 @@ export async function buildDayBook(
 
   const isSystemVoucher = (nar: string) => nar.startsWith("Opening") || nar.startsWith("Rounding");
 
+  // ── Wastage / Scrap বিক্রি ──
+  //   নগদ (payment_received) → জমা কলামে "ওয়েস্টেজ বিক্রি — <পার্টি>" (JV নয়, এখানে explicit)
+  //   বাকি                    → খরচ কলামে "<পার্টি> / অন্যান্য বিক্রি" + otherSaleAmount
+  //   এদের JV generic pool-loop-এ দুবার গোনা এড়াতে voucherId বাদ দেওয়া হয়।
+  const { data: wsRaw } = await supabase
+    .from("wastage_sales")
+    .select("voucher_id, sale_date, amount, quantity, unit, payment_received, sold_to_name, customers(name), chart_of_accounts:party_account_id(account_name)")
+    .lte("sale_date", to);
+  const wastageSales = (wsRaw ?? []) as any[];
+  const wsPartyName = (w: any) =>
+    one<any>(w.customers)?.name || one<any>(w.chart_of_accounts)?.account_name || w.sold_to_name || "পার্টি";
+  const wastageSaleVoucherIds = new Set<string>(wastageSales.map((w) => w.voucher_id).filter(Boolean));
+
   // prior cash (1000) balance — from-তারিখের আগের সব 1000 লাইন + যেকোনো তারিখের
   // opening/rounding ভাউচার (opening balance সবসময় "শুরুর" অংশ, তারিখ যা-ই হোক)।
   let priorCash = 0;
@@ -129,6 +142,7 @@ export async function buildDayBook(
     const d = v?.voucher_date ?? "";
     if (!d || d < from || d > to) continue;
     if (isSystemVoucher((v?.narration ?? "").trim())) continue;
+    if (wastageSaleVoucherIds.has(l.voucher_id)) continue; // নিচে explicit হ্যান্ডল
     voucherIds.add(l.voucher_id);
   }
 
@@ -314,6 +328,25 @@ export async function buildDayBook(
   // "বিল" লাইন — খরচ কলামে (বিক্রির সমান, reconcile-এ কাটাকাটি হয়)
   for (const b of bikri) khoroch.push({ name: b.name, note: "বিল", amount: b.amount });
 
+  // ── Wastage / Scrap বিক্রি (ঐ দিনের) ──
+  //   প্রতিটা বিক্রি → জমা লিস্টের **একদম শেষে** "ওয়েস্টেজ বিক্রি — <পার্টি>"
+  //   বাকিতে হলে → অতিরিক্ত ভাবে খরচ কলামে "<পার্টি> / অন্যান্য বিক্রি" (জমার সাথে কাটাকাটি,
+  //   বাকি বিক্রি ক্যাশ ছোঁয় না — invoice-এর "বিল" লাইনের মতোই)।
+  const wastageSaleJama: DbRow[] = [];
+  for (const w of wastageSales) {
+    const d = w.sale_date ?? "";
+    if (d < from || d > to) continue;
+    const amt = num(w.amount);
+    if (amt <= 0) continue;
+    const q = Math.round(num(w.quantity) * 100) / 100;
+    const qtyText = `${q.toLocaleString("en-IN")} ${w.unit === "kg" ? "কেজি" : "এলবিস"}`;
+    wastageSaleJama.push({ name: "ওয়েস্টেজ বিক্রি", note: qtyText, amount: amt });
+    if (!w.payment_received) {
+      khoroch.push({ name: wsPartyName(w), note: "অন্যান্য বিক্রি", amount: amt });
+    }
+  }
+  const wastageSaleJamaTotal = wastageSaleJama.reduce((s, r) => s + r.amount, 0);
+
   // ── Customer payments (পার্টি জমা + AR) ──
   const custPays = (custPaysRaw ?? []) as any[];
   let partyJamaBefore = 0;
@@ -375,7 +408,7 @@ export async function buildDayBook(
   }
 
   // ── Totals ──
-  const jamaTotal = jama.reduce((s, r) => s + r.amount, 0);
+  const jamaTotal = jama.reduce((s, r) => s + r.amount, 0) + wastageSaleJamaTotal;
   const khorochTotal = khoroch.reduce((s, r) => s + r.amount, 0);
   const cashPosition = priorCash + jamaTotal + bikriAmount - khorochTotal;
 
@@ -383,7 +416,8 @@ export async function buildDayBook(
     fromDate: from,
     toDate: to,
     singleDay: from === to,
-    jama: jama.sort((a, b) => b.amount - a.amount),
+    // ওয়েস্টেজ বিক্রি জমার একদম শেষে
+    jama: [...jama.sort((a, b) => b.amount - a.amount), ...wastageSaleJama],
     jamaTotal,
     khoroch: khoroch.sort((a, b) => b.amount - a.amount),
     khorochTotal,

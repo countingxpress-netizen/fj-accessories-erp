@@ -24,3 +24,20 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* প্রিন্টে ব্রাউজারের নিজের হেডার/ফুটার (পেজ title, URL, তারিখ, পেজ নম্বর) সরাতে
+   page margin 0 — মার্জিন দেয় dashboard-এর <main> (print:p-[10mm])। চালান নিজের
+   full-bleed sheet ব্যবহার করে (ChallanPrintView-এ main padding 0 override করা)। */
+@page {
+  size: A4;
+  margin: 0;
+}
+
+@media print {
+  html,
+  body {
+    margin: 0 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}

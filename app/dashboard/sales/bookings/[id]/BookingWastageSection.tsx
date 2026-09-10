@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { getCurrentUserId } from "@/lib/currentUser";
 import { formatDate } from "@/lib/formatDate";
 import { money } from "@/lib/format";
-import { recordBookingWastage, reverseBookingWastage } from "@/lib/bookingWastage";
+import { recordBookingWastage, updateBookingWastage, reverseBookingWastage } from "@/lib/bookingWastage";
 import GuardedAction from "@/app/dashboard/GuardedAction";
 
 type Material = { materialId: string; name: string; code: string; avgCost: number; bookingQtyLbs: number };
@@ -78,6 +78,49 @@ export default function BookingWastageSection({
   );
 }
 
+type EntryFields = {
+  stage: "blowing" | "printing" | "cutting";
+  qty: string;
+  recycled: boolean;
+  recycledWarehouseId: string;
+  date: string;
+};
+
+function WastageFields({
+  v, set, warehouses,
+}: { v: EntryFields; set: (patch: Partial<EntryFields>) => void; warehouses: Warehouse[] }) {
+  return (
+    <div className="flex flex-wrap items-end gap-2">
+      <div>
+        <label className="block text-[11px] text-gray-500 mb-0.5">Stage</label>
+        <select value={v.stage} onChange={(e) => set({ stage: e.target.value as EntryFields["stage"] })} className="rounded border px-2 py-1 text-sm">
+          <option value="blowing">Blowing</option>
+          <option value="printing">Printing</option>
+          <option value="cutting">Cutting</option>
+        </select>
+      </div>
+      <div>
+        <label className="block text-[11px] text-gray-500 mb-0.5">Wastage (Lbs)</label>
+        <input type="number" step="0.01" value={v.qty} onChange={(e) => set({ qty: e.target.value })} className="w-28 rounded border px-2 py-1 text-sm" />
+      </div>
+      <div>
+        <label className="block text-[11px] text-gray-500 mb-0.5">তারিখ</label>
+        <input type="date" value={v.date} onChange={(e) => set({ date: e.target.value })} className="rounded border px-2 py-1 text-sm" />
+      </div>
+      <label className="flex items-center gap-1 text-xs text-gray-700 pb-1">
+        <input type="checkbox" checked={v.recycled} onChange={(e) => set({ recycled: e.target.checked })} />
+        Recycled Chips-এ ফেরত
+      </label>
+      {v.recycled && (
+        <select value={v.recycledWarehouseId} onChange={(e) => set({ recycledWarehouseId: e.target.value })} className="rounded border px-2 py-1 text-sm">
+          <option value="">গুদাম বাছুন</option>
+          {warehouses.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
+        </select>
+      )}
+    </div>
+  );
+}
+
 function ProductWastage({
   product, bookingNo, warehouses, entries, totalExtra, onDone, supabase,
 }: {
@@ -90,39 +133,74 @@ function ProductWastage({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   supabase: any;
 }) {
-  const [stage, setStage] = useState<"blowing" | "printing" | "cutting">("blowing");
-  const [qty, setQty] = useState("");
-  const [recycled, setRecycled] = useState(false);
-  const [recycledWarehouseId, setRecycledWarehouseId] = useState("");
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const blank: EntryFields = { stage: "blowing", qty: "", recycled: false, recycledWarehouseId: "", date: new Date().toISOString().slice(0, 10) };
+  const [add, setAdd] = useState<EntryFields>(blank);
+  const [editId, setEditId] = useState<string | null>(null);
+  const [edit, setEdit] = useState<EntryFields>(blank);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const qtyN = parseFloat(qty) || 0;
+  const materials = product.materials.map((m) => ({
+    materialId: m.materialId, code: m.code, avgCost: m.avgCost, bookingQtyLbs: m.bookingQtyLbs,
+  }));
 
-  async function handleSave() {
-    setError("");
-    if (!qtyN || qtyN <= 0) { setError("সঠিক Quantity দিন।"); return; }
-    if (!product.warehouseId) { setError("এই বুকিং-এ গুদাম সেট নেই।"); return; }
-    if (recycled && !recycledWarehouseId) { setError("Recycled Chips ফেরত দিতে গুদাম বাছুন।"); return; }
+  function validate(v: EntryFields): string | null {
+    const n = parseFloat(v.qty) || 0;
+    if (!n || n <= 0) return "সঠিক Quantity দিন।";
+    if (!product.warehouseId) return "এই বুকিং-এ গুদাম সেট নেই।";
+    if (v.recycled && !v.recycledWarehouseId) return "Recycled Chips ফেরত দিতে গুদাম বাছুন।";
+    return null;
+  }
 
-    setLoading(true);
-    const createdBy = await getCurrentUserId(supabase);
-    const r = await recordBookingWastage(supabase, {
+  function payload(v: EntryFields, createdBy: string | null) {
+    return {
       bookingId: product.bookingId,
       productionOrderId: product.productionOrderId,
       bookingNo,
       warehouseId: product.warehouseId,
-      stage, quantityLbs: qtyN,
-      recycled, recycledWarehouseId: recycled ? recycledWarehouseId : null,
-      wastageDate: date, createdBy,
-      materials: product.materials.map((m) => ({
-        materialId: m.materialId, code: m.code, avgCost: m.avgCost, bookingQtyLbs: m.bookingQtyLbs,
-      })),
-    });
+      stage: v.stage,
+      quantityLbs: parseFloat(v.qty) || 0,
+      recycled: v.recycled,
+      recycledWarehouseId: v.recycled ? v.recycledWarehouseId : null,
+      wastageDate: v.date,
+      createdBy,
+      materials,
+    };
+  }
+
+  async function handleAdd() {
+    setError("");
+    const err = validate(add);
+    if (err) { setError(err); return; }
+    setLoading(true);
+    const createdBy = await getCurrentUserId(supabase);
+    const r = await recordBookingWastage(supabase, payload(add, createdBy));
     setLoading(false);
     if (!r.ok) { setError(r.error ?? "সেভ ব্যর্থ হয়েছে।"); return; }
-    setQty(""); setRecycled(false); setRecycledWarehouseId("");
+    setAdd(blank);
+    onDone();
+  }
+
+  function startEdit(w: any) {
+    setError("");
+    setEditId(w.id);
+    setEdit({
+      stage: w.stage, qty: String(w.quantity_lbs), recycled: !!w.recycled,
+      recycledWarehouseId: "", date: w.wastage_date,
+    });
+  }
+
+  async function handleUpdate() {
+    if (!editId) return;
+    setError("");
+    const err = validate(edit);
+    if (err) { setError(err); return; }
+    setLoading(true);
+    const createdBy = await getCurrentUserId(supabase);
+    const r = await updateBookingWastage(supabase, editId, payload(edit, createdBy));
+    setLoading(false);
+    if (!r.ok) { setError(r.error ?? "সেভ ব্যর্থ হয়েছে।"); return; }
+    setEditId(null);
     onDone();
   }
 
@@ -143,40 +221,12 @@ function ProductWastage({
       </div>
 
       <div className="flex flex-wrap items-end gap-2">
-        <div>
-          <label className="block text-[11px] text-gray-500 mb-0.5">Stage</label>
-          <select value={stage} onChange={(e) => setStage(e.target.value as "blowing" | "printing" | "cutting")} className="rounded border px-2 py-1 text-sm">
-            <option value="blowing">Blowing</option>
-            <option value="printing">Printing</option>
-            <option value="cutting">Cutting</option>
-          </select>
-        </div>
-        <div>
-          <label className="block text-[11px] text-gray-500 mb-0.5">Wastage (Lbs)</label>
-          <input type="number" step="0.01" value={qty} onChange={(e) => setQty(e.target.value)} className="w-28 rounded border px-2 py-1 text-sm" />
-        </div>
-        <div>
-          <label className="block text-[11px] text-gray-500 mb-0.5">তারিখ</label>
-          <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="rounded border px-2 py-1 text-sm" />
-        </div>
-        <label className="flex items-center gap-1 text-xs text-gray-700 pb-1">
-          <input type="checkbox" checked={recycled} onChange={(e) => setRecycled(e.target.checked)} />
-          Recycled Chips-এ ফেরত
-        </label>
-        {recycled && (
-          <select value={recycledWarehouseId} onChange={(e) => setRecycledWarehouseId(e.target.value)} className="rounded border px-2 py-1 text-sm">
-            <option value="">গুদাম বাছুন</option>
-            {warehouses.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
-          </select>
-        )}
-        <button
-          type="button" onClick={handleSave} disabled={loading}
-          className="rounded-lg bg-gray-900 px-4 py-1.5 text-sm text-white disabled:opacity-40"
-        >
+        <WastageFields v={add} set={(p) => setAdd((s) => ({ ...s, ...p }))} warehouses={warehouses} />
+        <button type="button" onClick={handleAdd} disabled={loading} className="rounded-lg bg-gray-900 px-4 py-1.5 text-sm text-white disabled:opacity-40">
           {loading ? "..." : "যোগ করুন"}
         </button>
       </div>
-      {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
+      {error && !editId && <p className="mt-1 text-xs text-red-600">{error}</p>}
 
       {entries.length > 0 && (
         <table className="mt-3 w-full text-xs">
@@ -189,24 +239,45 @@ function ProductWastage({
           </thead>
           <tbody>
             {entries.map((w) => (
-              <tr key={w.id} className="border-t">
-                <td className="py-1 text-gray-500">
-                  {formatDate(w.wastage_date)}
-                  {w.creator?.full_name && <span className="text-gray-400"> · {w.creator.full_name}</span>}
-                </td>
-                <td className="py-1">{STAGE_LABEL[w.stage] ?? w.stage}</td>
-                <td className="py-1 text-right">{money(w.quantity_lbs)}</td>
-                <td className="py-1">{w.recycled ? "হ্যাঁ" : "না"}</td>
-                <td className="py-1 text-right">
-                  <GuardedAction
-                    table="wastage" recordId={w.id} recordLabel={`${bookingNo} ${formatDate(w.wastage_date)}`} action="delete"
-                    onAllowed={() => handleDelete(w)}
-                    className="rounded bg-red-50 px-2 py-0.5 text-[11px] text-red-700 hover:bg-red-100"
-                  >
-                    Delete
-                  </GuardedAction>
-                </td>
-              </tr>
+              editId === w.id ? (
+                <tr key={w.id} className="border-t bg-yellow-50">
+                  <td colSpan={5} className="py-2">
+                    <WastageFields v={edit} set={(p) => setEdit((s) => ({ ...s, ...p }))} warehouses={warehouses} />
+                    {w.recycled && <p className="mt-1 text-[11px] text-amber-600">নোট: এডিটে Recycled থাকলে গুদাম আবার বাছুন।</p>}
+                    {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
+                    <div className="mt-2 flex gap-2">
+                      <button type="button" onClick={handleUpdate} disabled={loading} className="rounded bg-green-600 px-3 py-1 text-xs text-white disabled:opacity-40">সেভ</button>
+                      <button type="button" onClick={() => setEditId(null)} className="rounded bg-gray-200 px-3 py-1 text-xs text-gray-700">বাতিল</button>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                <tr key={w.id} className="border-t">
+                  <td className="py-1 text-gray-500">
+                    {formatDate(w.wastage_date)}
+                    {w.creator?.full_name && <span className="text-gray-400"> · {w.creator.full_name}</span>}
+                  </td>
+                  <td className="py-1">{STAGE_LABEL[w.stage] ?? w.stage}</td>
+                  <td className="py-1 text-right">{money(w.quantity_lbs)}</td>
+                  <td className="py-1">{w.recycled ? "হ্যাঁ" : "না"}</td>
+                  <td className="py-1 text-right whitespace-nowrap">
+                    <GuardedAction
+                      table="wastage" recordId={w.id} recordLabel={`${bookingNo} ${formatDate(w.wastage_date)}`} action="edit"
+                      onAllowed={() => startEdit(w)}
+                      className="rounded bg-blue-50 px-2 py-0.5 text-[11px] text-blue-700 mr-1 hover:bg-blue-100"
+                    >
+                      Edit
+                    </GuardedAction>
+                    <GuardedAction
+                      table="wastage" recordId={w.id} recordLabel={`${bookingNo} ${formatDate(w.wastage_date)}`} action="delete"
+                      onAllowed={() => handleDelete(w)}
+                      className="rounded bg-red-50 px-2 py-0.5 text-[11px] text-red-700 hover:bg-red-100"
+                    >
+                      Delete
+                    </GuardedAction>
+                  </td>
+                </tr>
+              )
             ))}
           </tbody>
         </table>

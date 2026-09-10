@@ -30,36 +30,41 @@ export type BookingWastageInput = {
   materials: BookingWastageMaterial[];
 };
 
-/**
- * Booking View "Wastage Register" — required_lbs-এর **অতিরিক্ত** ওয়েস্টেজ।
- * material-split অনুপাতে কাঁচামাল স্টক কমে, JV Dr 5600 / Cr <material inv>।
- */
-export async function recordBookingWastage(
-  supabase: Client,
-  input: BookingWastageInput,
+/** JV উল্টে দেয় + কাঁচামাল স্টক ফেরত দেয় — row মুছে না (edit-এ লাগে)। */
+async function undoBookingWastageEffects(supabase: Client, wastage: any): Promise<void> {
+  await reverseInventoryJv(supabase, wastage.inventory_voucher_id, {
+    unlink: { table: "wastage", column: "inventory_voucher_id", id: wastage.id },
+  });
+  const { data: ledgers } = await supabase
+    .from("stock_ledger").select("*")
+    .eq("reference_type", "wastage").eq("reference_id", wastage.id);
+  for (const l of ledgers ?? []) {
+    const { data: stock } = await supabase
+      .from("raw_material_stock").select("*")
+      .eq("material_id", l.item_id).eq("warehouse_id", l.warehouse_id).maybeSingle();
+    if (stock) {
+      const delta = l.txn_type === "out" ? Number(l.quantity) : -Number(l.quantity);
+      await supabase.from("raw_material_stock")
+        .update({ quantity_lbs: stock.quantity_lbs + delta, updated_at: new Date().toISOString() })
+        .eq("id", stock.id);
+    }
+    await supabase.from("stock_ledger").delete().eq("id", l.id);
+  }
+}
+
+/** wastage row আগে থেকেই আছে (id জানা) — fields update + স্টক কর্তন + JV বসায়। */
+async function applyBookingWastageEffects(
+  supabase: Client, wastageId: string, input: BookingWastageInput,
 ): Promise<{ ok: boolean; error?: string }> {
   const qty = input.quantityLbs;
-  if (!(qty > 0)) return { ok: false, error: "সঠিক Quantity দিন।" };
-
   const totalBookingLbs = input.materials.reduce((s, m) => s + (m.bookingQtyLbs || 0), 0);
   if (totalBookingLbs <= 0) return { ok: false, error: "এই বুকিং-এর material split পাওয়া যায়নি।" };
-  if (input.recycled && !input.recycledWarehouseId) {
-    return { ok: false, error: "Recycled Chips হিসেবে ফেরত দিতে Warehouse বাছুন।" };
-  }
 
-  // ১) wastage row (ledger reference-এর জন্য আগে দরকার)
-  const { data: wastageRow, error: wErr } = await supabase
-    .from("wastage")
-    .insert({
-      production_id: input.productionOrderId, booking_id: input.bookingId,
-      stage: input.stage, quantity_lbs: qty, recycled: input.recycled,
-      wastage_date: input.wastageDate, deducts_stock: true, created_by: input.createdBy,
-    })
-    .select("id").single();
-  if (wErr || !wastageRow) return { ok: false, error: wErr?.message ?? "Wastage সেভ ব্যর্থ হয়েছে।" };
-  const wastageId = wastageRow.id;
+  await supabase.from("wastage").update({
+    stage: input.stage, quantity_lbs: qty, recycled: input.recycled,
+    wastage_date: input.wastageDate,
+  }).eq("id", wastageId);
 
-  // ২) প্রতি material — split অনুপাতে স্টক কমাও + ledger + মূল্য
   const byAccount = new Map<string, number>();
   let wastedValue = 0;
   for (const m of input.materials) {
@@ -90,7 +95,6 @@ export async function recordBookingWastage(
     byAccount.set(code, round2((byAccount.get(code) ?? 0) + val));
   }
 
-  // ৩) recycled অংশ — Recycled Chips স্টকে ফেরত + মূল্য 1203-এ
   let recoveredValue = 0;
   if (input.recycled && input.recycledWarehouseId) {
     const { data: rec } = await supabase
@@ -116,7 +120,6 @@ export async function recordBookingWastage(
     }
   }
 
-  // ৪) JV
   const lossId = await accountIdByCode(supabase, WASTAGE_LOSS_CODE);
   const lines: { account_id: string; debit: number; credit: number; memo: string }[] = [];
   const netLoss = round2(wastedValue - recoveredValue);
@@ -138,32 +141,48 @@ export async function recordBookingWastage(
   if (voucherId) {
     await supabase.from("wastage").update({ inventory_voucher_id: voucherId }).eq("id", wastageId);
   }
-
   return { ok: true };
+}
+
+/**
+ * Booking View "Wastage Register" — required_lbs-এর **অতিরিক্ত** ওয়েস্টেজ।
+ * material-split অনুপাতে কাঁচামাল স্টক কমে, JV Dr 5600 / Cr <material inv>।
+ */
+export async function recordBookingWastage(
+  supabase: Client, input: BookingWastageInput,
+): Promise<{ ok: boolean; error?: string }> {
+  if (!(input.quantityLbs > 0)) return { ok: false, error: "সঠিক Quantity দিন।" };
+  if (input.recycled && !input.recycledWarehouseId) {
+    return { ok: false, error: "Recycled Chips হিসেবে ফেরত দিতে Warehouse বাছুন।" };
+  }
+  const { data: wastageRow, error: wErr } = await supabase
+    .from("wastage")
+    .insert({
+      production_id: input.productionOrderId, booking_id: input.bookingId,
+      stage: input.stage, quantity_lbs: input.quantityLbs, recycled: input.recycled,
+      wastage_date: input.wastageDate, deducts_stock: true, created_by: input.createdBy,
+    })
+    .select("id").single();
+  if (wErr || !wastageRow) return { ok: false, error: wErr?.message ?? "Wastage সেভ ব্যর্থ হয়েছে।" };
+
+  return applyBookingWastageEffects(supabase, wastageRow.id, input);
+}
+
+export async function updateBookingWastage(
+  supabase: Client, wastageId: string, input: BookingWastageInput,
+): Promise<{ ok: boolean; error?: string }> {
+  if (!(input.quantityLbs > 0)) return { ok: false, error: "সঠিক Quantity দিন।" };
+  if (input.recycled && !input.recycledWarehouseId) {
+    return { ok: false, error: "Recycled Chips হিসেবে ফেরত দিতে Warehouse বাছুন।" };
+  }
+  const { data: old } = await supabase.from("wastage").select("*").eq("id", wastageId).maybeSingle();
+  if (!old) return { ok: false, error: "Wastage এন্ট্রি খুঁজে পাওয়া যায়নি।" };
+  await undoBookingWastageEffects(supabase, old);
+  return applyBookingWastageEffects(supabase, wastageId, input);
 }
 
 /** Booking Wastage মুছে ফেলা — JV উল্টে দেয় + কাঁচামাল স্টক ফেরত দেয়। */
 export async function reverseBookingWastage(supabase: Client, wastage: any): Promise<void> {
-  await reverseInventoryJv(supabase, wastage.inventory_voucher_id, {
-    unlink: { table: "wastage", column: "inventory_voucher_id", id: wastage.id },
-  });
-
-  const { data: ledgers } = await supabase
-    .from("stock_ledger").select("*")
-    .eq("reference_type", "wastage").eq("reference_id", wastage.id);
-  for (const l of ledgers ?? []) {
-    const { data: stock } = await supabase
-      .from("raw_material_stock").select("*")
-      .eq("material_id", l.item_id).eq("warehouse_id", l.warehouse_id).maybeSingle();
-    if (stock) {
-      // 'out' হলে ফেরত যোগ, 'in' (recycled) হলে বিয়োগ
-      const delta = l.txn_type === "out" ? Number(l.quantity) : -Number(l.quantity);
-      await supabase.from("raw_material_stock")
-        .update({ quantity_lbs: stock.quantity_lbs + delta, updated_at: new Date().toISOString() })
-        .eq("id", stock.id);
-    }
-    await supabase.from("stock_ledger").delete().eq("id", l.id);
-  }
-
+  await undoBookingWastageEffects(supabase, wastage);
   await supabase.from("wastage").delete().eq("id", wastage.id);
 }

@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { formatDate } from "@/lib/formatDate";
 import { postWastageJv, reverseInventoryJv } from "@/lib/inventoryCost";
+import { reverseBookingWastage } from "@/lib/bookingWastage";
 import GuardedAction from "@/app/dashboard/GuardedAction";
 import { money } from "@/lib/format";
 
@@ -99,7 +100,17 @@ export default function WastageRow({ wastage, warehouses }: { wastage: any; ware
     router.refresh();
   }
 
+  const fromBooking = !!wastage.deducts_stock;
+
   async function handleDelete() {
+    if (fromBooking) {
+      if (!window.confirm("এই Wastage এন্ট্রি মুছবেন? কাঁচামাল স্টক ও JV ফেরত যাবে।")) return;
+      setLoading(true);
+      await reverseBookingWastage(supabase, wastage);
+      setLoading(false);
+      router.refresh();
+      return;
+    }
     if (!window.confirm("এই Wastage এন্ট্রি মুছে ফেলতে চান? Recycled স্টক ও inventory JV তাও উল্টে যাবে।")) return;
     setLoading(true);
     await reverseOldRecycledStock();
@@ -126,6 +137,7 @@ export default function WastageRow({ wastage, warehouses }: { wastage: any; ware
             <option value="cutting">Cutting</option>
           </select>
         </td>
+        <td className="px-4 py-2 text-xs text-gray-500">Production</td>
         <td className="px-4 py-2"><input type="number" step="0.01" value={quantity} onChange={(e) => setQuantity(e.target.value)} className="w-24 rounded border px-2 py-1 text-sm" /></td>
         <td className="px-4 py-2">
           <label className="flex items-center gap-1 text-xs">
@@ -158,14 +170,22 @@ export default function WastageRow({ wastage, warehouses }: { wastage: any; ware
         {wastage.production_orders?.bookings?.customers?.name ?? "-"} / {wastage.production_orders?.bookings?.booking_no ?? "-"}
       </td>
       <td className="px-4 py-2">{stageLabels[wastage.stage] ?? wastage.stage}</td>
+      <td className="px-4 py-2">
+        {fromBooking
+          ? <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-800">Booking (অতিরিক্ত)</span>
+          : <span className="text-xs text-gray-500">Production</span>}
+      </td>
       <td className="px-4 py-2 text-right">{money(wastage.quantity_lbs)}</td>
       <td className="px-4 py-2">
         {wastage.recycled ? <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs text-green-700">Yes</span> : <span className="text-gray-400 text-xs">No</span>}
       </td>
       <td className="px-4 py-2 text-right whitespace-nowrap">
-        <GuardedAction table="wastage" recordId={wastage.id} recordLabel={`${wastage.production_orders?.production_no ?? ""} ${formatDate(wastage.wastage_date)}`} action="edit"
-          onAllowed={() => setEditing(true)}
-          className="rounded bg-blue-50 px-2 py-1 text-xs text-blue-700 mr-2 hover:bg-blue-100">Edit</GuardedAction>
+        {!fromBooking && (
+          <GuardedAction table="wastage" recordId={wastage.id} recordLabel={`${wastage.production_orders?.production_no ?? ""} ${formatDate(wastage.wastage_date)}`} action="edit"
+            onAllowed={() => setEditing(true)}
+            className="rounded bg-blue-50 px-2 py-1 text-xs text-blue-700 mr-2 hover:bg-blue-100">Edit</GuardedAction>
+        )}
+        {fromBooking && <span className="text-[11px] text-gray-400 mr-2">Booking View থেকে</span>}
         <GuardedAction table="wastage" recordId={wastage.id} recordLabel={`${wastage.production_orders?.production_no ?? ""} ${formatDate(wastage.wastage_date)}`} action="delete"
           onAllowed={handleDelete} disabled={loading}
           className="rounded bg-red-50 px-2 py-1 text-xs text-red-700 hover:bg-red-100">Delete</GuardedAction>

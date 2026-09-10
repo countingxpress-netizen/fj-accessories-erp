@@ -88,7 +88,7 @@ export default async function WastageSalePage() {
               <th className="px-4 py-2">Sale No</th>
               <th className="px-4 py-2">উৎস</th>
               <th className="px-4 py-2">কার কাছে</th>
-              <th className="px-4 py-2 text-right">Qty (Lbs)</th>
+              <th className="px-4 py-2 text-right">Quantity</th>
               <th className="px-4 py-2 text-right">Rate</th>
               <th className="px-4 py-2 text-right">Amount</th>
               <th className="px-4 py-2 text-right">COGS</th>

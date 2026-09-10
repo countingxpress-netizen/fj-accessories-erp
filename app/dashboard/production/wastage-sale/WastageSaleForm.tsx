@@ -3,12 +3,25 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { getCurrentUserId } from "@/lib/currentUser";
-import { createWastageSale, type WastageSaleSource } from "@/lib/wastageSale";
+import { createWastageSale, updateWastageSale, toLbsEquiv, type WastageSaleSource, type WastageSaleUnit } from "@/lib/wastageSale";
 import { money } from "@/lib/format";
 
 type Customer = { id: string; name: string };
 type Account = { id: string; account_code: string; account_name: string; account_type: string };
 type Warehouse = { id: string; name: string };
+
+export type WastageSaleEdit = {
+  id: string;
+  saleDate: string;
+  source: WastageSaleSource;
+  warehouseId: string;
+  unit: WastageSaleUnit;
+  quantity: number;
+  rate: number;
+  party: string; // "cust:<id>" | "acct:<id>"
+  paymentReceived: boolean;
+  note: string;
+};
 
 const TYPE_LABEL: Record<string, string> = {
   asset: "Asset অ্যাকাউন্ট", liability: "Liability অ্যাকাউন্ট",
@@ -17,6 +30,7 @@ const TYPE_LABEL: Record<string, string> = {
 
 export default function WastageSaleForm({
   customers, partyAccounts, warehouses, availableWastageLbs, recycledStockByWarehouse, recycledAvgCost,
+  editSale,
 }: {
   customers: Customer[];
   partyAccounts: Account[];
@@ -24,14 +38,18 @@ export default function WastageSaleForm({
   availableWastageLbs: number;
   recycledStockByWarehouse: Record<string, number>;
   recycledAvgCost: number;
+  editSale?: WastageSaleEdit;
 }) {
-  const [saleDate, setSaleDate] = useState(new Date().toISOString().slice(0, 10));
-  const [source, setSource] = useState<WastageSaleSource>("wastage_stock");
-  const [warehouseId, setWarehouseId] = useState("");
-  const [quantity, setQuantity] = useState("");
-  const [rate, setRate] = useState("");
-  const [party, setParty] = useState(""); // "cust:<id>" | "acct:<id>"
-  const [note, setNote] = useState("");
+  const isEdit = !!editSale;
+  const [saleDate, setSaleDate] = useState(editSale?.saleDate ?? new Date().toISOString().slice(0, 10));
+  const [source, setSource] = useState<WastageSaleSource>(editSale?.source ?? "wastage_stock");
+  const [warehouseId, setWarehouseId] = useState(editSale?.warehouseId ?? "");
+  const [unit, setUnit] = useState<WastageSaleUnit>(editSale?.unit ?? "lbs");
+  const [quantity, setQuantity] = useState(editSale ? String(editSale.quantity) : "");
+  const [rate, setRate] = useState(editSale ? String(editSale.rate) : "");
+  const [party, setParty] = useState(editSale?.party ?? "");
+  const [paymentReceived, setPaymentReceived] = useState(editSale?.paymentReceived ?? false);
+  const [note, setNote] = useState(editSale?.note ?? "");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const router = useRouter();
@@ -40,8 +58,10 @@ export default function WastageSaleForm({
   const qtyN = parseFloat(quantity) || 0;
   const rateN = parseFloat(rate) || 0;
   const amount = Math.round(qtyN * rateN);
+  const qtyLbs = toLbsEquiv(qtyN, unit); // স্টক তুলনার জন্য Lbs-এ
+  const unitLabel = unit === "kg" ? "কেজি" : "Lbs";
   const fromRecycled = source === "recycled_chips";
-  const cogsPreview = fromRecycled ? Math.round(qtyN * recycledAvgCost * 100) / 100 : 0;
+  const cogsPreview = fromRecycled ? Math.round(qtyLbs * recycledAvgCost * 100) / 100 : 0;
   const availableInWarehouse = warehouseId ? (recycledStockByWarehouse[warehouseId] ?? 0) : 0;
 
   const accountsByType = partyAccounts.reduce<Record<string, Account[]>>((acc, a) => {
@@ -54,7 +74,7 @@ export default function WastageSaleForm({
     setError("");
 
     if (!qtyN || qtyN <= 0) { setError("সঠিক Quantity দিন।"); return; }
-    if (!rateN || rateN <= 0) { setError("সঠিক Rate/Lbs দিন।"); return; }
+    if (!rateN || rateN <= 0) { setError(`সঠিক Rate/${unitLabel} দিন।`); return; }
     if (fromRecycled && !warehouseId) { setError("কোন গুদামের Recycled Chips বিক্রি হচ্ছে বাছুন।"); return; }
     if (!party) { setError("কার কাছে বিক্রি হচ্ছে বাছুন।"); return; }
 
@@ -65,20 +85,28 @@ export default function WastageSaleForm({
 
     setLoading(true);
     const createdBy = await getCurrentUserId(supabase);
-    const result = await createWastageSale(supabase, {
+    const payload = {
       saleDate, source,
       warehouseId: fromRecycled ? warehouseId : null,
-      quantityLbs: qtyN, ratePerLbs: rateN, amount,
+      unit, quantity: qtyN, rate: rateN, amount,
       party: kind === "cust"
-        ? { kind: "customer", customerId: id, label }
-        : { kind: "account", accountId: id, label },
-      note, createdBy,
-    });
+        ? { kind: "customer" as const, customerId: id, label }
+        : { kind: "account" as const, accountId: id, label },
+      paymentReceived, note, createdBy,
+    };
+    const result = isEdit
+      ? await updateWastageSale(supabase, editSale.id, payload)
+      : await createWastageSale(supabase, payload);
     setLoading(false);
 
     if (!result.ok) { setError(result.error ?? "সেভ ব্যর্থ হয়েছে।"); return; }
     if (result.error) setError(result.error);
 
+    if (isEdit) {
+      router.push("/dashboard/production/wastage-sale");
+      router.refresh();
+      return;
+    }
     setQuantity(""); setRate(""); setParty(""); setNote("");
     router.refresh();
   }
@@ -110,7 +138,7 @@ export default function WastageSaleForm({
         </div>
       </div>
 
-      {source === "wastage_stock" && qtyN > availableWastageLbs && (
+      {source === "wastage_stock" && qtyLbs > availableWastageLbs && (
         <p className="text-xs text-amber-600">
           সতর্কতা: রেকর্ড করা Wastage stock মাত্র {money(availableWastageLbs)} Lbs — এর বেশি বিক্রি দেখাচ্ছে।
         </p>
@@ -127,7 +155,7 @@ export default function WastageSaleForm({
               </option>
             ))}
           </select>
-          {warehouseId && qtyN > availableInWarehouse && (
+          {warehouseId && qtyLbs > availableInWarehouse && (
             <p className="mt-1 text-xs text-amber-600">
               সতর্কতা: এই গুদামে মাত্র {money(availableInWarehouse)} Lbs আছে — বিক্রির পর স্টক ঋণাত্মক হবে।
             </p>
@@ -137,12 +165,19 @@ export default function WastageSaleForm({
 
       <div className="flex flex-wrap gap-4">
         <div>
-          <label className="block text-sm text-gray-600 mb-1">Quantity (Lbs)</label>
-          <input type="number" step="0.01" value={quantity} onChange={(e) => setQuantity(e.target.value)} className="rounded-lg border px-3 py-2 text-sm w-36" required />
+          <label className="block text-sm text-gray-600 mb-1">একক</label>
+          <select value={unit} onChange={(e) => setUnit(e.target.value as WastageSaleUnit)} className="rounded-lg border px-3 py-2 text-sm w-24">
+            <option value="lbs">Lbs</option>
+            <option value="kg">Kg</option>
+          </select>
         </div>
         <div>
-          <label className="block text-sm text-gray-600 mb-1">Rate / Lbs</label>
-          <input type="number" step="0.0001" value={rate} onChange={(e) => setRate(e.target.value)} className="rounded-lg border px-3 py-2 text-sm w-36" required />
+          <label className="block text-sm text-gray-600 mb-1">Quantity ({unitLabel})</label>
+          <input type="number" step="0.01" value={quantity} onChange={(e) => setQuantity(e.target.value)} className="rounded-lg border px-3 py-2 text-sm w-32" required />
+        </div>
+        <div>
+          <label className="block text-sm text-gray-600 mb-1">Rate / {unitLabel}</label>
+          <input type="number" step="0.0001" value={rate} onChange={(e) => setRate(e.target.value)} className="rounded-lg border px-3 py-2 text-sm w-32" required />
         </div>
         <div>
           <label className="block text-sm text-gray-600 mb-1">Amount</label>
@@ -175,10 +210,12 @@ export default function WastageSaleForm({
             )
           ))}
         </select>
-        <p className="mt-1 text-xs text-gray-400">
-          Customer বাছলে তার বাকির খাতায় (Dr 1100) যাবে; অ্যাকাউন্ট বাছলে সরাসরি ঐ অ্যাকাউন্টে Dr হবে (যেমন নগদ পেলে &quot;Cash in Hand&quot;)।
-        </p>
       </div>
+
+      <label className="flex items-center gap-2 text-sm text-gray-700 bg-gray-50 border rounded-lg px-3 py-2">
+        <input type="checkbox" checked={paymentReceived} onChange={(e) => setPaymentReceived(e.target.checked)} />
+        Payment Received — <span className="text-gray-500">টিক থাকলে নগদ বিক্রি (Dr Cash in Hand), না থাকলে বাকি (Dr উপরের পার্টি)</span>
+      </label>
 
       <div>
         <label className="block text-sm text-gray-600 mb-1">Note (ঐচ্ছিক)</label>
@@ -188,7 +225,7 @@ export default function WastageSaleForm({
       {error && <p className="text-sm text-red-600">{error}</p>}
 
       <button type="submit" disabled={loading} className="rounded-lg bg-gray-900 px-5 py-2 text-sm text-white disabled:opacity-40">
-        {loading ? "সেভ হচ্ছে..." : "বিক্রি সেভ করুন"}
+        {loading ? "সেভ হচ্ছে..." : isEdit ? "পরিবর্তন সেভ করুন" : "বিক্রি সেভ করুন"}
       </button>
     </form>
   );

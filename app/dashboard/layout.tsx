@@ -50,7 +50,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
           <LogoutButton />
         </div>
       </aside>
-      <main className="flex-1 bg-gray-50 p-6 print:p-0 print:bg-white">
+      <main className="flex-1 bg-gray-50 p-6 print:p-[10mm] print:bg-white">
         <PermissionProvider isAdmin={isAdmin} userId={appUser?.id ?? ""}>
           {children}
         </PermissionProvider>

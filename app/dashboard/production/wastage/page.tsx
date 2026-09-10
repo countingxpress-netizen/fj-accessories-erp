@@ -17,12 +17,11 @@ export default async function WastagePage() {
 
   const { data: warehouses } = await supabase.from("warehouses").select("id, name").order("name");
 
-  // Booking View "Wastage Register"-এর এন্ট্রি (deducts_stock=true) এখানে নয় —
-  // সেগুলোর হিসাব আলাদা (কাঁচামাল স্টক থেকে), reversal-ও আলাদা।
+  // সব ওয়েস্টেজ — Production > Wastage পেজ থেকে করা (deducts_stock=false, WIP→Loss)
+  // এবং Booking View "Wastage Register" থেকে করা (deducts_stock=true, কাঁচামাল স্টক থেকে)।
   const { data: wastageEntries } = await supabase
     .from("wastage")
     .select("*, production_orders(production_no, bookings(booking_no, customers(name))), creator:app_users!wastage_created_by_fkey(full_name)")
-    .eq("deducts_stock", false)
     .order("wastage_date", { ascending: false });
 
   const totalByStage: Record<string, number> = { blowing: 0, printing: 0, cutting: 0 };
@@ -70,6 +69,7 @@ export default async function WastagePage() {
               <th className="px-4 py-2">Production No</th>
               <th className="px-4 py-2">Customer / Booking</th>
               <th className="px-4 py-2">Stage</th>
+              <th className="px-4 py-2">উৎস</th>
               <th className="px-4 py-2 text-right">Quantity (Lbs)</th>
               <th className="px-4 py-2">Recycled?</th>
               <th className="px-4 py-2 text-right">Action</th>
@@ -80,7 +80,7 @@ export default async function WastagePage() {
               <WastageRow key={w.id} wastage={w} warehouses={warehouses ?? []} />
             ))}
             {(!wastageEntries || wastageEntries.length === 0) && (
-              <tr><td colSpan={7} className="px-4 py-3 text-gray-400 italic">এখনো কোনো Wastage এন্ট্রি নেই</td></tr>
+              <tr><td colSpan={8} className="px-4 py-3 text-gray-400 italic">এখনো কোনো Wastage এন্ট্রি নেই</td></tr>
             )}
           </tbody>
         </table>

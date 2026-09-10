@@ -39,13 +39,22 @@ export default function WastageSaleRow({ sale }: { sale: any }) {
       <td className="px-4 py-2 text-gray-600">{sourceLabel}</td>
       <td className="px-4 py-2 text-gray-600">
         {soldTo}
-        {sale.customers?.name && <span className="ml-1 rounded-full bg-amber-100 px-1.5 py-0.5 text-[11px] text-amber-800">বাকি</span>}
+        {sale.payment_received
+          ? <span className="ml-1 rounded-full bg-green-100 px-1.5 py-0.5 text-[11px] text-green-700">নগদ</span>
+          : <span className="ml-1 rounded-full bg-amber-100 px-1.5 py-0.5 text-[11px] text-amber-800">বাকি</span>}
       </td>
-      <td className="px-4 py-2 text-right">{money(sale.quantity_lbs)}</td>
-      <td className="px-4 py-2 text-right">{money(sale.rate_per_lbs)}</td>
+      <td className="px-4 py-2 text-right">{money(sale.quantity)} <span className="text-gray-400 text-xs">{sale.unit === "kg" ? "কেজি" : "Lbs"}</span></td>
+      <td className="px-4 py-2 text-right">{money(sale.rate)}</td>
       <td className="px-4 py-2 text-right font-medium">{money(sale.amount)}</td>
       <td className="px-4 py-2 text-right text-gray-500">{sale.source === "recycled_chips" ? money(sale.cogs_amount) : "-"}</td>
       <td className="px-4 py-2 text-right whitespace-nowrap">
+        <GuardedAction
+          table="wastage_sales" recordId={sale.id} recordLabel={sale.sale_no} action="edit"
+          onAllowed={() => router.push(`/dashboard/production/wastage-sale/${sale.id}/edit`)}
+          className="rounded bg-blue-50 px-2 py-1 text-xs text-blue-700 mr-2 hover:bg-blue-100"
+        >
+          Edit
+        </GuardedAction>
         <GuardedAction
           table="wastage_sales" recordId={sale.id} recordLabel={sale.sale_no} action="delete"
           onAllowed={handleDelete} disabled={loading}
