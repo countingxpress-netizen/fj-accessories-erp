@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import { formatDate } from "@/lib/formatDate";
 import { currencySymbol } from "@/lib/numberToWords";
 import GuardedAction from "@/app/dashboard/GuardedAction";
+import { usePermission } from "@/app/dashboard/PermissionProvider";
 import { money } from "@/lib/format";
 
 const statusLabels: Record<string, string> = {
@@ -22,6 +23,9 @@ const statusColors: Record<string, string> = {
 export default function ProformaRow({ pi, autoSalesInvoiceValue, garments }: { pi: any; autoSalesInvoiceValue: number; garments: string }) {
   const router = useRouter();
   const supabase = createClient();
+  // Sales Invoice Value / Commission / Notes — শুধু Admin এডিট করতে পারবে, Staff শুধু দেখবে
+  // (Edit/Delete-এর মতো request-approve সিস্টেম না, একদম strict admin-only)
+  const { isAdmin } = usePermission("proforma_invoices", pi.id, "edit");
 
   // real_amount (হাতে বসানো — Manual PI-তে এটাই একমাত্র উৎস) থাকলে সেটা প্রাধান্য পায়,
   // নাহলে booking-লিংকড sales_invoice_items থেকে অটো-হিসাব করা মান দেখায়।
@@ -88,7 +92,9 @@ export default function ProformaRow({ pi, autoSalesInvoiceValue, garments }: { p
       <td className="px-4 py-2 text-gray-500">{garments}</td>
       <td className="px-4 py-2 text-right font-medium">{currencySymbol(pi.currency)}{money(pi.total_amount)}</td>
       <td className="px-4 py-2 text-right">
-        {pi.real_amount == null && autoSalesInvoiceValue > 0 ? (
+        {!isAdmin ? (
+          <span className="text-gray-500">{realAmountLive > 0 ? money(realAmountLive) : "-"}</span>
+        ) : pi.real_amount == null && autoSalesInvoiceValue > 0 ? (
           <span className="text-gray-500">{money(autoSalesInvoiceValue)}</span>
         ) : (
           <input
@@ -100,30 +106,38 @@ export default function ProformaRow({ pi, autoSalesInvoiceValue, garments }: { p
         )}
       </td>
       <td className="px-4 py-2 text-right">
-        <input
-          type="number" step="0.01" value={commissionAmount}
-          onChange={(e) => setCommissionAmount(e.target.value)}
-          placeholder="-"
-          className="w-24 rounded border px-2 py-1 text-sm text-right"
-        />
+        {!isAdmin ? (
+          <span className="text-gray-500">{commissionLive > 0 ? money(commissionLive) : "-"}</span>
+        ) : (
+          <input
+            type="number" step="0.01" value={commissionAmount}
+            onChange={(e) => setCommissionAmount(e.target.value)}
+            placeholder="-"
+            className="w-24 rounded border px-2 py-1 text-sm text-right"
+          />
+        )}
       </td>
       <td className="px-4 py-2 text-right text-gray-700">
         {realAmountLive > 0 || commissionLive > 0 ? money(submitToCustomer) : "-"}
       </td>
       <td className="px-4 py-2">
-        <input
-          value={notes}
-          onChange={(e) => setNotes(e.target.value)}
-          placeholder="নোট (ঐচ্ছিক)"
-          className="w-28 rounded border px-2 py-1 text-sm"
-        />
+        {!isAdmin ? (
+          <span className="text-gray-500 text-xs">{notes || "-"}</span>
+        ) : (
+          <input
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            placeholder="নোট (ঐচ্ছিক)"
+            className="w-28 rounded border px-2 py-1 text-sm"
+          />
+        )}
         {error && <p className="text-[11px] text-red-600 mt-0.5">{error}</p>}
       </td>
       <td className="px-4 py-2">
         <span className={`rounded-full px-2 py-0.5 text-xs ${statusColors[pi.status]}`}>{statusLabels[pi.status]}</span>
       </td>
       <td className="px-4 py-2 text-right whitespace-nowrap">
-        {dirty && (
+        {isAdmin && dirty && (
           <button
             onClick={saveAmounts}
             disabled={saving}

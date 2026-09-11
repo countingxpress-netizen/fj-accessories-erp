@@ -23,7 +23,10 @@ type BuyerMaster = { id: string; customer_id: string; name: string; pricing_rule
 type Garment = { id: string; customer_id: string; name: string; address: string | null };
 type AdvisingBank = { id: string; name: string; branch: string | null; address: string | null; swift: string | null };
 type BuyerRateHistoryRow = { buyer_id: string; effective_from: string; rate: number };
-type ManualLine = { description: string; measurement: string; qtyPcs: string; priceUnit: string; priceBasis: "pcs" | "dzn" };
+type ManualLine = {
+  description: string; measurement: string; qtyPcs: string; priceUnit: string; priceBasis: "pcs" | "dzn";
+  tubeInch: string; cuttingInch: string; thicknessMm: string; // Weight অটো-ক্যালকুলেশনের জন্য, ঐচ্ছিক
+};
 
 const DEFAULT_TERMS = `01) 100% IRREVOCABLE LETTER OF CREDIT AT SIGHT.
 02) PARTIAL SHIPMENT MUST BE ALLOWED IN THE L/C.
@@ -107,7 +110,7 @@ export default function ProformaForm({
   const [bookingThickness, setBookingThickness] = useState<Record<string, string>>({});
 
   const [manualLines, setManualLines] = useState<ManualLine[]>([
-    { description: "", measurement: "", qtyPcs: "", priceUnit: "", priceBasis: "pcs" },
+    { description: "", measurement: "", qtyPcs: "", priceUnit: "", priceBasis: "pcs", tubeInch: "", cuttingInch: "", thicknessMm: "" },
   ]);
 
   const [error, setError] = useState("");
@@ -302,13 +305,18 @@ export default function ProformaForm({
       const qtyPcs = parseFloat(l.qtyPcs) || 0;
       const priceUnit = parseFloat(l.priceUnit) || 0;
       const amount = calcLineAmount(qtyPcs, priceUnit, l.priceBasis);
-      return { ...l, qtyPcs, priceUnit, amount };
+      const tube = parseFloat(l.tubeInch) || 0;
+      const cutting = parseFloat(l.cuttingInch) || 0;
+      const thickness = parseFloat(l.thicknessMm) || 0;
+      // Tube/Cutting/Thickness তিনটাই দিলে তবেই এই লাইনের ওজন গোনা হবে (অংশত দেওয়া হলে ০)
+      const weightLbs = tube > 0 && cutting > 0 && thickness > 0 ? (qtyPcs * tube * cutting * thickness) / 75000 : 0;
+      return { ...l, qtyPcs, priceUnit, amount, tube, cutting, thickness, weightLbs };
     });
 
   // Total Weight (Kg) — PI Thickness ধরে অটো: Σ (Qty × Tube" × Cutting" × PI_Thk / 75000) / 2.2
   const autoWeightKg = mode === "booking"
     ? bookingLineItems.reduce((s, li) => s + calcPiWeightLbs(li.booking, lineThickness(li.booking)) / 2.2, 0)
-    : 0;
+    : manualLineItems.reduce((s, li) => s + li.weightLbs / 2.2, 0);
 
   useEffect(() => {
     if (!weightTouched && autoWeightKg > 0) setTotalWeightKg(autoWeightKg.toFixed(2));
@@ -334,7 +342,7 @@ export default function ProformaForm({
     setManualLines((prev) => prev.map((l, idx) => (idx === i ? { ...l, [field]: value } : l)));
   }
   function addManualLine() {
-    setManualLines((prev) => [...prev, { description: "", measurement: "", qtyPcs: "", priceUnit: "", priceBasis: "pcs" }]);
+    setManualLines((prev) => [...prev, { description: "", measurement: "", qtyPcs: "", priceUnit: "", priceBasis: "pcs", tubeInch: "", cuttingInch: "", thicknessMm: "" }]);
   }
   function removeManualLine(i: number) {
     setManualLines((prev) => prev.filter((_, idx) => idx !== i));
@@ -427,6 +435,7 @@ export default function ProformaForm({
           pi_id: pi.id, booking_id: null, sl_no: i + 1,
           description: li.description, measurement: li.measurement,
           qty_pcs: li.qtyPcs, price_unit: li.priceUnit, price_basis: li.priceBasis,
+          pi_thickness_mm: li.thickness || null,
         }))
       );
       if (itemsError) {
@@ -620,7 +629,7 @@ export default function ProformaForm({
       )}
 
       {mode === "manual" && (
-        <div className="overflow-hidden rounded-lg border">
+        <div className="overflow-x-auto rounded-lg border">
           <table className="w-full text-sm">
             <thead className="bg-gray-50 text-left text-gray-600">
               <tr>
@@ -629,6 +638,9 @@ export default function ProformaForm({
                 <th className="px-3 py-2 text-right w-24">Qty (Pcs)</th>
                 <th className="px-3 py-2 w-20">Basis</th>
                 <th className="px-3 py-2 w-28">Price/Unit</th>
+                <th className="px-3 py-2 w-20">Tube&quot;</th>
+                <th className="px-3 py-2 w-20">Cutting&quot;</th>
+                <th className="px-3 py-2 w-20">Thick(mm)</th>
                 <th className="px-3 py-2 text-right">Amount</th>
                 <th className="px-3 py-2 w-12"></th>
               </tr>
@@ -646,6 +658,9 @@ export default function ProformaForm({
                     </select>
                   </td>
                   <td className="px-3 py-2"><input type="number" step="0.0001" value={l.priceUnit} onChange={(e) => updateManualLine(i, "priceUnit", e.target.value)} className="w-full rounded border px-2 py-1 text-sm" /></td>
+                  <td className="px-3 py-2"><input type="number" step="0.01" value={l.tubeInch} onChange={(e) => updateManualLine(i, "tubeInch", e.target.value)} className="w-full rounded border px-2 py-1 text-xs" placeholder="ইঞ্চি" /></td>
+                  <td className="px-3 py-2"><input type="number" step="0.01" value={l.cuttingInch} onChange={(e) => updateManualLine(i, "cuttingInch", e.target.value)} className="w-full rounded border px-2 py-1 text-xs" placeholder="ইঞ্চি" /></td>
+                  <td className="px-3 py-2"><input type="number" step="0.1" value={l.thicknessMm} onChange={(e) => updateManualLine(i, "thicknessMm", e.target.value)} className="w-full rounded border px-2 py-1 text-xs" placeholder="mm" /></td>
                   <td className="px-3 py-2 text-right">{money(calcLineAmount(parseFloat(l.qtyPcs) || 0, parseFloat(l.priceUnit) || 0, l.priceBasis))}</td>
                   <td className="px-3 py-2 text-right">
                     {manualLines.length > 1 && <button type="button" onClick={() => removeManualLine(i)} className="text-red-600 text-xs hover:underline">সরান</button>}
@@ -655,6 +670,7 @@ export default function ProformaForm({
             </tbody>
           </table>
           <button type="button" onClick={addManualLine} className="w-full border-t px-3 py-2 text-xs text-gray-600 hover:bg-gray-50">+ আরেকটি লাইন যোগ করুন</button>
+          <p className="px-3 py-2 text-[11px] text-gray-400 border-t">Tube/Cutting/Thickness ঐচ্ছিক — তিনটাই দিলে নিচের Total Weight (Kg) অটো-ক্যালকুলেট হবে।</p>
         </div>
       )}
 
