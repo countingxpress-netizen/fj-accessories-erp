@@ -9,6 +9,7 @@ export default async function ProformaListPage() {
     .select("*, customers(name, price_per_lbs), pi_items(qty_pcs, booking_id, bookings(garments_name, quantity_pcs)), creator:app_users!proforma_invoices_created_by_fkey(full_name)")
     .order("pi_date", { ascending: false })
     .order("created_at", { ascending: false });
+  // real_amount/commission_amount আগের কোনো সেশনে DB-তে বসলেও এখানে select("*") দিয়েই আসবে
 
   // প্রতিটা PI-এর সাথে যুক্ত booking_id গুলোর বিপরীতে sales_invoice_items থেকে মোট বিক্রয় বের করুন
   const bookingIds = Array.from(
@@ -40,25 +41,29 @@ export default async function ProformaListPage() {
               <th className="px-4 py-2">Garments</th>
               <th className="px-4 py-2 text-right">PI Value</th>
               <th className="px-4 py-2 text-right">Sales Invoice Value</th>
-              <th className="px-4 py-2 text-right">Difference</th>
+              <th className="px-4 py-2 text-right">Commission</th>
+              <th className="px-4 py-2 text-right">Submit to Customer</th>
+              <th className="px-4 py-2">Notes</th>
               <th className="px-4 py-2">Status</th>
               <th className="px-4 py-2 text-right">Action</th>
             </tr>
           </thead>
           <tbody>
             {(pis ?? []).map((pi: any) => {
-              const salesInvoiceValue = (pi.pi_items ?? []).reduce(
+              // booking-লিংকড PI-তে sales_invoice_items থেকে অটো — Manual PI-তে ০,
+              // তখন pi.real_amount (হাতে বসানো) প্রাধান্য পাবে (ProformaRow-এর ভেতরে)
+              const autoSalesInvoiceValue = (pi.pi_items ?? []).reduce(
                 (s: number, it: any) => s + (invoiceValueByBooking[it.booking_id] ?? 0), 0
               );
               const garments = Array.from(
                 new Set((pi.pi_items ?? []).map((it: any) => it.bookings?.garments_name).filter(Boolean))
               ).join(", ");
               return (
-                <ProformaRow key={pi.id} pi={pi} salesInvoiceValue={salesInvoiceValue} garments={garments || "-"} />
+                <ProformaRow key={pi.id} pi={pi} autoSalesInvoiceValue={autoSalesInvoiceValue} garments={garments || "-"} />
               );
             })}
             {(!pis || pis.length === 0) && (
-              <tr><td colSpan={9} className="px-4 py-3 text-gray-400 italic">এখনো কোনো Proforma Invoice নেই</td></tr>
+              <tr><td colSpan={11} className="px-4 py-3 text-gray-400 italic">এখনো কোনো Proforma Invoice নেই</td></tr>
             )}
           </tbody>
         </table>
