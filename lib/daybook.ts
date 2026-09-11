@@ -19,6 +19,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 const CASH_CODE = "1000";
 const ABU_JAFOR_CODE = "3000";
+const RIPON_THINAR_CODE = "1500"; // "Paid Via" পার্টি (Expense form) — ব্যাংক/আবু-জাফরের মতোই প্রায়-নগদ উৎস
 const AR_CODE = "1100";
 const AP_CODE = "2000";
 
@@ -91,11 +92,12 @@ export async function buildDayBook(
   const byId = new Map(accounts.map((a) => [a.id, a]));
   const cashId = accounts.find((a) => a.account_code === CASH_CODE)?.id ?? "";
   const abuJaforId = accounts.find((a) => a.account_code === ABU_JAFOR_CODE)?.id ?? "";
+  const riponThinarId = accounts.find((a) => a.account_code === RIPON_THINAR_CODE)?.id ?? "";
   const bankIds = new Set(
     accounts.filter((a) => a.account_type === "asset" && a.account_code !== CASH_CODE && isBankName(a.account_name)).map((a) => a.id),
   );
-  // "প্রায়-নগদ উৎস" = ব্যাংক + আবু জাফর
-  const sourceIds = new Set<string>([...bankIds, abuJaforId].filter(Boolean));
+  // "প্রায়-নগদ উৎস" = ব্যাংক + আবু জাফর + রিপন থিনার
+  const sourceIds = new Set<string>([...bankIds, abuJaforId, riponThinarId].filter(Boolean));
   const poolIds = new Set<string>([cashId, ...sourceIds].filter(Boolean));
 
   // ── Journal lines (pool অ্যাকাউন্টে) — prior balance + in-range ──
@@ -121,6 +123,13 @@ export async function buildDayBook(
     one<any>(w.customers)?.name || one<any>(w.chart_of_accounts)?.account_name || w.sold_to_name || "পার্টি";
   const wastageSaleVoucherIds = new Set<string>(wastageSales.map((w) => w.voucher_id).filter(Boolean));
 
+  // ── Sales invoice ভাউচার (নগদ + বাকি) — generic pool-loop থেকে বাদ ──
+  //   নগদ বিক্রির JV (Dr 1000 / Cr 4000) পুল-লাইন ছোঁয় বলে অন্যথায় জমা কলামে
+  //   "Sales Revenue" হিসেবে দেখাতো — অথচ বিক্রি ব্লক (নিচে, explicit) থেকেই ওটার
+  //   টাকা রিকনসিলিয়েশনে যোগ হয়। তাই বিক্রি কখনো জমা/খরচ কলামে সরাসরি আসবে না।
+  const { data: salesInvVoucherRaw } = await supabase.from("sales_invoices").select("voucher_id").not("voucher_id", "is", null);
+  const salesInvoiceVoucherIds = new Set<string>((salesInvVoucherRaw ?? []).map((r: any) => r.voucher_id).filter(Boolean));
+
   // prior cash (1000) balance — from-তারিখের আগের সব 1000 লাইন + যেকোনো তারিখের
   // opening/rounding ভাউচার (opening balance সবসময় "শুরুর" অংশ, তারিখ যা-ই হোক)।
   let priorCash = 0;
@@ -143,6 +152,7 @@ export async function buildDayBook(
     if (!d || d < from || d > to) continue;
     if (isSystemVoucher((v?.narration ?? "").trim())) continue;
     if (wastageSaleVoucherIds.has(l.voucher_id)) continue; // নিচে explicit হ্যান্ডল
+    if (salesInvoiceVoucherIds.has(l.voucher_id)) continue; // নিচে বিক্রি ব্লকে explicit হ্যান্ডল
     voucherIds.add(l.voucher_id);
   }
 
@@ -299,7 +309,13 @@ export async function buildDayBook(
       return s + num(i.required_lbs ?? bk?.required_lbs ?? 0);
     }, 0);
 
+  // বিক্রি ব্লক = ঐ দিনের সব বিক্রি (নগদ + বাকি), Lbs/পার্টি-ভিত্তিক — sales-invoice
+  // ভাউচার pool-loop থেকে বাদ (ওপরে), তাই বিক্রি কখনো আলাদাভাবে জমা কলামে আসে না;
+  // এখানের bikriAmount-ই রিকনসিলিয়েশনে ক্যাশ-এফেক্ট যোগ করে।
+  // "বিল" পাস-থ্রু লাইন — খরচ কলামে — শুধু বাকিতে বিক্রির জন্য (ক্যাশ না ছোঁয়া বলে
+  // reconcile-এ কাটাকাটি লাগে); নগদ বিক্রি বিল-বিহীন, তার টাকা সরাসরি cashPosition বাড়ায়।
   const bikriByCust = new Map<string, { name: string; lbs: number; amount: number }>();
+  const creditBillByCust = new Map<string, { name: string; amount: number }>();
   let bikriLbs = 0;
   let bikriAmount = 0;
   let soldLbsBefore = 0;
@@ -314,7 +330,6 @@ export async function buildDayBook(
       soldLbsBefore += lbs;
       if (isCredit) arInvBefore += amt;
     } else if (d <= to) {
-      if (isCredit) arInvRange += amt;
       const name = one<any>(inv.customers)?.name ?? "কাস্টমার";
       const cur = bikriByCust.get(inv.customer_id) ?? { name, lbs: 0, amount: 0 };
       cur.lbs += lbs;
@@ -322,11 +337,17 @@ export async function buildDayBook(
       bikriByCust.set(inv.customer_id, cur);
       bikriLbs += lbs;
       bikriAmount += amt;
+      if (isCredit) {
+        arInvRange += amt;
+        const bill = creditBillByCust.get(inv.customer_id) ?? { name, amount: 0 };
+        bill.amount += amt;
+        creditBillByCust.set(inv.customer_id, bill);
+      }
     }
   }
   const bikri = [...bikriByCust.values()].sort((a, b) => b.amount - a.amount);
-  // "বিল" লাইন — খরচ কলামে (বিক্রির সমান, reconcile-এ কাটাকাটি হয়)
-  for (const b of bikri) khoroch.push({ name: b.name, note: "বিল", amount: b.amount });
+  // "বিল" লাইন — খরচ কলামে (শুধু বাকিতে বিক্রির সমান, reconcile-এ কাটাকাটি হয়)
+  for (const b of creditBillByCust.values()) khoroch.push({ name: b.name, note: "বিল", amount: b.amount });
 
   // ── Wastage / Scrap বিক্রি (ঐ দিনের) ──
   //   প্রতিটা বিক্রি → জমা লিস্টের **একদম শেষে** "ওয়েস্টেজ বিক্রি — <পার্টি>"

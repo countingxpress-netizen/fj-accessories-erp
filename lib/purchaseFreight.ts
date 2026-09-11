@@ -1,7 +1,7 @@
 // Purchase Freight / Carrying — ক্রয়ের freight/labour খরচ কাঁচামালের দামে যোগ করে।
 //
 //   JV:  Dr <material inventory acct 1200-1203/1299 — entry-র Lbs-অনুপাতে ভাগ>
-//        Cr <paid via: Cash 1000 / Bank / Md Abu Jafor 3000>
+//        Cr <paid via: Cash 1000 / Bank / Md Abu Jafor 3000 / রিপন থিনার 1500>
 //
 //   raw_materials.avg_cost_per_lbs-এ freight-এর অংশ যোগ হয় recomputeRawAvgCost
 //   (lib/inventoryCost.ts) — যেটা পুরো history নতুন করে হিসাব করে, তাই freight
