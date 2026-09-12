@@ -2,7 +2,7 @@
 import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { generateNextDocNo } from "@/lib/docNumber";
+import { generateChallanNo } from "@/lib/docNumber";
 import { recalcBookingStatus } from "@/lib/recalcBookingStatus";
 import { formatStyle } from "@/lib/formatStyle";
 import { getCurrentUserId } from "@/lib/currentUser";
@@ -15,7 +15,7 @@ type Booking = {
   delivery_point: string | null; customer_booking_ref: string | null;
   finished_goods: { product_name: string } | null;
 };
-type Customer = { id: string; name: string };
+type Customer = { id: string; name: string; code?: string | null };
 type Warehouse = { id: string; name: string };
 
 export type EditChallanContext = {
@@ -199,7 +199,8 @@ export default function DeliveryChallanForm({
       return;
     }
 
-    const challanNo = await generateNextDocNo(supabase, "delivery_challans", "challan_no", "DC", "challan_date", challanDate);
+    const selectedCustomer = customers.find((c) => c.id === customerId) ?? null;
+    const challanNo = await generateChallanNo(supabase, selectedCustomer, challanDate);
     const createdBy = await getCurrentUserId(supabase);
     const { data: challan, error: challanError } = await supabase
       .from("delivery_challans")

@@ -4,7 +4,7 @@ import DeliveryChallanForm from "./DeliveryChallanForm";
 export default async function NewDeliveryChallanPage() {
   const supabase = await createClient();
 
-  const { data: customers } = await supabase.from("customers").select("id, name").order("name");
+  const { data: customers } = await supabase.from("customers").select("id, name, code").order("name");
   const { data: bookings } = await supabase
     .from("bookings")
     .select("id, booking_no, quantity_pcs, product_id, customer_id, warehouse_id, style, garments_name, buyers(name), merchants(name), delivery_point, customer_booking_ref, finished_goods(product_name)")

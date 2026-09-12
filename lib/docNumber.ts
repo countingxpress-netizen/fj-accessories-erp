@@ -41,34 +41,58 @@ export function deriveCustomerCode(name: string): string {
   return words.map((w) => w[0]).join("").toUpperCase();
 }
 
-// PI নম্বর: PI/FNJ-{seq}-{CODE}/{year} — seq কাস্টমার-প্রতি আলাদা, 1 থেকে শুরু।
-// customer-এর code না থাকলে নাম থেকে ডিরাইভ; একেবারেই না পেলে পুরনো PI-{year}-{NNNN} ফরম্যাট।
-export async function generatePiNo(
+// কাস্টমার-প্রতি আলাদা সিরিজ: {docPrefix}/FNJ-{seq}-{CODE}/{year} — seq প্রতি কাস্টমারের
+// নিজের কোডের মধ্যে সবচেয়ে বড় সংখ্যা +1 (কখনো delete হলেও ঠিক থাকে, count-based না)।
+// customer-এর code না থাকলে নাম থেকে ডিরাইভ; একেবারেই না পেলে পুরনো গ্লোবাল
+// {docPrefix}-{year}-{NNNN} ফরম্যাটে fallback করে। PI (generatePiNo) আর Delivery
+// Challan (generateChallanNo) দুটোতেই ব্যবহৃত — নতুন কোনো ডকুমেন্টেও একই প্যাটার্নে
+// কাস্টমার-ভিত্তিক নম্বর লাগলে এটাই রিইউজ করুন।
+async function generateCustomerCodedDocNo(
   supabase: SupabaseClient,
+  table: string,
+  column: string,
+  docPrefix: string,
+  dateColumn: string,
   customer: { name?: string | null; code?: string | null } | null,
-  piDate: string
+  docDate: string
 ): Promise<string> {
-  const year = new Date(piDate).getFullYear();
+  const year = new Date(docDate).getFullYear();
   const code = (customer?.code || deriveCustomerCode(customer?.name || "")).toUpperCase().trim();
 
   if (!code) {
-    return generateNextDocNo(supabase, "proforma_invoices", "pi_no", "PI", "pi_date", piDate);
+    return generateNextDocNo(supabase, table, column, docPrefix, dateColumn, docDate);
   }
 
   const { data } = await supabase
-    .from("proforma_invoices")
-    .select("pi_no")
-    .ilike("pi_no", `PI/FNJ-%-${code}/%`);
+    .from(table)
+    .select(column)
+    .ilike(column, `${docPrefix}/FNJ-%-${code}/%`);
 
-  const re = new RegExp(`^PI/FNJ-(\\d+)-${code}/`, "i");
+  const re = new RegExp(`^${docPrefix}/FNJ-(\\d+)-${code}/`, "i");
   let maxNum = 0;
   (data ?? []).forEach((row: any) => {
-    const m = (row.pi_no as string)?.match(re);
+    const m = (row[column] as string)?.match(re);
     if (m) {
       const n = parseInt(m[1], 10);
       if (n > maxNum) maxNum = n;
     }
   });
 
-  return `PI/FNJ-${maxNum + 1}-${code}/${year}`;
+  return `${docPrefix}/FNJ-${maxNum + 1}-${code}/${year}`;
+}
+
+export async function generatePiNo(
+  supabase: SupabaseClient,
+  customer: { name?: string | null; code?: string | null } | null,
+  piDate: string
+): Promise<string> {
+  return generateCustomerCodedDocNo(supabase, "proforma_invoices", "pi_no", "PI", "pi_date", customer, piDate);
+}
+
+export async function generateChallanNo(
+  supabase: SupabaseClient,
+  customer: { name?: string | null; code?: string | null } | null,
+  challanDate: string
+): Promise<string> {
+  return generateCustomerCodedDocNo(supabase, "delivery_challans", "challan_no", "DC", "challan_date", customer, challanDate);
 }
