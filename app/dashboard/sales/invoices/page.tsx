@@ -25,10 +25,14 @@ export default async function SalesInvoiceListPage() {
     )
   ) as string[];
   const { data: buyers } = buyerIds.length
-    ? await supabase.from("buyers").select("id, markup_percentage").in("id", buyerIds)
+    ? await supabase.from("buyers").select("id, name, markup_percentage").in("id", buyerIds)
     : { data: [] };
   const markupMap: Record<string, number> = {};
-  (buyers ?? []).forEach((b: any) => (markupMap[b.id] = b.markup_percentage ?? AT_DEFAULT_MARKUP_PERCENTAGE));
+  const buyerNameMap: Record<string, string> = {};
+  (buyers ?? []).forEach((b: any) => {
+    markupMap[b.id] = b.markup_percentage ?? AT_DEFAULT_MARKUP_PERCENTAGE;
+    buyerNameMap[b.id] = b.name;
+  });
 
   const invoicesWithCommission = (invoices ?? []).map((inv: any) => {
     // Other Sales Invoice (scrap/charge বিক্রি) commission হিসাবের বাইরে
@@ -60,7 +64,7 @@ export default async function SalesInvoiceListPage() {
         </div>
       </div>
 
-      <InvoicesTable invoices={invoicesWithCommission} />
+      <InvoicesTable invoices={invoicesWithCommission} buyerNameMap={buyerNameMap} />
     </div>
   );
 }

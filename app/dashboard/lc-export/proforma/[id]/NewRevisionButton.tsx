@@ -47,6 +47,7 @@ export default function NewRevisionButton({ piId }: { piId: string }) {
             description: it.description, measurement: it.measurement,
             qty_pcs: it.qty_pcs, price_unit: it.price_unit, price_basis: it.price_basis,
             pi_thickness_mm: it.pi_thickness_mm, print_charge: it.print_charge, adhesive_charge: it.adhesive_charge,
+            tube_inch: it.tube_inch, cutting_inch: it.cutting_inch,
           }))
         );
       }

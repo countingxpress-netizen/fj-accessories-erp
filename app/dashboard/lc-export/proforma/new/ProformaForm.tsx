@@ -3,7 +3,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { generatePiNo } from "@/lib/docNumber";
-import { calcPiUnitPrice, calcPiUnitPriceWithMarkup, calcPiWeightLbs } from "@/lib/calcTubeCutting";
+import { calcPiUnitPrice, calcPiUnitPriceWithMarkup, calcPiWeightLbs, calcTubeCutting, toInches } from "@/lib/calcTubeCutting";
 import { resolveRate } from "@/lib/rateHistory";
 import { amountInWords } from "@/lib/numberToWords";
 import { getCurrentUserId } from "@/lib/currentUser";
@@ -16,6 +16,7 @@ type Booking = {
   measurement_type: string; measurement_unit: string; length_val: number; width_val: number;
   flap_val: number | null; gusset_val: number | null; pillow_val: number | null; pi_thickness_mm: number | null;
   material_type: string; has_print: boolean; print_colors: number | null; rate_per_color: number | null;
+  plain_cm_conversion?: boolean | null;
   finished_goods: { product_name: string; length_cm: number; width_cm: number; thickness: number } | null;
 };
 type Customer = { id: string; name: string; code: string | null; price_per_lbs: number | null; default_print_rate: number | null };
@@ -150,6 +151,13 @@ export default function ProformaForm({
 
   function getBuyerRule(b: Booking): BuyerMaster | undefined {
     return buyersMaster.find((bm) => bm.id === b.buyer_id);
+  }
+
+  // Booking-এর Tube"/Cutting" (inch) — pi_items-এ স্ন্যাপশট হিসেবে সেভ থাকে, যাতে
+  // Edit পেজে Thickness বদলালে Weight/Price/Unit রিক্যালকুলেট করা যায়।
+  function lineTubeCuttingInches(b: Booking): { tubeInch: number; cuttingInch: number } {
+    const { tube, cutting } = calcTubeCutting(b);
+    return toInches(tube, cutting, b.measurement_unit, b.material_type, b.has_print, !!b.plain_cm_conversion);
   }
 
   // buyer rule অনুযায়ী per-piece suggested price (currency অনুযায়ী)
@@ -416,13 +424,17 @@ export default function ProformaForm({
 
     if (mode === "booking") {
       const { error: itemsError } = await supabase.from("pi_items").insert(
-        bookingLineItems.map((li, i) => ({
-          pi_id: pi.id, booking_id: li.booking.id, sl_no: i + 1,
-          description: buildBookingDescription(li.booking),
-          measurement: formatMeasurement(li.booking),
-          qty_pcs: li.booking.quantity_pcs, price_unit: li.priceUnit, price_basis: li.basis,
-          pi_thickness_mm: lineThickness(li.booking) || null,
-        }))
+        bookingLineItems.map((li, i) => {
+          const { tubeInch, cuttingInch } = lineTubeCuttingInches(li.booking);
+          return {
+            pi_id: pi.id, booking_id: li.booking.id, sl_no: i + 1,
+            description: buildBookingDescription(li.booking),
+            measurement: formatMeasurement(li.booking),
+            qty_pcs: li.booking.quantity_pcs, price_unit: li.priceUnit, price_basis: li.basis,
+            pi_thickness_mm: lineThickness(li.booking) || null,
+            tube_inch: tubeInch || null, cutting_inch: cuttingInch || null,
+          };
+        })
       );
       if (itemsError) {
         setLoading(false);
@@ -436,6 +448,7 @@ export default function ProformaForm({
           description: li.description, measurement: li.measurement,
           qty_pcs: li.qtyPcs, price_unit: li.priceUnit, price_basis: li.priceBasis,
           pi_thickness_mm: li.thickness || null,
+          tube_inch: li.tube || null, cutting_inch: li.cutting || null,
         }))
       );
       if (itemsError) {
@@ -613,6 +626,7 @@ export default function ProformaForm({
                         placeholder="0"
                       />
                       <span className="block text-[11px] text-gray-400">± /{basis === "dzn" ? "dzn" : "pc"}</span>
+                      <div className="mt-1 text-[11px] whitespace-nowrap text-gray-500">= {effectivePriceUnit(b.id).toFixed(pd)}/{basis === "dzn" ? "dzn" : "pc"}</div>
                     </td>
                     <td className="px-3 py-2 text-right">
                       {money(calcLineAmount(b.quantity_pcs, effectivePriceUnit(b.id), basis))}

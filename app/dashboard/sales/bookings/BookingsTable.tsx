@@ -1,16 +1,17 @@
 "use client";
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { useBulkSelect } from "@/hooks/useBulkSelect";
 import { BulkActionBar } from "@/components/BulkActionBar";
 import { deleteBookingCascade } from "@/lib/bookingDelete";
 import { useBulkDeletePermission } from "@/app/dashboard/PermissionProvider";
+import ListFilterBar from "@/components/ListFilterBar";
 import BookingRow from "./BookingRow";
 import BookingGroupSummaryRow from "./BookingGroupSummaryRow";
 
 export default function BookingsTable({
-  groups, deliveredMap, challanNosByBooking, piNoByBooking,
+  groups: allGroups, deliveredMap, challanNosByBooking, piNoByBooking,
 }: {
   groups: { groupId: string; items: any[] }[];
   deliveredMap: Record<string, number>;
@@ -19,6 +20,58 @@ export default function BookingsTable({
 }) {
   const router = useRouter();
   const supabase = createClient();
+
+  const [search, setSearch] = useState("");
+  const [customerId, setCustomerId] = useState("");
+  const [buyerId, setBuyerId] = useState("");
+  const [garments, setGarments] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+
+  const allBookingsUnfiltered = useMemo(() => allGroups.flatMap((g) => g.items), [allGroups]);
+
+  const customerOptions = useMemo(() => {
+    const seen = new Map<string, string>();
+    allBookingsUnfiltered.forEach((b: any) => { if (b.customer_id && b.customers?.name) seen.set(b.customer_id, b.customers.name); });
+    return Array.from(seen, ([value, label]) => ({ value, label })).sort((a, b) => a.label.localeCompare(b.label));
+  }, [allBookingsUnfiltered]);
+
+  const buyerOptions = useMemo(() => {
+    const seen = new Map<string, string>();
+    allBookingsUnfiltered.forEach((b: any) => { if (b.buyer_id && b.buyers?.name) seen.set(b.buyer_id, b.buyers.name); });
+    return Array.from(seen, ([value, label]) => ({ value, label })).sort((a, b) => a.label.localeCompare(b.label));
+  }, [allBookingsUnfiltered]);
+
+  const garmentsOptions = useMemo(() => {
+    const set = new Set<string>();
+    allBookingsUnfiltered.forEach((b: any) => { if (b.garments_name) set.add(b.garments_name); });
+    return Array.from(set).sort().map((v) => ({ value: v, label: v }));
+  }, [allBookingsUnfiltered]);
+
+  function matches(b: any) {
+    if (customerId && b.customer_id !== customerId) return false;
+    if (buyerId && b.buyer_id !== buyerId) return false;
+    if (garments && b.garments_name !== garments) return false;
+    if (dateFrom && (!b.booking_date || b.booking_date < dateFrom)) return false;
+    if (dateTo && (!b.booking_date || b.booking_date > dateTo)) return false;
+    if (search.trim()) {
+      const q = search.trim().toLowerCase();
+      const hay = `${b.booking_no ?? ""} ${b.style ?? ""} ${b.customer_booking_ref ?? ""} ${b.customers?.name ?? ""} ${b.buyers?.name ?? ""} ${b.garments_name ?? ""}`.toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    return true;
+  }
+
+  const groups = useMemo(() => {
+    return allGroups
+      .map((g) => ({ groupId: g.groupId, items: g.items.filter(matches) }))
+      .filter((g) => g.items.length > 0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allGroups, search, customerId, buyerId, garments, dateFrom, dateTo]);
+
+  function clearFilters() {
+    setSearch(""); setCustomerId(""); setBuyerId(""); setGarments(""); setDateFrom(""); setDateTo("");
+  }
 
   const allBookings = useMemo(() => groups.flatMap((g) => g.items), [groups]);
   const { partition, markFulfilled } = useBulkDeletePermission("bookings");
@@ -51,6 +104,15 @@ export default function BookingsTable({
 
   return (
     <div>
+      <ListFilterBar
+        search={search} onSearchChange={setSearch} searchPlaceholder="Booking No / Style / Ref..."
+        customers={customerOptions} customerId={customerId} onCustomerChange={setCustomerId}
+        buyers={buyerOptions} buyerId={buyerId} onBuyerChange={setBuyerId}
+        garmentsOptions={garmentsOptions} garments={garments} onGarmentsChange={setGarments}
+        dateFrom={dateFrom} onDateFromChange={setDateFrom} dateTo={dateTo} onDateToChange={setDateTo}
+        onClear={clearFilters}
+      />
+      <p className="mb-2 text-xs text-gray-400">{allBookings.length} / {allBookingsUnfiltered.length} টা Booking দেখানো হচ্ছে</p>
       <BulkActionBar count={selectedCount} itemLabel="বুকিং" onDeleteSelected={handleBulkDelete} onClear={clear} />
       <div className="rounded-xl border bg-white shadow-sm overflow-x-auto">
         <table className="w-full text-sm">
@@ -139,7 +201,9 @@ export default function BookingsTable({
               );
             })}
             {groups.length === 0 && (
-              <tr><td colSpan={13} className="px-4 py-3 text-gray-400 italic">এখনো কোনো Booking নেই</td></tr>
+              <tr><td colSpan={13} className="px-4 py-3 text-gray-400 italic">
+                {allBookingsUnfiltered.length === 0 ? "এখনো কোনো Booking নেই" : "এই ফিল্টারে কোনো Booking নেই"}
+              </td></tr>
             )}
           </tbody>
         </table>
