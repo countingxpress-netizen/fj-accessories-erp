@@ -108,7 +108,8 @@ export function calcPiUnitPriceWithMarkup(
   markupPercentage: number,
   adhesiveRatePerInch: number | null,
   piThicknessMm?: number,
-  printRatePerColor?: number | null
+  printRatePerColor?: number | null,
+  pricePerLbsAdhesive?: number | null
 ): number {
   const thickness = piThicknessMm ?? booking.pi_thickness_mm;
   if (!thickness || !pricePerLbs) return 0;
@@ -117,9 +118,13 @@ export function calcPiUnitPriceWithMarkup(
   const { tubeInch, cuttingInch } = toInches(tube, cutting, booking.measurement_unit, booking.material_type, booking.has_print, !!booking.plain_cm_conversion);
   if (!tubeInch || !cuttingInch) return 0;
 
-  const baseBdt = (pricePerLbs * tubeInch * cuttingInch * thickness) / 75000;
+  const hasAdhesive = hasAdhesiveCharge(booking.measurement_type);
+  // কিছু বায়ারের (যেমন Walmart) adhesive/flap ব্যাগে আলাদা (বেশি) Rate/Lbs —
+  // buyers.rate_per_lbs_value_adhesive সেট থাকলে সেটাই ব্যবহার হবে।
+  const effectiveRate = hasAdhesive && pricePerLbsAdhesive ? pricePerLbsAdhesive : pricePerLbs;
+  const baseBdt = (effectiveRate * tubeInch * cuttingInch * thickness) / 75000;
 
-  const adhesiveCharge = hasAdhesiveCharge(booking.measurement_type)
+  const adhesiveCharge = hasAdhesive
     ? cuttingInch * (adhesiveRatePerInch || 0)
     : 0;
 

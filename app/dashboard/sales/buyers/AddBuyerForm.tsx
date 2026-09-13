@@ -12,6 +12,7 @@ export default function AddBuyerForm({ customers }: { customers: Customer[] }) {
   const [pricingRule, setPricingRule] = useState<"manual" | "percentage" | "rate_per_lbs" | "rate_per_lbs_markup">("manual");
   const [percentageValue, setPercentageValue] = useState("0");
   const [rateValue, setRateValue] = useState("0");
+  const [rateValueAdhesive, setRateValueAdhesive] = useState("");
   const [piThicknessMm, setPiThicknessMm] = useState("");
   const [bookingThicknessMm, setBookingThicknessMm] = useState("");
   const [productionThicknessMm, setProductionThicknessMm] = useState("");
@@ -44,6 +45,7 @@ export default function AddBuyerForm({ customers }: { customers: Customer[] }) {
       pricing_rule: pricingRule,
       percentage_value: parseFloat(percentageValue) || 0,
       rate_per_lbs_value: rate,
+      rate_per_lbs_value_adhesive: parseFloat(rateValueAdhesive) || null,
       pi_thickness_mm: parseFloat(piThicknessMm) || null,
       booking_thickness_mm: parseFloat(bookingThicknessMm) || null,
       production_thickness_mm: parseFloat(productionThicknessMm) || null,
@@ -76,7 +78,7 @@ export default function AddBuyerForm({ customers }: { customers: Customer[] }) {
       });
     }
     setLoading(false);
-    setName(""); setPercentageValue("0"); setRateValue("0"); setPiThicknessMm(""); setBookingThicknessMm(""); setProductionThicknessMm(""); setAdhesiveRatePerInch("0.02"); setPrintColorsDefault(""); setColorQuantity(""); setMarkupPercentage("2"); setUsdBdtRate(""); setUsdSurchargePerPc(""); setPriceBasisDefault("pcs");
+    setName(""); setPercentageValue("0"); setRateValue("0"); setRateValueAdhesive(""); setPiThicknessMm(""); setBookingThicknessMm(""); setProductionThicknessMm(""); setAdhesiveRatePerInch("0.02"); setPrintColorsDefault(""); setColorQuantity(""); setMarkupPercentage("2"); setUsdBdtRate(""); setUsdSurchargePerPc(""); setPriceBasisDefault("pcs");
     router.refresh();
   }
 
@@ -117,6 +119,13 @@ export default function AddBuyerForm({ customers }: { customers: Customer[] }) {
           <div className="flex flex-col">
             <label className="text-xs text-gray-500">Value (Rate/Lbs)</label>
             <input type="number" step="0.01" value={rateValue} onChange={(e) => setRateValue(e.target.value)} className="rounded-lg border px-2 py-1 text-sm w-32" />
+          </div>
+        )}
+
+        {(pricingRule === "rate_per_lbs" || pricingRule === "rate_per_lbs_markup") && (
+          <div className="flex flex-col">
+            <label className="text-xs text-gray-500">Rate/Lbs (Adhesive বাগে, ঐচ্ছিক)</label>
+            <input type="number" step="0.01" value={rateValueAdhesive} onChange={(e) => setRateValueAdhesive(e.target.value)} className="rounded-lg border px-2 py-1 text-sm w-32" placeholder="খালি = সাধারণ Rate/Lbs" />
           </div>
         )}
 

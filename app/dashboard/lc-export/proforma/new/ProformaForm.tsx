@@ -20,7 +20,7 @@ type Booking = {
   finished_goods: { product_name: string; length_cm: number; width_cm: number; thickness: number } | null;
 };
 type Customer = { id: string; name: string; code: string | null; price_per_lbs: number | null; default_print_rate: number | null };
-type BuyerMaster = { id: string; customer_id: string; name: string; pricing_rule: string; percentage_value: number; rate_per_lbs_value: number; pi_thickness_mm: number | null; adhesive_rate_per_inch: number | null; print_colors_default: number | null; usd_bdt_rate: number | null; price_basis_default: string | null; usd_surcharge_per_pc: number | null };
+type BuyerMaster = { id: string; customer_id: string; name: string; pricing_rule: string; percentage_value: number; rate_per_lbs_value: number; pi_thickness_mm: number | null; adhesive_rate_per_inch: number | null; print_colors_default: number | null; usd_bdt_rate: number | null; price_basis_default: string | null; usd_surcharge_per_pc: number | null; rate_per_lbs_value_adhesive: number | null };
 type Garment = { id: string; customer_id: string; name: string; address: string | null };
 type AdvisingBank = { id: string; name: string; branch: string | null; address: string | null; swift: string | null };
 type BuyerRateHistoryRow = { buyer_id: string; effective_from: string; rate: number };
@@ -187,7 +187,8 @@ export default function ProformaForm({
     if (rule.pricing_rule === "rate_per_lbs_markup") {
       const bdtPrice = calcPiUnitPriceWithMarkup(
         b, ratePerLbs || 0, rule.percentage_value || 0,
-        rule.adhesive_rate_per_inch, thickness, printRate
+        rule.adhesive_rate_per_inch, thickness, printRate,
+        rule.rate_per_lbs_value_adhesive
       );
       if (!bdtPrice) return 0;
       const surcharge = rule.usd_surcharge_per_pc || 0; // recycled ইত্যাদি flat USD/pc

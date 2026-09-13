@@ -20,6 +20,7 @@ export default function BuyerRow({
   const [bookingThicknessMm, setBookingThicknessMm] = useState(String(buyer.booking_thickness_mm ?? ""));
   const [productionThicknessMm, setProductionThicknessMm] = useState(String(buyer.production_thickness_mm ?? ""));
   const [adhesiveRatePerInch, setAdhesiveRatePerInch] = useState(String(buyer.adhesive_rate_per_inch ?? ""));
+  const [rateValueAdhesive, setRateValueAdhesive] = useState(String(buyer.rate_per_lbs_value_adhesive ?? ""));
   const [printColorsDefault, setPrintColorsDefault] = useState(String(buyer.print_colors_default ?? ""));
   const [colorQuantity, setColorQuantity] = useState(String(buyer.color_quantity ?? ""));
   const [markupPercentage, setMarkupPercentage] = useState(String(buyer.markup_percentage ?? 2));
@@ -45,6 +46,7 @@ export default function BuyerRow({
       booking_thickness_mm: parseFloat(bookingThicknessMm) || null,
       production_thickness_mm: parseFloat(productionThicknessMm) || null,
       adhesive_rate_per_inch: parseFloat(adhesiveRatePerInch) || null,
+      rate_per_lbs_value_adhesive: parseFloat(rateValueAdhesive) || null,
       print_colors_default: normalizedPrintColorsDefault,
       color_quantity: normalizedColorQuantity,
       markup_percentage: parseFloat(markupPercentage) || 0,
@@ -114,6 +116,15 @@ export default function BuyerRow({
                   Rate/Lbs: <strong>{buyer.rate_per_lbs_value ?? "-"}</strong> · History থেকে
                 </span>
               )}
+              {usesRate && (
+                <input
+                  type="number" step="0.01" value={rateValueAdhesive}
+                  onChange={(e) => setRateValueAdhesive(e.target.value)}
+                  className="w-24 rounded border px-2 py-1 text-sm"
+                  placeholder="Rate/Lbs (Adh.)"
+                  title="Adhesive/Flap ব্যাগে আলাদা Rate/Lbs — খালি রাখলে সাধারণ Rate/Lbs-ই ব্যবহার হবে"
+                />
+              )}
             </div>
           </td>
           <td className="px-4 py-2"><input type="number" step="0.001" value={piThicknessMm} onChange={(e) => setPiThicknessMm(e.target.value)} className="w-28 rounded border px-2 py-1 text-sm" placeholder="PI Thick" /></td>
@@ -149,7 +160,7 @@ export default function BuyerRow({
         <td className="px-4 py-2 text-gray-500">
           {buyer.pricing_rule === "percentage" && `${buyer.percentage_value}%`}
           {buyer.pricing_rule === "rate_per_lbs" && buyer.rate_per_lbs_value}
-          {buyer.pricing_rule === "rate_per_lbs_markup" && `${buyer.rate_per_lbs_value}/Lbs + ${buyer.percentage_value}%`}
+          {buyer.pricing_rule === "rate_per_lbs_markup" && `${buyer.rate_per_lbs_value}/Lbs + ${buyer.percentage_value}%${buyer.rate_per_lbs_value_adhesive ? ` (Adh: ${buyer.rate_per_lbs_value_adhesive})` : ""}`}
           {buyer.pricing_rule === "manual" && "-"}
           {usesRate && (
             <button

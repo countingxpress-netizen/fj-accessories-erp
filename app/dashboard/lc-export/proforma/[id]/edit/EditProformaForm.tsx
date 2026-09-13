@@ -19,7 +19,7 @@ type Booking = {
   plain_cm_conversion?: boolean | null;
   finished_goods: { product_name: string; length_cm: number; width_cm: number; thickness: number } | null;
 };
-type BuyerMaster = { id: string; customer_id: string; name: string; pricing_rule: string; percentage_value: number; rate_per_lbs_value: number; pi_thickness_mm: number | null; adhesive_rate_per_inch: number | null; print_colors_default: number | null; usd_bdt_rate: number | null; price_basis_default: string | null; usd_surcharge_per_pc: number | null };
+type BuyerMaster = { id: string; customer_id: string; name: string; pricing_rule: string; percentage_value: number; rate_per_lbs_value: number; pi_thickness_mm: number | null; adhesive_rate_per_inch: number | null; print_colors_default: number | null; usd_bdt_rate: number | null; price_basis_default: string | null; usd_surcharge_per_pc: number | null; rate_per_lbs_value_adhesive: number | null };
 type BuyerRateHistoryRow = { buyer_id: string; effective_from: string; rate: number };
 
 function round(n: number, decimals: number) {
@@ -304,7 +304,7 @@ export default function EditProformaForm({
       return currency === "USD" ? roundPrice(bdt / rate) : roundPrice(bdt);
     }
     if (rule.pricing_rule === "rate_per_lbs_markup") {
-      const bdtPrice = calcPiUnitPriceWithMarkup(b, ratePerLbs || 0, rule.percentage_value || 0, rule.adhesive_rate_per_inch, thickness, printRate);
+      const bdtPrice = calcPiUnitPriceWithMarkup(b, ratePerLbs || 0, rule.percentage_value || 0, rule.adhesive_rate_per_inch, thickness, printRate, rule.rate_per_lbs_value_adhesive);
       if (!bdtPrice) return 0;
       const surcharge = rule.usd_surcharge_per_pc || 0;
       return currency === "USD" ? roundPrice(bdtPrice / rate + surcharge) : roundPrice(bdtPrice + surcharge * rate);
