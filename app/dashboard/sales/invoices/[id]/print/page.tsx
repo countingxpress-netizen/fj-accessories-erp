@@ -92,10 +92,30 @@ export default async function InvoicePrintPage({ params }: { params: Promise<{ i
   // যিনি এই Invoice তৈরি করেছেন তার নিজস্ব Signature দেখাবে, না থাকলে Company-এর ডিফল্ট
   const signatureUrl = invoice.creator?.signature_url || company?.signature_url;
 
+  // InvoiceSummary.tsx-এর হুবহু resolve লজিক — সেভ করা override থাকলে সেটাই, নাহলে অটো হিসাব
+  const previousLabel = `Previous Bill${previousInvoice ? `-${previousInvoice.invoice_no}` : " (Opening Balance)"}`;
+  const resolvedPrevDue = invoice.summary_prev_due ?? previousDue;
+  const resolvedThisBill = invoice.summary_this_bill ?? thisBillAmount;
+  const resolvedPaid = invoice.summary_paid ?? paidBetween;
+  const resolvedTotalDue = resolvedPrevDue + resolvedThisBill;
+  const resolvedRunningDue = resolvedTotalDue - resolvedPaid;
+
+  const itemCols = isOther ? 4 : 6; // Total-এর আগে ফাঁকা কলাম সংখ্যা (Sl বাদে, Amount বাদে)
+
   const excelRows: (string | number | null)[][] = [
-    ["Invoice No", invoice.invoice_no],
-    ["Date", formatDate(invoice.invoice_date)],
-    ["Bill To", invoice.customers?.name || ""],
+    [company?.name || ""],
+    [company?.address || ""],
+    [`Phone: ${company?.phone || ""} | Email: ${company?.email || ""}`],
+    [],
+    ["Sales Invoice"],
+    [],
+    ["Bill To:", "", "", "", "Invoice No:", invoice.invoice_no],
+    [invoice.customers?.name || "", "", "", "", "Date:", formatDate(invoice.invoice_date)],
+    [invoice.customers?.address || "", "", "", "", ...(invoice.delivery_point ? ["Delivery Point:", invoice.delivery_point] : [])],
+    ...(invoice.customers?.phone ? [[invoice.customers.phone]] : []),
+    ...(invoice.buyer_name ? [[`Buyer: ${invoice.buyer_name}`]] : []),
+    ...(invoice.merchant_name ? [[`Merchant: ${invoice.merchant_name}`]] : []),
+    ...(invoice.customer_booking_ref ? [[`Customer Booking Ref: ${invoice.customer_booking_ref}`]] : []),
     [],
     isOther
       ? ["Sl", "Description", "Qty", "Unit Price", "Amount"]
@@ -105,7 +125,17 @@ export default async function InvoicePrintPage({ params }: { params: Promise<{ i
         ? [i + 1, item.line_label, item.quantity_pcs, Number(item.unit_price), Number(item.amount)]
         : [i + 1, item.bookings?.style || item.bookings?.booking_no || "-", item.finished_goods?.product_name, formatMeasurement(item.bookings), item.quantity_pcs, Number(item.unit_price), Number(item.amount)]
     ),
-    isOther ? ["Total", "", "", "", Number(total.toFixed(2))] : ["Total", "", "", "", "", "", Number(total.toFixed(2))],
+    ["Total", ...Array(itemCols - 1).fill(""), Number(total.toFixed(2))],
+    [],
+    ["Amount In Word (BDT):"],
+    [amountInWords(total, "BDT")],
+    [],
+    [`${previousLabel} Due =`, "", "", "", "BDT", Number(resolvedPrevDue.toFixed(2))],
+    [`This Bill-${invoice.invoice_no} =`, "", "", "", "BDT", Number(resolvedThisBill.toFixed(2))],
+    ["Total Due =", "", "", "", "BDT", Number(resolvedTotalDue.toFixed(2))],
+    [`Paid${lastPaymentDate ? ` on ${formatDate(lastPaymentDate)}` : ""} =`, "", "", "", "BDT", Number(resolvedPaid.toFixed(2))],
+    ["Running Due =", "", "", "", "BDT", Number(resolvedRunningDue.toFixed(2))],
+    ...(invoice.summary_note ? [[], ["Note:", invoice.summary_note]] : []),
   ];
 
   return (

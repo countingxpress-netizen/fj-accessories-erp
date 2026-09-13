@@ -40,9 +40,21 @@ export default async function PIPrintPage({ params }: { params: Promise<{ id: st
   const signatureUrl = pi.creator?.signature_url || company?.signature_url;
 
   const excelRows: (string | number | null)[][] = [
-    ["INVOICE NO.", `${pi.pi_no}${pi.revision > 0 ? ` (Rev-${pi.revision})` : ""}`],
-    ["Date", formatDate(pi.pi_date)],
-    ["Buyer", pi.buyer_name || pi.customers?.name || ""],
+    [company?.name || ""],
+    [company?.address || ""],
+    [],
+    ["PROFORMA INVOICE"],
+    [],
+    ["INVOICE NO.", `${pi.pi_no}${pi.revision > 0 ? ` (Rev-${pi.revision})` : ""}`, "", "", "ADVISING BANK:", pi.advising_bank_name || ""],
+    ["Date-", formatDate(pi.pi_date), "", "", pi.advising_bank_branch || ""],
+    ...(pi.advising_bank_address ? [["", "", "", "", pi.advising_bank_address]] : []),
+    ...(pi.advising_bank_swift ? [["", "", "", "", `SWIFT - ${pi.advising_bank_swift}`]] : []),
+    [],
+    ["TO"],
+    [pi.garments_name || pi.customers?.name || ""],
+    ...(pi.garments_address || pi.customers?.address ? [[pi.garments_address || pi.customers?.address]] : []),
+    ...(pi.buyer_name ? [[`Buyer: - ${pi.buyer_name}`]] : []),
+    ...(pi.item_description ? [[`Item:- ${pi.item_description}`]] : []),
     [],
     ["Sl No", "Description", "Measurement", "Qty (Pcs)", "Qty (Dzn)", "Price/Unit", "Total Amt"],
     ...(items ?? []).map((it: any) => {
@@ -52,6 +64,12 @@ export default async function PIPrintPage({ params }: { params: Promise<{ id: st
     ["Total", "", "", totalQtyPcs, Number(totalQtyDzn.toFixed(2)), "", Number(subtotal.toFixed(2))],
     ...(pi.discount_type !== "none" ? [["Discount", "", "", "", "", "", Number(discountAmount.toFixed(2))]] : []),
     ["Grand Total", "", "", "", "", "", Number(pi.total_amount ?? 0)],
+    [],
+    [`SAY: ${amountInWords(pi.total_amount ?? 0, pi.currency)}`],
+    ...(pi.total_weight_kg ? [[`Total Invoice Weight = ${pi.total_weight_kg} Kgs`]] : []),
+    [`H.S CODE NO: ${pi.hs_code || "3923.21.00"}`],
+    [`BIN No. ${pi.bin_no || "000113803-1201"}`],
+    ...(termsText ? [[], ...termsText.split("\n").map((line: string) => [line])] : []),
   ];
 
   return (

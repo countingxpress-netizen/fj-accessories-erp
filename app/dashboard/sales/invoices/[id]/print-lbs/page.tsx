@@ -92,9 +92,13 @@ export default async function LbsInvoicePrintPage({ params }: { params: Promise<
   const cellCls = "border border-gray-400 px-2 py-1 text-sm";
 
   const excelRows: (string | number | null)[][] = [
-    ["Invoice No", invoice.invoice_no],
-    ["Date", formatDate(invoice.invoice_date)],
-    ["Bill To", invoice.customers?.name || ""],
+    [company?.name ?? "F & J ACCESSORIES"],
+    [company?.address || ""],
+    [`Contact No- ${company?.phone || ""}  E-Mail- ${company?.email || ""}`],
+    [],
+    ["Sl No-", invoice.invoice_no, "", "INVOICE", "", "Date:-", formatDate(invoice.invoice_date)],
+    ["Bill To -", invoice.customers?.name || "", "", "", "WO #", invoice.customer_booking_ref || ""],
+    ["Buyer-", invoice.buyer_name || "", "", "", "Attn:-", invoice.merchant_name || ""],
     [],
     ["Sl", "Item Description", "Measurement", "Quantity", "Unit Price", "Amount"],
     ...productRows.map((r: any, i: number) => [
@@ -104,6 +108,15 @@ export default async function LbsInvoicePrintPage({ params }: { params: Promise<
       PRODUCT_SLOTS + i + 1, "", r.line_label, Number(r.quantity_pcs) ? `${Math.round(r.quantity_pcs)} ${chargeUnit(r.line_type)}` : "", Number(r.unit_price) || 0, Number(r.amount) || 0,
     ]),
     ["Total", "", "", "", "", Number(total.toFixed(2))],
+    [],
+    ["Amount In Word (BDT) ="],
+    [amountInWords(total, "BDT")],
+    [],
+    [`Previous Bill${previousInvoice ? ` - ${previousInvoice.invoice_no}` : " (Opening Balance)"} - Due =`, "", "", "", "BDT", Number(previousDue.toFixed(2))],
+    [`This Bill - ${invoice.invoice_no} =`, "", "", "", "BDT", Number(total.toFixed(2))],
+    ["Total Due =", "", "", "", "BDT", Number(totalDue.toFixed(2))],
+    [`Less: Payment${lastPaymentDate ? ` (${formatDate(lastPaymentDate)})` : ""} =`, "", "", "", "BDT", Number(paidBetween.toFixed(2))],
+    ["Running Due =", "", "", "", "BDT", Number(runningDue.toFixed(2))],
   ];
 
   return (

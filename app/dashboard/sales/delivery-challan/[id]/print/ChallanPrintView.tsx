@@ -23,9 +23,18 @@ export default function ChallanPrintView({
 
   function handleExcelDownload() {
     const rows: (string | number | null)[][] = [
-      ["Challan No", challan.challan_no],
-      ["Date", challanDateLabel],
-      ["Deliver To", challan.delivery_point || challan.customers?.name || ""],
+      [company?.name || ""],
+      [company?.address || ""],
+      [`Phone: ${company?.phone || ""} | Email: ${company?.email || ""}`],
+      [],
+      ["Delivery Challan"],
+      [],
+      ["Deliver To:", "", "", "", "Challan No:", challan.challan_no],
+      [challan.delivery_point || challan.customers?.name || "-", "", "", "", "Date:", challanDateLabel],
+      ...(challan.buyer_name ? [[`Buyer: ${challan.buyer_name}`]] : []),
+      ...(challan.merchant_name ? [[`Merchant: ${challan.merchant_name}`]] : []),
+      ...(challan.style ? [[`Style: ${challan.style}`]] : []),
+      ...(challan.customer_booking_ref ? [[`Customer Booking Ref: ${challan.customer_booking_ref}`]] : []),
       [],
       hasPackets ? ["Product", "Measurement", "Quantity", "Packets"] : ["Product", "Measurement", "Quantity"],
       ...items.map((item) => {
@@ -35,6 +44,8 @@ export default function ChallanPrintView({
         return row;
       }),
       hasPackets ? ["Total", "", totalQty, totalPackets] : ["Total", "", totalQty],
+      [],
+      ["Received the above goods as per order with good condition."],
     ];
     downloadExcel(`Challan-${challan.challan_no}`, [{ name: "Challan", rows }]);
   }

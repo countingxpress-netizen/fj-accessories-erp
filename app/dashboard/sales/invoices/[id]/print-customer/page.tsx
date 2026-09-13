@@ -102,16 +102,43 @@ export default async function InvoicePrintCustomerPage({ params }: { params: Pro
 
   const signatureUrl = invoice.creator?.signature_url || company?.signature_url;
 
+  const previousLabel = `Previous Bill${previousInvoice ? `-${previousInvoice.invoice_no}` : " (Opening Balance)"}`;
+  const resolvedPrevDue = invoice.summary_prev_due ?? previousDue;
+  const resolvedThisBill = invoice.summary_this_bill ?? total;
+  const resolvedPaid = invoice.summary_paid ?? paidBetween;
+  const resolvedTotalDue = resolvedPrevDue + resolvedThisBill;
+  const resolvedRunningDue = resolvedTotalDue - resolvedPaid;
+
   const excelRows: (string | number | null)[][] = [
-    ["Sl No", invoice.invoice_no],
-    ["Date", formatDate(invoice.invoice_date)],
-    ["Bill To", invoice.customers?.name || ""],
+    [company?.name || ""],
+    [company?.address || ""],
+    [`Phone: ${company?.phone || ""} | Email: ${company?.email || ""}`],
+    [],
+    ["Invoice"],
+    [],
+    ["Bill To:", "", "", "", "Sl No:", invoice.invoice_no],
+    [invoice.customers?.name || "", "", "", "", "Date:", formatDate(invoice.invoice_date)],
+    ...(invoice.customers?.address ? [[invoice.customers.address]] : []),
+    ...(invoice.buyer_name ? [[`Buyer: ${invoice.buyer_name}`]] : []),
+    ...(invoice.merchant_name ? [[`Merchant: ${invoice.merchant_name}`]] : []),
     [],
     ["Sl", "Style", "Item Description", "Measurement", "Qty (Pcs)", "Unit Price", "Amount"],
     ...items.map((item: any, i: number) => [
       i + 1, item.bookings?.style || item.bookings?.booking_no || "-", item.finished_goods?.product_name, formatMeasurement(item.bookings), item.quantity_pcs, Number(item.customerUnitPrice.toFixed(2)), Number(item.customerAmount.toFixed(2)),
     ]),
     ["Total", "", "", "", "", "", Number(total.toFixed(2))],
+    [],
+    [`Total Order Lbs = ${fmt(totalOrderLbs)} Lbs`],
+    [],
+    ["Amount In Word (BDT):"],
+    [amountInWords(total, "BDT")],
+    [],
+    [`${previousLabel} Due =`, "", "", "", "BDT", Number(resolvedPrevDue.toFixed(2))],
+    [`This Bill-${invoice.invoice_no} =`, "", "", "", "BDT", Number(resolvedThisBill.toFixed(2))],
+    ["Total Due =", "", "", "", "BDT", Number(resolvedTotalDue.toFixed(2))],
+    [`Paid${lastPaymentDate ? ` on ${formatDate(lastPaymentDate)}` : ""} =`, "", "", "", "BDT", Number(resolvedPaid.toFixed(2))],
+    ["Running Due =", "", "", "", "BDT", Number(resolvedRunningDue.toFixed(2))],
+    ...(invoice.summary_note ? [[], ["Note:", invoice.summary_note]] : []),
   ];
 
   return (
