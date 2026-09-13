@@ -22,20 +22,67 @@ export default async function DashboardPage() {
   const [year, month] = todayLocal().split("-").map(Number);
   const { start: monthStart, end: monthEnd } = monthRange(year, month);
 
-  const { data: cashBankAccounts } = await supabase
-    .from("chart_of_accounts")
-    .select("id")
-    .eq("account_type", "asset")
-    .or("account_name.ilike.%cash%,account_name.ilike.%bank%");
-  const cashBankIds = (cashBankAccounts ?? []).map((a: any) => a.id);
-  const { data: cashBankLines } = cashBankIds.length
-    ? await supabase.from("journal_entry_lines").select("debit, credit").in("account_id", cashBankIds)
-    : { data: [] };
-  const cashBankBalance = (cashBankLines ?? []).reduce((s: number, l: any) => s + (l.debit || 0) - (l.credit || 0), 0);
+  // এই রাউন্ডের সব query একে অপরের থেকে স্বাধীন — সিরিয়ালি await করলে প্রতিটা
+  // network round-trip যোগ হয়ে পেজ-লোড ধীর লাগে, তাই একসাথে fire করা হয়।
+  const [
+    { data: cashBankAccounts },
+    { data: customers },
+    { data: invoices },
+    { data: customerPayments },
+    groupMap,
+    { data: suppliers },
+    { data: purchases },
+    { data: supplierPayments },
+    { data: allAccounts },
+    { data: company },
+    { data: rmMaterials },
+    { data: rmStockRows },
+    { data: consumptionRows },
+    { data: bookingStatuses },
+  ] = await Promise.all([
+    supabase.from("chart_of_accounts").select("id").eq("account_type", "asset").or("account_name.ilike.%cash%,account_name.ilike.%bank%"),
+    supabase.from("customers").select("id, name, opening_balance"),
+    supabase.from("sales_invoices").select("customer_id, invoice_date, sales_invoice_items(amount)"),
+    supabase.from("customer_payments").select("customer_id, amount"),
+    loadGroupMap(supabase),
+    supabase.from("suppliers").select("id"),
+    supabase.from("purchase_entries").select("supplier_id, purchase_entry_items(quantity_lbs, rate_per_lbs)"),
+    supabase.from("supplier_payments").select("supplier_id, amount"),
+    supabase.from("chart_of_accounts").select("id, account_code, account_name, account_type"),
+    supabase.from("company_profile").select("*").limit(1).maybeSingle(),
+    supabase.from("raw_materials").select("id, avg_cost_per_lbs"),
+    supabase.from("raw_material_stock").select("material_id, quantity_lbs"),
+    supabase.from("material_consumption").select("material_id, quantity_lbs, consumption_date").gte("consumption_date", monthStart).lte("consumption_date", monthEnd),
+    supabase.from("bookings").select("status"),
+  ]);
 
-  const { data: customers } = await supabase.from("customers").select("id, name, opening_balance");
-  const { data: invoices } = await supabase.from("sales_invoices").select("customer_id, invoice_date, sales_invoice_items(amount)");
-  const { data: customerPayments } = await supabase.from("customer_payments").select("customer_id, amount");
+  const cashBankIds = (cashBankAccounts ?? []).map((a: any) => a.id);
+  const accountsById = new Map<string, any>((allAccounts ?? []).map((a: any) => [a.id, a]));
+  const ieIds = (allAccounts ?? [])
+    .filter((a: any) => a.account_type === "income" || a.account_type === "expense")
+    .map((a: any) => a.id);
+  const selId = (company as any)?.dashboard_account_id as string | null | undefined;
+  const wantSelLines = !!(selId && accountsById.has(selId));
+
+  // দ্বিতীয় রাউন্ড — আগের রাউন্ডের ফলাফলের (id list) উপর নির্ভরশীল, কিন্তু এই তিনটাও
+  // একে অপরের থেকে স্বাধীন বলে একসাথেই fire করা হয়।
+  const [
+    { data: cashBankLines },
+    { data: ieLines },
+    { data: selLines },
+  ] = await Promise.all([
+    cashBankIds.length
+      ? supabase.from("journal_entry_lines").select("debit, credit").in("account_id", cashBankIds)
+      : Promise.resolve({ data: [] as any[] }),
+    ieIds.length
+      ? supabase.from("journal_entry_lines").select("account_id, debit, credit, journal_vouchers(voucher_date)").in("account_id", ieIds)
+      : Promise.resolve({ data: [] as any[] }),
+    wantSelLines
+      ? supabase.from("journal_entry_lines").select("debit, credit").eq("account_id", selId as string)
+      : Promise.resolve({ data: [] as any[] }),
+  ]);
+
+  const cashBankBalance = (cashBankLines ?? []).reduce((s: number, l: any) => s + (l.debit || 0) - (l.credit || 0), 0);
 
   const customerDue: Record<string, number> = {};
   (customers ?? []).forEach((c: any) => { if (c.opening_balance) customerDue[c.id] = (customerDue[c.id] ?? 0) + c.opening_balance; });
@@ -45,12 +92,7 @@ export default async function DashboardPage() {
   });
   (customerPayments ?? []).forEach((p: any) => { customerDue[p.customer_id] = (customerDue[p.customer_id] ?? 0) - p.amount; });
   // গ্রুপভুক্ত কাস্টমার এক পার্টি হিসেবে net — Outstanding রিপোর্টের সাথে মিল রেখে।
-  const groupMap = await loadGroupMap(supabase);
   const totalReceivable = foldNumbers(groupMap, customers ?? [], customerDue).reduce((s, r) => s + (r.value > 0 ? r.value : 0), 0);
-
-  const { data: suppliers } = await supabase.from("suppliers").select("id");
-  const { data: purchases } = await supabase.from("purchase_entries").select("supplier_id, purchase_entry_items(quantity_lbs, rate_per_lbs)");
-  const { data: supplierPayments } = await supabase.from("supplier_payments").select("supplier_id, amount");
 
   const supplierDue: Record<string, number> = {};
   (purchases ?? []).forEach((p: any) => {
@@ -65,21 +107,6 @@ export default async function DashboardPage() {
     .reduce((s: number, inv: any) => s + (inv.sales_invoice_items ?? []).reduce((t: number, i: any) => t + (i.amount || 0), 0), 0);
 
   // ---- এ মাসের P&L কার্ড: Gross Profit (Sales 4000/4010 − COGS 5050) + Operating Expenses ----
-  const { data: allAccounts } = await supabase
-    .from("chart_of_accounts")
-    .select("id, account_code, account_name, account_type");
-  const accountsById = new Map<string, any>((allAccounts ?? []).map((a: any) => [a.id, a]));
-
-  const ieIds = (allAccounts ?? [])
-    .filter((a: any) => a.account_type === "income" || a.account_type === "expense")
-    .map((a: any) => a.id);
-  const { data: ieLines } = ieIds.length
-    ? await supabase
-        .from("journal_entry_lines")
-        .select("account_id, debit, credit, journal_vouchers(voucher_date)")
-        .in("account_id", ieIds)
-    : { data: [] };
-
   let monthSalesRevenue = 0;
   let monthCogs = 0;
   let monthExpenses = 0; // COGS বাদে বাকি সব expense অ্যাকাউন্ট (operating expense)
@@ -99,22 +126,16 @@ export default async function DashboardPage() {
   const monthGrossProfit = monthSalesRevenue - monthCogs;
 
   // ---- Selected Account Balance (Settings-এ বাছাই করা) ----
-  const { data: company } = await supabase.from("company_profile").select("*").limit(1).maybeSingle();
-  const selId = (company as any)?.dashboard_account_id as string | null | undefined;
   let selectedAccount: { id: string; code: string; name: string; balance: number } | null = null;
-  if (selId && accountsById.has(selId)) {
-    const acc = accountsById.get(selId);
-    const { data: selLines } = await supabase
-      .from("journal_entry_lines").select("debit, credit").eq("account_id", selId);
+  if (wantSelLines) {
+    const acc = accountsById.get(selId as string);
     const net = (selLines ?? []).reduce((s: number, l: any) => s + (l.debit || 0) - (l.credit || 0), 0);
     const normalDebit = acc.account_type === "asset" || acc.account_type === "expense";
-    selectedAccount = { id: selId, code: acc.account_code, name: acc.account_name, balance: normalDebit ? net : -net };
+    selectedAccount = { id: selId as string, code: acc.account_code, name: acc.account_name, balance: normalDebit ? net : -net };
   }
 
   // ---- কাঁচামাল স্টক (LBS + গড় খরচে মূল্য) ----
-  const { data: rmMaterials } = await supabase.from("raw_materials").select("id, avg_cost_per_lbs");
   const rmCostById = new Map<string, number>((rmMaterials ?? []).map((m: any) => [m.id, Number(m.avg_cost_per_lbs) || 0]));
-  const { data: rmStockRows } = await supabase.from("raw_material_stock").select("material_id, quantity_lbs");
   let rawStockLbs = 0;
   let rawStockValue = 0;
   (rmStockRows ?? []).forEach((s: any) => {
@@ -124,11 +145,6 @@ export default async function DashboardPage() {
   });
 
   // ---- এ মাসে production-এ ঢালা কাঁচামাল (LBS + মূল্য) ----
-  const { data: consumptionRows } = await supabase
-    .from("material_consumption")
-    .select("material_id, quantity_lbs, consumption_date")
-    .gte("consumption_date", monthStart)
-    .lte("consumption_date", monthEnd);
   let consumedLbs = 0;
   let consumedValue = 0;
   (consumptionRows ?? []).forEach((c: any) => {
@@ -137,7 +153,6 @@ export default async function DashboardPage() {
     consumedValue += q * (rmCostById.get(c.material_id) ?? 0);
   });
 
-  const { data: bookingStatuses } = await supabase.from("bookings").select("status");
   const statusCounts: Record<string, number> = {};
   (bookingStatuses ?? []).forEach((b: any) => { statusCounts[b.status] = (statusCounts[b.status] ?? 0) + 1; });
 

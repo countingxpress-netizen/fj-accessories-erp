@@ -47,6 +47,21 @@ export function deriveCustomerCode(name: string): string {
 // {docPrefix}-{year}-{NNNN} ফরম্যাটে fallback করে। PI (generatePiNo) আর Delivery
 // Challan (generateChallanNo) দুটোতেই ব্যবহৃত — নতুন কোনো ডকুমেন্টেও একই প্যাটার্নে
 // কাস্টমার-ভিত্তিক নম্বর লাগলে এটাই রিইউজ করুন।
+// ERP-এ ঢোকার আগে কাস্টমারের কাগজের চালান বইয়ে যে সিরিয়াল পর্যন্ত ব্যবহার হয়ে গেছে,
+// সেটাকেও maxNum হিসাব করার সময় বিবেচনায় নেয় (customers.challan_next_serial_hint থেকে
+// আসা "পরবর্তী সিরিয়াল" বাদ ১) — যাতে কাস্টমারের প্রথম ERP চালান শূন্য থেকে শুরু না করে।
+export function buildCustomerCodedDocNo(
+  docPrefix: string,
+  customer: { name?: string | null; code?: string | null } | null,
+  docDate: string,
+  serial: number
+): string {
+  const year = new Date(docDate).getFullYear();
+  const code = (customer?.code || deriveCustomerCode(customer?.name || "")).toUpperCase().trim();
+  if (!code) return `${docPrefix}-${year}-${String(serial).padStart(4, "0")}`;
+  return `${docPrefix}/FNJ-${serial}-${code}/${year}`;
+}
+
 async function generateCustomerCodedDocNo(
   supabase: SupabaseClient,
   table: string,
@@ -54,7 +69,8 @@ async function generateCustomerCodedDocNo(
   docPrefix: string,
   dateColumn: string,
   customer: { name?: string | null; code?: string | null } | null,
-  docDate: string
+  docDate: string,
+  hintNext?: number | null
 ): Promise<string> {
   const year = new Date(docDate).getFullYear();
   const code = (customer?.code || deriveCustomerCode(customer?.name || "")).toUpperCase().trim();
@@ -69,7 +85,7 @@ async function generateCustomerCodedDocNo(
     .ilike(column, `${docPrefix}/FNJ-%-${code}/%`);
 
   const re = new RegExp(`^${docPrefix}/FNJ-(\\d+)-${code}/`, "i");
-  let maxNum = 0;
+  let maxNum = hintNext && hintNext > 0 ? hintNext - 1 : 0;
   (data ?? []).forEach((row: any) => {
     const m = (row[column] as string)?.match(re);
     if (m) {
@@ -91,8 +107,11 @@ export async function generatePiNo(
 
 export async function generateChallanNo(
   supabase: SupabaseClient,
-  customer: { name?: string | null; code?: string | null } | null,
+  customer: { name?: string | null; code?: string | null; challan_next_serial_hint?: number | null } | null,
   challanDate: string
 ): Promise<string> {
-  return generateCustomerCodedDocNo(supabase, "delivery_challans", "challan_no", "DC", "challan_date", customer, challanDate);
+  return generateCustomerCodedDocNo(
+    supabase, "delivery_challans", "challan_no", "DC", "challan_date", customer, challanDate,
+    customer?.challan_next_serial_hint
+  );
 }

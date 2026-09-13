@@ -7,12 +7,21 @@ const money = (n: number) => n.toLocaleString("en-IN", { minimumFractionDigits: 
 export default async function StockReportPage() {
   const supabase = await createClient();
 
-  const { data: materials } = await supabase.from("raw_materials").select("id, material_name, unit, avg_cost_per_lbs, inventory_account_code").order("material_name");
-  const { data: rawStock } = await supabase.from("raw_material_stock").select("material_id, quantity_lbs");
-  const { data: products } = await supabase.from("finished_goods").select("id, product_name, avg_cost_per_pc").order("product_name");
-  const { data: fgStock } = await supabase.from("finished_goods_stock").select("product_id, quantity_pcs");
-  const { data: accounts } = await supabase.from("chart_of_accounts").select("id, account_code");
-  const { data: lines } = await supabase.from("journal_entry_lines").select("account_id, debit, credit");
+  const [
+    { data: materials },
+    { data: rawStock },
+    { data: products },
+    { data: fgStock },
+    { data: accounts },
+    { data: lines },
+  ] = await Promise.all([
+    supabase.from("raw_materials").select("id, material_name, unit, avg_cost_per_lbs, inventory_account_code").order("material_name"),
+    supabase.from("raw_material_stock").select("material_id, quantity_lbs"),
+    supabase.from("finished_goods").select("id, product_name, avg_cost_per_pc").order("product_name"),
+    supabase.from("finished_goods_stock").select("product_id, quantity_pcs"),
+    supabase.from("chart_of_accounts").select("id, account_code"),
+    supabase.from("journal_entry_lines").select("account_id, debit, credit"),
+  ]);
 
   const rawTotals: Record<string, number> = {};
   (rawStock ?? []).forEach((s) => { rawTotals[s.material_id] = (rawTotals[s.material_id] ?? 0) + s.quantity_lbs; });

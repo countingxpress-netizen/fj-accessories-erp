@@ -1,8 +1,8 @@
 "use client";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { generateChallanNo } from "@/lib/docNumber";
+import { generateChallanNo, buildCustomerCodedDocNo } from "@/lib/docNumber";
 import { recalcBookingStatus } from "@/lib/recalcBookingStatus";
 import { formatStyle } from "@/lib/formatStyle";
 import { getCurrentUserId } from "@/lib/currentUser";
@@ -15,7 +15,7 @@ type Booking = {
   delivery_point: string | null; customer_booking_ref: string | null;
   finished_goods: { product_name: string } | null;
 };
-type Customer = { id: string; name: string; code?: string | null };
+type Customer = { id: string; name: string; code?: string | null; challan_next_serial_hint?: number | null };
 type Warehouse = { id: string; name: string };
 
 export type EditChallanContext = {
@@ -27,12 +27,13 @@ export type EditChallanContext = {
 };
 
 export default function DeliveryChallanForm({
-  customers, bookings, warehouses, deliveredMap, stockByProduct, editChallan,
+  customers, bookings, warehouses, deliveredMap, stockByProduct, editChallan, customersWithChallans = [],
 }: {
   customers: Customer[]; bookings: Booking[]; warehouses: Warehouse[];
   deliveredMap: Record<string, number>;
   stockByProduct: Record<string, Record<string, number>>;
   editChallan?: EditChallanContext;
+  customersWithChallans?: string[];
 }) {
   const isEdit = !!editChallan;
   const editLines = editChallan?.lines ?? [];
@@ -59,8 +60,23 @@ export default function DeliveryChallanForm({
   );
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [manualSerial, setManualSerial] = useState("");
   const router = useRouter();
   const supabase = createClient();
+
+  const selectedCustomer = useMemo(() => customers.find((c) => c.id === customerId) ?? null, [customers, customerId]);
+  // এই কাস্টমারের এটাই প্রথম চালান হলে সিরিয়াল ম্যানুয়ালি বসানোর অপশন দিই —
+  // এরপর থেকে স্বাভাবিক MAX-based auto-numbering এখান থেকেই এগোবে।
+  const isFirstChallanForCustomer = !isEdit && !!customerId && !customersWithChallans.includes(customerId);
+
+  useEffect(() => {
+    if (isFirstChallanForCustomer && selectedCustomer?.challan_next_serial_hint) {
+      setManualSerial(String(selectedCustomer.challan_next_serial_hint));
+    } else {
+      setManualSerial("");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [customerId]);
 
   // একটি product-এর প্রতিটা warehouse-এ কত pcs আছে (সব warehouse দেখায়, না থাকলে 0)
   function warehouseRowsFor(productId: string) {
@@ -199,8 +215,18 @@ export default function DeliveryChallanForm({
       return;
     }
 
-    const selectedCustomer = customers.find((c) => c.id === customerId) ?? null;
-    const challanNo = await generateChallanNo(supabase, selectedCustomer, challanDate);
+    let challanNo: string;
+    if (isFirstChallanForCustomer && manualSerial.trim() !== "") {
+      const serial = parseInt(manualSerial, 10);
+      if (!Number.isInteger(serial) || serial <= 0) {
+        setLoading(false);
+        setError("চালান সিরিয়াল একটা সঠিক পূর্ণসংখ্যা হতে হবে।");
+        return;
+      }
+      challanNo = buildCustomerCodedDocNo("DC", selectedCustomer, challanDate, serial);
+    } else {
+      challanNo = await generateChallanNo(supabase, selectedCustomer, challanDate);
+    }
     const createdBy = await getCurrentUserId(supabase);
     const { data: challan, error: challanError } = await supabase
       .from("delivery_challans")
@@ -246,6 +272,18 @@ export default function DeliveryChallanForm({
             {customers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
         </div>
+        {isFirstChallanForCustomer && (
+          <div>
+            <label className="block text-sm text-gray-600 mb-1">চালান সিরিয়াল (এই কাস্টমারের প্রথম চালান)</label>
+            <input
+              type="text" inputMode="numeric" value={manualSerial}
+              onChange={(e) => setManualSerial(e.target.value.replace(/[^0-9]/g, ""))}
+              placeholder="খালি রাখলে ১ থেকে শুরু হবে"
+              className="w-44 rounded-lg border px-3 py-2 text-sm"
+            />
+            <p className="text-xs text-gray-400 mt-1">নতুন কাস্টমার বলে ERP নিজে থেকে সিরিয়াল জানে না — কাগজের চালান বই অনুযায়ী পরের নম্বরটা বসান।</p>
+          </div>
+        )}
         {customerId && (
           <>
             <div>

@@ -6,9 +6,23 @@ import { loadGroupMap, foldNumbers, ledgerHref } from "@/lib/customerGroups";
 export default async function OutstandingReportPage() {
   const supabase = await createClient();
 
-  const { data: customers } = await supabase.from("customers").select("id, name, opening_balance");
-  const { data: invoices } = await supabase.from("sales_invoices").select("customer_id, sales_invoice_items(amount)");
-  const { data: customerPayments } = await supabase.from("customer_payments").select("customer_id, amount");
+  const [
+    { data: customers },
+    { data: invoices },
+    { data: customerPayments },
+    gm,
+    { data: suppliers },
+    { data: purchases },
+    { data: supplierPayments },
+  ] = await Promise.all([
+    supabase.from("customers").select("id, name, opening_balance"),
+    supabase.from("sales_invoices").select("customer_id, sales_invoice_items(amount)"),
+    supabase.from("customer_payments").select("customer_id, amount"),
+    loadGroupMap(supabase),
+    supabase.from("suppliers").select("id, name"),
+    supabase.from("purchase_entries").select("supplier_id, purchase_entry_items(quantity_lbs, rate_per_lbs)"),
+    supabase.from("supplier_payments").select("supplier_id, amount"),
+  ]);
 
   const customerDue: Record<string, number> = {};
   (customers ?? []).forEach((c: any) => {
@@ -23,14 +37,9 @@ export default async function OutstandingReportPage() {
   });
 
   // গ্রুপভুক্ত কাস্টমার এক পার্টি — তাদের বাকি একসাথে (net) দেখানো হয়।
-  const gm = await loadGroupMap(supabase);
   const dueRows = foldNumbers(gm, customers ?? [], customerDue)
     .filter((r) => r.value > 0)
     .sort((a, b) => b.value - a.value);
-
-  const { data: suppliers } = await supabase.from("suppliers").select("id, name");
-  const { data: purchases } = await supabase.from("purchase_entries").select("supplier_id, purchase_entry_items(quantity_lbs, rate_per_lbs)");
-  const { data: supplierPayments } = await supabase.from("supplier_payments").select("supplier_id, amount");
 
   const supplierDue: Record<string, number> = {};
   (purchases ?? []).forEach((p: any) => {
