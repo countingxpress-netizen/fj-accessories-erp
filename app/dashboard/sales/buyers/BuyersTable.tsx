@@ -47,8 +47,8 @@ export default function BuyersTable({
         return (
           <div key={gi} className="mb-6">
             <h2 className="text-sm font-semibold uppercase text-gray-500 mb-2">{group.customerName}</h2>
-            <div className="overflow-hidden rounded-xl border bg-white shadow-sm">
-              <table className="w-full text-sm">
+            <div className="overflow-x-auto rounded-xl border bg-white shadow-sm">
+              <table className="w-full text-sm min-w-[1400px]">
                 <thead className="bg-gray-50 text-left text-gray-600">
                   <tr>
                     <th className="px-4 py-2 w-10">
