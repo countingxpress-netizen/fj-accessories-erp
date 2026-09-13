@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import PrintButton from "@/app/dashboard/PrintButton";
 
 const LBS_PER_BAG = 55;
 const money = (n: number) => n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -55,12 +56,36 @@ export default async function StockReportPage() {
   const roundingDiff = Math.round((rawValue - rawValueByCosting) * 100) / 100;
   const fgValue = (products ?? []).reduce((s, p: any) => s + (fgTotals[p.id] ?? 0) * (Number(p.avg_cost_per_pc) || 0), 0);
 
+  const excelRows: (string | number)[][] = [
+    ["Stock Report"],
+    [],
+    ["Raw Material Stock"],
+    ["Material", "Lbs", "Kg", "Bags", "গড় খরচ", "মূল্য"],
+    ...(materials ?? []).map((m: any) => {
+      const lbs = rawTotals[m.id] ?? 0;
+      const cost = Number(m.avg_cost_per_lbs) || 0;
+      const isCarton = m.unit === "carton";
+      return [m.material_name, lbs, isCarton ? "" : Number((lbs * 0.453592).toFixed(2)), isCarton ? "" : Number((lbs / LBS_PER_BAG).toFixed(2)), cost, Number((lbs * cost).toFixed(2))];
+    }),
+    ["মোট (খাতা অনুযায়ী)", "", "", "", "", Number(rawValue.toFixed(2))],
+    [],
+    ["Finished Goods Stock"],
+    ["Product", "Quantity (Pcs)", "গড় খরচ / Pc", "মূল্য"],
+    ...(products ?? []).map((p: any) => {
+      const pcs = fgTotals[p.id] ?? 0;
+      const cost = Number(p.avg_cost_per_pc) || 0;
+      return [p.product_name, pcs, cost, Number((pcs * cost).toFixed(2))];
+    }),
+    ["মোট", "", "", Number(fgValue.toFixed(2))],
+  ];
+
   return (
     <div>
-      <div className="flex items-center justify-between mb-4">
+      <div className="print:hidden flex items-center justify-between mb-4">
         <h1 className="text-2xl font-semibold">Stock Report</h1>
         <Link href="/dashboard/reports" className="text-sm text-gray-500 hover:underline">← Reports-এ ফিরুন</Link>
       </div>
+      <PrintButton excelFilename="Stock-Report" excelSheets={[{ name: "Stock", rows: excelRows }]} />
 
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mb-6">
         <div className="rounded-xl border bg-white p-4 shadow-sm">

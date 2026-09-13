@@ -2,6 +2,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { formatDate } from "@/lib/formatDate";
 import { money } from "@/lib/format";
+import PrintButton from "@/app/dashboard/PrintButton";
 
 export default async function ProductionReportPage({
   searchParams,
@@ -27,14 +28,30 @@ export default async function ProductionReportPage({
   );
   const wastagePercent = totalConsumption > 0 ? (totalWastage / totalConsumption) * 100 : 0;
 
+  const excelRows: (string | number)[][] = [
+    ["Production Report", from || to ? `${from ?? ""} - ${to ?? ""}` : "All Time"],
+    ["Total Material Consumption (Lbs)", Number(totalConsumption.toFixed(2))],
+    ["Total Wastage (Lbs)", Number(totalWastage.toFixed(2))],
+    ["Wastage %", Number(wastagePercent.toFixed(2))],
+    [],
+    ["Date", "Production No", "Customer", "Product", "Qty (Pcs)", "Consumption", "Wastage", "Stage"],
+    ...(orders ?? []).map((o: any) => {
+      const consumption = (o.material_consumption ?? []).reduce((s: number, m: any) => s + m.quantity_lbs, 0);
+      const wastage = (o.wastage ?? []).reduce((s: number, w: any) => s + w.quantity_lbs, 0);
+      return [formatDate(o.order_date), o.production_no, o.bookings?.customers?.name, o.bookings?.finished_goods?.product_name, o.quantity_pcs, Number(consumption.toFixed(2)), Number(wastage.toFixed(2)), o.stage];
+    }),
+  ];
+
   return (
     <div>
-      <div className="flex items-center justify-between mb-4">
+      <div className="print:hidden flex items-center justify-between mb-4">
         <h1 className="text-2xl font-semibold">Production Report</h1>
         <Link href="/dashboard/reports" className="text-sm text-gray-500 hover:underline">← Reports-এ ফিরুন</Link>
       </div>
 
-      <form className="mb-4 flex items-end gap-3">
+      <PrintButton excelFilename="Production-Report" excelSheets={[{ name: "Production", rows: excelRows }]} />
+
+      <form className="print:hidden mb-4 flex items-end gap-3">
         <div>
           <label className="block text-xs text-gray-500 mb-1">From</label>
           <input type="date" name="from" defaultValue={from} className="rounded-lg border px-3 py-2 text-sm" />

@@ -53,6 +53,14 @@ export default async function SalesByCustomerReportPage({
       ? `${from ? formatDate(from) : "শুরু"} — ${to ? formatDate(to) : formatDate(todayDhaka())}`
       : "সব সময় (All Time)";
 
+  const excelRows: (string | number)[][] = [
+    ["Sales by Customer", periodText],
+    [],
+    ["Name", "Invoice Count", "Production LBS", "Sales Amount"],
+    ...rows.map((r) => [r.name, r.count, Number(r.lbs.toFixed(2)), Number(r.amount.toFixed(2))]),
+    ["Total", totCount, Number(totLbs.toFixed(2)), Number(totAmt.toFixed(2))],
+  ];
+
   return (
     <div className="max-w-4xl mx-auto print:max-w-none">
       {/* ── কন্ট্রোল বার (print-এ লুকানো) ── */}
@@ -104,7 +112,7 @@ export default async function SalesByCustomerReportPage({
           )}
         </form>
 
-        <PrintButton />
+        <PrintButton excelFilename="Sales-by-Customer" excelSheets={[{ name: "Sales", rows: excelRows }]} />
       </div>
 
       {/* ── রিপোর্ট বডি (এটাই প্রিন্ট হয়) ── */}

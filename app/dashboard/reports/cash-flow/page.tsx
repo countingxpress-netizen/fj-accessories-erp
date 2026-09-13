@@ -2,6 +2,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { formatDate } from "@/lib/formatDate";
 import { money } from "@/lib/format";
+import PrintButton from "@/app/dashboard/PrintButton";
 
 export default async function CashFlowPage({
   searchParams,
@@ -34,14 +35,27 @@ export default async function CashFlowPage({
   const totalOutflow = sorted.reduce((s: number, l: any) => s + (l.credit || 0), 0);
   const netCashFlow = totalInflow - totalOutflow;
 
+  const excelRows: (string | number)[][] = [
+    ["Cash Flow", from || to ? `${from ?? ""} - ${to ?? ""}` : "All Time"],
+    ["Total Inflow", Number(totalInflow.toFixed(2))],
+    ["Total Outflow", Number(totalOutflow.toFixed(2))],
+    ["Net Cash Flow", Number(netCashFlow.toFixed(2))],
+    [],
+    ["Date", "Account", "Narration", "Inflow", "Outflow"],
+    ...sorted.map((l: any) => [
+      formatDate(l.journal_vouchers?.voucher_date), l.chart_of_accounts?.account_name, l.memo || l.journal_vouchers?.narration || "-",
+      l.debit ? Number(l.debit) : "", l.credit ? Number(l.credit) : "",
+    ]),
+  ];
+
   return (
     <div>
-      <div className="flex items-center justify-between mb-4">
+      <div className="print:hidden flex items-center justify-between mb-4">
         <h1 className="text-2xl font-semibold">Cash Flow</h1>
         <Link href="/dashboard/reports" className="text-sm text-gray-500 hover:underline">← Reports-এ ফিরুন</Link>
       </div>
 
-      <form className="mb-4 flex items-end gap-3">
+      <form className="print:hidden mb-4 flex items-end gap-3">
         <div>
           <label className="block text-xs text-gray-500 mb-1">From</label>
           <input type="date" name="from" defaultValue={from} className="rounded-lg border px-3 py-2 text-sm" />
@@ -52,6 +66,8 @@ export default async function CashFlowPage({
         </div>
         <button type="submit" className="rounded-lg bg-gray-900 px-4 py-2 text-sm text-white">ফিল্টার করুন</button>
       </form>
+
+      <PrintButton excelFilename="Cash-Flow" excelSheets={[{ name: "Cash Flow", rows: excelRows }]} />
 
       <div className="grid grid-cols-3 gap-4 mb-6">
         <div className="rounded-xl border bg-white p-4 shadow-sm">

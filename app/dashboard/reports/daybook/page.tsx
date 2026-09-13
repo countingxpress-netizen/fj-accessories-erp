@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { todayDhaka } from "@/lib/salesByCustomer";
 import PrintButton from "@/app/dashboard/PrintButton";
 import { buildDayBook, type DbRow } from "@/lib/daybook";
+import type { ExcelSheet } from "@/lib/exportExcel";
 
 // PDF-এর মতো: হাজার-গ্রুপিং (1,163,440.00), ঋণাত্মক প্যারেন্থেসিসে (133,268.00)
 function fmt(n: number): string {
@@ -90,6 +91,31 @@ export default async function DayBookPage({
   const subtotal = data.priorCash + data.jamaTotal + data.bikriAmount;
   const sealTotal = data.sideSealPcs + data.bottomSealPcs;
 
+  const excelRows: ExcelSheet["rows"] = [
+    ["DayBook", dateText],
+    [],
+    ["জমা", "", ""], ["হিসাবের নাম", "বিবরন", "টাকা"],
+    ...data.jama.map((r) => [r.name, r.note, r.amount]),
+    ["মোট জমা", "", data.jamaTotal],
+    [],
+    ["খরচ", "", ""], ["হিসাবের নাম", "বিবরন", "টাকা"],
+    ...data.khoroch.map((r) => [r.name, r.note, r.amount]),
+    ["মোট খরচ", "", data.khorochTotal],
+    [],
+    ["বিক্রি", "", ""],
+    ...data.bikri.map((b) => [b.name, `PE- ${Math.round(b.lbs)}`, b.amount]),
+    ["মোট বিক্রি", `PE- ${Math.round(data.bikriLbs)}`, data.bikriAmount],
+    [],
+    ["মোট জমা", data.jamaTotal], ["বিক্রি", data.bikriAmount], ["সাবেক ক্যাশ দেনা", data.priorCash],
+    ["উপমোট", subtotal], ["(-) খরচ", data.khorochTotal], ["ক্যাশ দেনা", data.cashPosition],
+    [],
+    ["স্টক ছিলো", data.stockOpening], ["ক্রয়", data.stockPurchaseLbs], ["খরচ", data.stockSoldLbs], ["স্টক আছে", data.stockClosing],
+    [],
+    ["সাইড সিলিং", data.sideSealPcs], ["বটম সিলিং", data.bottomSealPcs], ["মোট সিলিং", sealTotal],
+    [],
+    ["বাঁকি ছিলো", data.arOpening], ["বাঁকি বিক্রি", data.arBikri], ["পার্টি জমা", data.arPartyJama], ["বাঁকি আছে", data.arClosing],
+  ];
+
   return (
     <div className="max-w-4xl mx-auto print:max-w-none">
       {/* ── কন্ট্রোল বার (প্রিন্টে লুকানো) ── */}
@@ -114,7 +140,7 @@ export default async function DayBookPage({
             <Link href="/dashboard/reports/daybook" className="text-sm text-gray-500 hover:underline">রিসেট</Link>
           )}
         </form>
-        <PrintButton />
+        <PrintButton excelFilename={`DayBook-${from}${to !== from ? `_to_${to}` : ""}`} excelSheets={[{ name: "DayBook", rows: excelRows }]} />
         <p className="mb-4 text-xs text-gray-400">
           নগদ (Cash in Hand) বই। Bank, আবু জাফর (3000) ও রিপন থিনার (1500) দিয়ে করা লেনদেন pass-through
           দেখানো — "ক্যাশ দেনা" = নগদ অ্যাকাউন্টের ঐ দিন শেষের ব্যালেন্স। বিক্রি = ঐ দিনের সব বিক্রি (নগদ + বাকি);

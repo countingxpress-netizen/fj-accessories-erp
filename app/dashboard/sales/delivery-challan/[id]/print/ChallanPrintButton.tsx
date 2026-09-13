@@ -29,7 +29,7 @@ export default function ChallanPrintButton({
       disabled={busy}
       className="rounded-lg bg-gray-900 px-4 py-2 text-sm text-white disabled:opacity-50"
     >
-      🖨 Print
+      🖨 PDF ডাউনলোড / Print
     </button>
   );
 }

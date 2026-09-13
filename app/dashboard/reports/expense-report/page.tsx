@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { money } from "@/lib/format";
+import PrintButton from "@/app/dashboard/PrintButton";
 
 export default async function ExpenseReportPage({
   searchParams,
@@ -31,14 +32,24 @@ export default async function ExpenseReportPage({
 
   const total = rows.reduce((s, r) => s + r.amount, 0);
 
+  const excelRows: (string | number)[][] = [
+    ["Expense Report", from || to ? `${from ?? ""} - ${to ?? ""}` : "All Time"],
+    [],
+    ["Code", "Expense Head", "Amount", "%"],
+    ...rows.map((r) => [r.account_code, r.account_name, Number(r.amount.toFixed(2)), total > 0 ? Number(((r.amount / total) * 100).toFixed(1)) : 0]),
+    ["Total Expense", "", Number(total.toFixed(2)), ""],
+  ];
+
   return (
     <div>
-      <div className="flex items-center justify-between mb-4">
+      <div className="print:hidden flex items-center justify-between mb-4">
         <h1 className="text-2xl font-semibold">Expense Report</h1>
         <Link href="/dashboard/reports" className="text-sm text-gray-500 hover:underline">← Reports-এ ফিরুন</Link>
       </div>
 
-      <form className="mb-6 flex items-end gap-3">
+      <PrintButton excelFilename="Expense-Report" excelSheets={[{ name: "Expense", rows: excelRows }]} />
+
+      <form className="print:hidden mb-6 flex items-end gap-3">
         <div>
           <label className="block text-xs text-gray-500 mb-1">From</label>
           <input type="date" name="from" defaultValue={from} className="rounded-lg border px-3 py-2 text-sm" />

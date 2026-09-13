@@ -39,9 +39,24 @@ export default async function PIPrintPage({ params }: { params: Promise<{ id: st
   const totalQtyDzn = totalQtyPcs / 12;
   const signatureUrl = pi.creator?.signature_url || company?.signature_url;
 
+  const excelRows: (string | number | null)[][] = [
+    ["INVOICE NO.", `${pi.pi_no}${pi.revision > 0 ? ` (Rev-${pi.revision})` : ""}`],
+    ["Date", formatDate(pi.pi_date)],
+    ["Buyer", pi.buyer_name || pi.customers?.name || ""],
+    [],
+    ["Sl No", "Description", "Measurement", "Qty (Pcs)", "Qty (Dzn)", "Price/Unit", "Total Amt"],
+    ...(items ?? []).map((it: any) => {
+      const amount = it.price_basis === "dzn" ? (it.qty_pcs / 12) * it.price_unit : it.qty_pcs * it.price_unit;
+      return [it.sl_no, it.description, it.measurement, it.qty_pcs, Number((it.qty_pcs / 12).toFixed(2)), Number(it.price_unit), Number(amount.toFixed(2))];
+    }),
+    ["Total", "", "", totalQtyPcs, Number(totalQtyDzn.toFixed(2)), "", Number(subtotal.toFixed(2))],
+    ...(pi.discount_type !== "none" ? [["Discount", "", "", "", "", "", Number(discountAmount.toFixed(2))]] : []),
+    ["Grand Total", "", "", "", "", "", Number(pi.total_amount ?? 0)],
+  ];
+
   return (
     <div className="max-w-3xl mx-auto p-8 bg-white text-gray-900 print:p-0">
-      <PrintButton />
+      <PrintButton excelFilename={`PI-${pi.pi_no}`} excelSheets={[{ name: "PI", rows: excelRows }]} />
 
       <div className="mb-4 border-b-2 border-gray-800 pb-3">
         <div className="flex items-center justify-center gap-4">

@@ -2,6 +2,7 @@
 import { useEffect, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
 import ChallanPrintButton from "./ChallanPrintButton";
+import { downloadExcel } from "@/lib/exportExcel";
 
 const nf = new Intl.NumberFormat("en-US");
 
@@ -19,6 +20,24 @@ export default function ChallanPrintView({
   const totalQty = items.reduce((s, i) => s + Number(i.quantity_pcs || 0), 0);
   const totalPackets = items.reduce((s, i) => s + Number(i.packets || 0), 0);
   const hasPackets = items.some((i) => i.packets != null);
+
+  function handleExcelDownload() {
+    const rows: (string | number | null)[][] = [
+      ["Challan No", challan.challan_no],
+      ["Date", challanDateLabel],
+      ["Deliver To", challan.delivery_point || challan.customers?.name || ""],
+      [],
+      hasPackets ? ["Product", "Measurement", "Quantity", "Packets"] : ["Product", "Measurement", "Quantity"],
+      ...items.map((item) => {
+        const label = item.print_label || item.finished_goods?.product_name || "-";
+        const row: (string | number)[] = [label, measurementByItem[item.id] || "-", Number(item.quantity_pcs || 0)];
+        if (hasPackets) row.push(Number(item.packets || 0));
+        return row;
+      }),
+      hasPackets ? ["Total", "", totalQty, totalPackets] : ["Total", "", totalQty],
+    ];
+    downloadExcel(`Challan-${challan.challan_no}`, [{ name: "Challan", rows }]);
+  }
 
   // এক পেজে না আঁটলে নন-প্রিন্ট ওয়ার্নিং — re-render ছাড়াই DOM-এ
   useEffect(() => {
@@ -55,6 +74,12 @@ export default function ChallanPrintView({
         <span ref={warnRef} style={{ display: "none" }} className="text-xs text-red-600">
           ⚠ এই চালান এক পেজে আঁটছে না — লাইন কমান
         </span>
+        <button
+          onClick={handleExcelDownload}
+          className="rounded-lg bg-green-700 px-4 py-2 text-sm text-white"
+        >
+          📊 Excel ডাউনলোড
+        </button>
         <ChallanPrintButton challanId={challan.id} currentStatus={challan.delivery_status ?? "challan_ready"} />
       </div>
 

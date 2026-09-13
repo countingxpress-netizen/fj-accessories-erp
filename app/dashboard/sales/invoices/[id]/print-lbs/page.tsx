@@ -91,9 +91,24 @@ export default async function LbsInvoicePrintPage({ params }: { params: Promise<
 
   const cellCls = "border border-gray-400 px-2 py-1 text-sm";
 
+  const excelRows: (string | number | null)[][] = [
+    ["Invoice No", invoice.invoice_no],
+    ["Date", formatDate(invoice.invoice_date)],
+    ["Bill To", invoice.customers?.name || ""],
+    [],
+    ["Sl", "Item Description", "Measurement", "Quantity", "Unit Price", "Amount"],
+    ...productRows.map((r: any, i: number) => [
+      i + 1, r.line_label, r.bookings ? lbsFormatMeasurement(r.bookings) : "", `${Math.round(r.quantity_pcs)} Pcs`, `${Math.round(r.required_lbs || 0)} Lbs`, "",
+    ]),
+    ...chargeRows.map((r: any, i: number) => [
+      PRODUCT_SLOTS + i + 1, "", r.line_label, Number(r.quantity_pcs) ? `${Math.round(r.quantity_pcs)} ${chargeUnit(r.line_type)}` : "", Number(r.unit_price) || 0, Number(r.amount) || 0,
+    ]),
+    ["Total", "", "", "", "", Number(total.toFixed(2))],
+  ];
+
   return (
     <div className="max-w-3xl mx-auto p-8 bg-white text-gray-900 print:p-0">
-      <PrintButton />
+      <PrintButton excelFilename={`Invoice-${invoice.invoice_no}`} excelSheets={[{ name: "Invoice", rows: excelRows }]} />
 
       <div className="text-center mb-1">
         <div className="flex items-center justify-center gap-3">

@@ -92,9 +92,25 @@ export default async function InvoicePrintPage({ params }: { params: Promise<{ i
   // যিনি এই Invoice তৈরি করেছেন তার নিজস্ব Signature দেখাবে, না থাকলে Company-এর ডিফল্ট
   const signatureUrl = invoice.creator?.signature_url || company?.signature_url;
 
+  const excelRows: (string | number | null)[][] = [
+    ["Invoice No", invoice.invoice_no],
+    ["Date", formatDate(invoice.invoice_date)],
+    ["Bill To", invoice.customers?.name || ""],
+    [],
+    isOther
+      ? ["Sl", "Description", "Qty", "Unit Price", "Amount"]
+      : ["Sl", "Style", "Product", "Measurement", "Qty", "Unit Price", "Amount"],
+    ...(invoice.sales_invoice_items ?? []).map((item: any, i: number) =>
+      isOther
+        ? [i + 1, item.line_label, item.quantity_pcs, Number(item.unit_price), Number(item.amount)]
+        : [i + 1, item.bookings?.style || item.bookings?.booking_no || "-", item.finished_goods?.product_name, formatMeasurement(item.bookings), item.quantity_pcs, Number(item.unit_price), Number(item.amount)]
+    ),
+    isOther ? ["Total", "", "", "", Number(total.toFixed(2))] : ["Total", "", "", "", "", "", Number(total.toFixed(2))],
+  ];
+
   return (
     <div className="max-w-3xl mx-auto p-8 bg-white text-gray-900 print:p-0">
-      <PrintButton />
+      <PrintButton excelFilename={`Invoice-${invoice.invoice_no}`} excelSheets={[{ name: "Invoice", rows: excelRows }]} />
       {invoice.customers?.code === "AT" && (
         <div className="print:hidden mb-4 flex justify-end">
           <Link href={`/dashboard/sales/invoices/${invoice.id}/print-customer`} target="_blank" className="text-sm text-purple-700 hover:underline">

@@ -102,9 +102,21 @@ export default async function InvoicePrintCustomerPage({ params }: { params: Pro
 
   const signatureUrl = invoice.creator?.signature_url || company?.signature_url;
 
+  const excelRows: (string | number | null)[][] = [
+    ["Sl No", invoice.invoice_no],
+    ["Date", formatDate(invoice.invoice_date)],
+    ["Bill To", invoice.customers?.name || ""],
+    [],
+    ["Sl", "Style", "Item Description", "Measurement", "Qty (Pcs)", "Unit Price", "Amount"],
+    ...items.map((item: any, i: number) => [
+      i + 1, item.bookings?.style || item.bookings?.booking_no || "-", item.finished_goods?.product_name, formatMeasurement(item.bookings), item.quantity_pcs, Number(item.customerUnitPrice.toFixed(2)), Number(item.customerAmount.toFixed(2)),
+    ]),
+    ["Total", "", "", "", "", "", Number(total.toFixed(2))],
+  ];
+
   return (
     <div className="max-w-3xl mx-auto p-8 bg-white text-gray-900 print:p-0">
-      <PrintButton />
+      <PrintButton excelFilename={`Invoice-${invoice.invoice_no}-Customer`} excelSheets={[{ name: "Invoice", rows: excelRows }]} />
 
       <div className="mb-6 border-b pb-4 flex items-center justify-center gap-4">
         {company?.logo_url && (

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { money } from "@/lib/format";
 import { loadGroupMap, foldNumbers, ledgerHref } from "@/lib/customerGroups";
+import PrintButton from "@/app/dashboard/PrintButton";
 
 export default async function OutstandingReportPage() {
   const supabase = await createClient();
@@ -52,13 +53,29 @@ export default async function OutstandingReportPage() {
 
   const totalReceivable = dueRows.reduce((s, r) => s + r.value, 0);
   const totalPayable = Object.values(supplierDue).reduce((s, v) => s + (v > 0 ? v : 0), 0);
+  const payableRows = (suppliers ?? []).filter((s) => (supplierDue[s.id] ?? 0) > 0);
+
+  const excelRows: (string | number)[][] = [
+    ["Outstanding Report"],
+    [],
+    ["Customer Due"],
+    ["Customer", "Due Amount"],
+    ...dueRows.map((r) => [r.name, Number(r.value.toFixed(2))]),
+    ["Total Receivable", Number(totalReceivable.toFixed(2))],
+    [],
+    ["Supplier Payable"],
+    ["Supplier", "Payable Amount"],
+    ...payableRows.map((s) => [s.name, Number((supplierDue[s.id] ?? 0).toFixed(2))]),
+    ["Total Payable", Number(totalPayable.toFixed(2))],
+  ];
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-4">
+      <div className="print:hidden flex items-center justify-between mb-4">
         <h1 className="text-2xl font-semibold">Outstanding Report</h1>
         <Link href="/dashboard/reports" className="text-sm text-gray-500 hover:underline">← Reports-এ ফিরুন</Link>
       </div>
+      <PrintButton excelFilename="Outstanding-Report" excelSheets={[{ name: "Outstanding", rows: excelRows }]} />
 
       <div className="grid grid-cols-2 gap-4 mb-6">
         <div className="rounded-xl border bg-white p-4 shadow-sm">
@@ -101,7 +118,7 @@ export default async function OutstandingReportPage() {
             <tr><th className="px-4 py-2">Supplier</th><th className="px-4 py-2 text-right">Payable Amount</th></tr>
           </thead>
           <tbody>
-            {(suppliers ?? []).filter((s) => (supplierDue[s.id] ?? 0) > 0).map((s) => (
+            {payableRows.map((s) => (
               <tr key={s.id} className="border-t">
                 <td className="px-4 py-2">
                   <Link href={`/dashboard/purchase/supplier-ledger/${s.id}`} className="hover:underline hover:text-blue-700">{s.name}</Link>
@@ -109,7 +126,7 @@ export default async function OutstandingReportPage() {
                 <td className="px-4 py-2 text-right">{money((supplierDue[s.id] ?? 0))}</td>
               </tr>
             ))}
-            {(suppliers ?? []).filter((s) => (supplierDue[s.id] ?? 0) > 0).length === 0 && (
+            {payableRows.length === 0 && (
               <tr><td colSpan={2} className="px-4 py-3 text-gray-400 italic">কোনো পাওনা নেই</td></tr>
             )}
           </tbody>

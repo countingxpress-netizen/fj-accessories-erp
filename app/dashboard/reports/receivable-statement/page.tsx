@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { formatDate } from "@/lib/formatDate";
 import { money } from "@/lib/format";
 import { loadGroupMap, displayEntity, ledgerHref } from "@/lib/customerGroups";
+import PrintButton from "@/app/dashboard/PrintButton";
 
 export default async function ReceivableStatementPage() {
   const supabase = await createClient();
@@ -54,12 +55,21 @@ export default async function ReceivableStatementPage() {
 
   const totalDue = rows.reduce((s, r) => s + r.due, 0);
 
+  const excelRows: (string | number)[][] = [
+    ["Receivable Statement (Customer Wise)"],
+    [],
+    ["Customer", "Last Invoice", "Total Invoiced", "Total Paid", "Due"],
+    ...rows.map((r) => [r.name, r.lastInvoiceDate ? formatDate(r.lastInvoiceDate) : "-", Number(r.invoiced.toFixed(2)), Number(r.paid.toFixed(2)), Number(r.due.toFixed(2))]),
+    ["Total Due", "", "", "", Number(totalDue.toFixed(2))],
+  ];
+
   return (
     <div>
-      <div className="flex items-center justify-between mb-4">
+      <div className="print:hidden flex items-center justify-between mb-4">
         <h1 className="text-2xl font-semibold">Receivable Statement (Customer Wise)</h1>
         <Link href="/dashboard/reports" className="text-sm text-gray-500 hover:underline">← Reports-এ ফিরুন</Link>
       </div>
+      <PrintButton excelFilename="Receivable-Statement" excelSheets={[{ name: "Receivable", rows: excelRows }]} />
 
       <div className="rounded-xl border bg-white p-4 shadow-sm mb-6 max-w-xs">
         <p className="text-xs text-gray-500">Total Outstanding Receivable</p>

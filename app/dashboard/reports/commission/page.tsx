@@ -6,6 +6,7 @@ import { AT_DEFAULT_MARKUP_PERCENTAGE } from "@/lib/atCommission";
 import { calcInvoiceCommission } from "@/lib/commission";
 import { loadGroupMap, displayEntity } from "@/lib/customerGroups";
 import CommissionRow from "./CommissionRow";
+import PrintButton from "@/app/dashboard/PrintButton";
 
 export default async function CommissionReportPage({
   searchParams,
@@ -84,18 +85,31 @@ export default async function CommissionReportPage({
     return opts;
   })();
 
+  const excelRows: (string | number)[][] = [
+    ["Commission Report"],
+    [],
+    ["Invoice No", "Date", "Customer", "Invoice Total", "হিসাবি কমিশন", "Adjustment", "Note", "Final Commission"],
+    ...rows.map((r) => [
+      r.invoice_no, formatDate(r.invoice_date), r.customer_code ? `${r.customer_name} (${r.customer_code})` : r.customer_name,
+      Number(r.invoiceTotal.toFixed(2)), Number(r.calc.toFixed(2)), Number(r.adjustment.toFixed(2)), r.note, Number(r.final.toFixed(2)),
+    ]),
+    ["Total", "", "", "", Number(totalCalc.toFixed(2)), Number(totalAdj.toFixed(2)), "", Number(totalFinal.toFixed(2))],
+  ];
+
   return (
     <div>
-      <div className="flex items-center justify-between mb-1">
+      <div className="print:hidden flex items-center justify-between mb-1">
         <h1 className="text-2xl font-semibold">Commission Report <span className="text-sm font-normal text-amber-600">(খসড়া)</span></h1>
         <Link href="/dashboard/reports" className="text-sm text-gray-500 hover:underline">← Reports-এ ফিরুন</Link>
       </div>
-      <p className="text-sm text-gray-500 mb-5">
+      <p className="print:hidden text-sm text-gray-500 mb-5">
         শুধু হিসাব দেখানোর জন্য — কোনো Journal Voucher তৈরি হয় না। AT → markup + freight নিয়ম; বাকি → Invoice Total × Commission %।
         প্রতি সারিতে Adjustment (±) হাতে দিয়ে সেভ করা যায়।
       </p>
 
-      <form className="mb-6 flex flex-wrap items-end gap-3">
+      <PrintButton excelFilename="Commission-Report" excelSheets={[{ name: "Commission", rows: excelRows }]} />
+
+      <form className="print:hidden mb-6 flex flex-wrap items-end gap-3">
         <div>
           <label className="block text-xs text-gray-500 mb-1">From</label>
           <input type="date" name="from" defaultValue={from} className="rounded-lg border px-3 py-2 text-sm" />
