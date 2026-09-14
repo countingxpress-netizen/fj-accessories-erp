@@ -49,7 +49,10 @@ export default function SalesByCustomer({ customers, groupMap }: { customers: Cu
         .select("customer_id, sales_invoice_items(amount, required_lbs, bookings(required_lbs))");
       if (from) q = q.gte("invoice_date", from);
       if (to) q = q.lte("invoice_date", to);
-      const { data, error } = await q;
+      let rmsQ = supabase.from("raw_material_sales").select("customer_id, amount, quantity_lbs");
+      if (from) rmsQ = rmsQ.gte("sale_date", from);
+      if (to) rmsQ = rmsQ.lte("sale_date", to);
+      const [{ data, error }, { data: rms }] = await Promise.all([q, rmsQ]);
       if (cancelled) return;
       if (error) {
         setErr(error.message);
@@ -57,7 +60,7 @@ export default function SalesByCustomer({ customers, groupMap }: { customers: Cu
         setLoading(false);
         return;
       }
-      const agg = aggregateSalesByCustomer((data as any) ?? [], customers, groupMap).sort(
+      const agg = aggregateSalesByCustomer((data as any) ?? [], customers, groupMap, (rms as any) ?? []).sort(
         (a, b) => b.amount - a.amount,
       );
       setRows(agg);

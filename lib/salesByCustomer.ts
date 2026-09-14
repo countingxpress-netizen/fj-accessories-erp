@@ -1,8 +1,12 @@
 // "Sales by Customer" রিপোর্টের শেয়ার্ড লজিক — Dashboard widget ও Reports পেজ দুটোই ব্যবহার করে।
 //
 //   Production LBS = ইনভয়েস লাইনের Required Lbs-এর যোগফল
-//                    (LBS invoice হলে item.required_lbs, নইলে booking.required_lbs)।
-//   Sales Amount   = Σ sales_invoice_items.amount (standard / lbs / other — সব ধরনের invoice)।
+//                    (LBS invoice হলে item.required_lbs, নইলে booking.required_lbs)
+//                    + কোনো কাস্টমারের নামে থাকা Raw Material সরাসরি বিক্রির quantity_lbs।
+//   Sales Amount   = Σ sales_invoice_items.amount (standard / lbs / other — সব ধরনের invoice)
+//                    + কাস্টমারের নামে Raw Material সরাসরি বিক্রি (lib/rawMaterialSale.ts)।
+//                    Account-পার্টির (customer না) Raw Material বিক্রি এখানে ধরা হয় না —
+//                    এই রিপোর্ট কাস্টমার-ভিত্তিক।
 //   গ্রুপভুক্ত কাস্টমার এক পার্টি হিসেবে যোগ হয় (Outstanding / Commission রিপোর্টের মতো)।
 
 import { type GroupMap, displayEntity } from "@/lib/customerGroups";
@@ -30,11 +34,18 @@ type InvoiceRow = {
     | null;
 };
 
+export type RawMaterialSaleRow = {
+  customer_id: string | null;
+  amount?: number | null;
+  quantity_lbs?: number | null;
+};
+
 /** ইনভয়েস রো-গুলোকে কাস্টমার/গ্রুপ-ভিত্তিক সারিতে ভাঁজ করে (unsorted)। */
 export function aggregateSalesByCustomer(
   invoices: InvoiceRow[],
   customers: { id: string; name: string }[],
   groupMap: GroupMap,
+  rawMaterialSales: RawMaterialSaleRow[] = [],
 ): SalesByCustomerRow[] {
   const perCust: Record<string, { amount: number; lbs: number; count: number }> = {};
   invoices.forEach((inv) => {
@@ -47,6 +58,13 @@ export function aggregateSalesByCustomer(
     const c = (perCust[inv.customer_id] ??= { amount: 0, lbs: 0, count: 0 });
     c.amount += amount;
     c.lbs += lbs;
+    c.count += 1;
+  });
+  rawMaterialSales.forEach((r) => {
+    if (!r.customer_id) return; // শুধু customer-এর নামে বিক্রি — account-পার্টি এখানে না
+    const c = (perCust[r.customer_id] ??= { amount: 0, lbs: 0, count: 0 });
+    c.amount += r.amount || 0;
+    c.lbs += r.quantity_lbs || 0;
     c.count += 1;
   });
 

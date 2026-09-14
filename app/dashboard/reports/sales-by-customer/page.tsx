@@ -36,8 +36,13 @@ export default async function SalesByCustomerReportPage({
   if (to) q = q.lte("invoice_date", to);
   const { data: invoices } = await q;
 
-  let rows = aggregateSalesByCustomer(invoices ?? [], customers ?? [], groupMap).sort((a, b) =>
-    a.name.localeCompare(b.name),
+  let rmsQ = supabase.from("raw_material_sales").select("customer_id, amount, quantity_lbs");
+  if (from) rmsQ = rmsQ.gte("sale_date", from);
+  if (to) rmsQ = rmsQ.lte("sale_date", to);
+  const { data: rawMaterialSales } = await rmsQ;
+
+  let rows = aggregateSalesByCustomer(invoices ?? [], customers ?? [], groupMap, rawMaterialSales ?? []).sort(
+    (a, b) => a.name.localeCompare(b.name),
   );
   if (customer) rows = rows.filter((r) => r.key === customer);
 

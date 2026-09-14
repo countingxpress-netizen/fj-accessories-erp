@@ -123,6 +123,18 @@ export async function buildDayBook(
     one<any>(w.customers)?.name || one<any>(w.chart_of_accounts)?.account_name || w.sold_to_name || "পার্টি";
   const wastageSaleVoucherIds = new Set<string>(wastageSales.map((w) => w.voucher_id).filter(Boolean));
 
+  // ── Raw Material সরাসরি বিক্রি ──
+  //   sales_invoices-এর মতোই বিক্রি ব্লকে ঢোকে (নিচে) — নগদ+বাকি দুটোই, party-wise
+  //   Lbs+টাকা। এদের JV generic pool-loop-এ দুবার গোনা এড়াতে voucherId বাদ দেওয়া হয়।
+  const { data: rmsRaw } = await supabase
+    .from("raw_material_sales")
+    .select("voucher_id, sale_date, amount, quantity_lbs, payment_received, customer_id, sold_to_name, customers(name), chart_of_accounts:party_account_id(account_name)")
+    .lte("sale_date", to);
+  const rawMaterialSales = (rmsRaw ?? []) as any[];
+  const rmsPartyName = (r: any) =>
+    one<any>(r.customers)?.name || one<any>(r.chart_of_accounts)?.account_name || r.sold_to_name || "পার্টি";
+  const rawMaterialSaleVoucherIds = new Set<string>(rawMaterialSales.map((r) => r.voucher_id).filter(Boolean));
+
   // ── Sales invoice ভাউচার (নগদ + বাকি) — generic pool-loop থেকে বাদ ──
   //   নগদ বিক্রির JV (Dr 1000 / Cr 4000) পুল-লাইন ছোঁয় বলে অন্যথায় জমা কলামে
   //   "Sales Revenue" হিসেবে দেখাতো — অথচ বিক্রি ব্লক (নিচে, explicit) থেকেই ওটার
@@ -153,6 +165,7 @@ export async function buildDayBook(
     if (isSystemVoucher((v?.narration ?? "").trim())) continue;
     if (wastageSaleVoucherIds.has(l.voucher_id)) continue; // নিচে explicit হ্যান্ডল
     if (salesInvoiceVoucherIds.has(l.voucher_id)) continue; // নিচে বিক্রি ব্লকে explicit হ্যান্ডল
+    if (rawMaterialSaleVoucherIds.has(l.voucher_id)) continue; // নিচে বিক্রি ব্লকে explicit হ্যান্ডল
     voucherIds.add(l.voucher_id);
   }
 
@@ -345,6 +358,37 @@ export async function buildDayBook(
       }
     }
   }
+  // ── Raw Material সরাসরি বিক্রি — একই বিক্রি ব্লকে যোগ (নগদ+বাকি, party-wise) ──
+  //   Lbs টা এখানে সত্যিকারের raw material outflow (production-attributed না), তাই
+  //   স্টক ব্লকের হিসাবেও (stockSoldLbs = bikriLbs) সঠিকভাবে যোগ হয়ে যায়। বাঁকি
+  //   বিক্রি শুধু তখনই AR (বাঁকি ব্লক)-এ ধরা হয় যদি customer_id থাকে (account-পার্টির
+  //   বাকি আসলে 1100 AR ছোঁয় না)।
+  for (const r of rawMaterialSales) {
+    const d = r.sale_date ?? "";
+    const amt = num(r.amount);
+    const lbs = num(r.quantity_lbs);
+    const isCredit = !r.payment_received;
+    if (d < from) {
+      soldLbsBefore += lbs;
+      if (isCredit && r.customer_id) arInvBefore += amt;
+    } else if (d <= to) {
+      const name = rmsPartyName(r);
+      const key = r.customer_id ?? `party:${name}`;
+      const cur = bikriByCust.get(key) ?? { name, lbs: 0, amount: 0 };
+      cur.lbs += lbs;
+      cur.amount += amt;
+      bikriByCust.set(key, cur);
+      bikriLbs += lbs;
+      bikriAmount += amt;
+      if (isCredit) {
+        const bill = creditBillByCust.get(key) ?? { name, amount: 0 };
+        bill.amount += amt;
+        creditBillByCust.set(key, bill);
+        if (r.customer_id) arInvRange += amt;
+      }
+    }
+  }
+
   const bikri = [...bikriByCust.values()].sort((a, b) => b.amount - a.amount);
   // "বিল" লাইন — খরচ কলামে (শুধু বাকিতে বিক্রির সমান, reconcile-এ কাটাকাটি হয়)
   for (const b of creditBillByCust.values()) khoroch.push({ name: b.name, note: "বিল", amount: b.amount });
