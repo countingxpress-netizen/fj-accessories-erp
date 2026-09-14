@@ -36,7 +36,7 @@ export default function SuppliersTable({ suppliers }: { suppliers: any[] }) {
   return (
     <div>
       <BulkActionBar count={selectedCount} itemLabel="Supplier" onDeleteSelected={handleBulkDelete} onClear={clear} />
-      <div className="overflow-hidden rounded-xl border bg-white shadow-sm">
+      <div className="overflow-x-auto rounded-xl border bg-white shadow-sm">
         <table className="w-full text-sm">
           <thead className="bg-gray-50 text-left text-gray-600">
             <tr>

@@ -13,7 +13,7 @@ export default async function PackingListPage() {
     <div>
       <h1 className="text-2xl font-semibold mb-4">Packing List</h1>
       <PackingListForm invoices={invoices ?? []} />
-      <div className="mt-6 overflow-hidden rounded-xl border bg-white shadow-sm">
+      <div className="mt-6 overflow-x-auto rounded-xl border bg-white shadow-sm">
         <table className="w-full text-sm">
           <thead className="bg-gray-50 text-left text-gray-600">
             <tr>

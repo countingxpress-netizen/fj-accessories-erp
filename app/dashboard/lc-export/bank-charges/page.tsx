@@ -17,7 +17,7 @@ export default async function BankChargesPage() {
     <div>
       <h1 className="text-2xl font-semibold mb-4">Bank Charges</h1>
       <BankChargesForm lcs={lcs ?? []} />
-      <div className="mt-6 overflow-hidden rounded-xl border bg-white shadow-sm">
+      <div className="mt-6 overflow-x-auto rounded-xl border bg-white shadow-sm">
         <table className="w-full text-sm">
           <thead className="bg-gray-50 text-left text-gray-600">
             <tr>

@@ -31,7 +31,7 @@ export default async function SupplierLedgerListPage() {
         যেকোনো সাপ্লায়ারে ক্লিক করে তার সম্পূর্ণ ক্রয় ও পাওনার হিসাব দেখুন।
       </p>
 
-      <div className="overflow-hidden rounded-xl border bg-white shadow-sm divide-y">
+      <div className="overflow-x-auto rounded-xl border bg-white shadow-sm divide-y">
         {(suppliers ?? []).map((s) => (
           <Link
             key={s.id}

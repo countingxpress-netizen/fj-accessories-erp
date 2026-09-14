@@ -108,7 +108,7 @@ export default async function BankBookPage({
             দেখানো হচ্ছে: <span className="font-medium text-gray-700">{selectedAccount.account_name}</span>
           </p>
 
-          <div className="overflow-hidden rounded-xl border bg-white shadow-sm">
+          <div className="overflow-x-auto rounded-xl border bg-white shadow-sm">
             <table className="w-full text-sm">
               <thead className="bg-gray-50 text-left text-gray-600">
                 <tr>

@@ -35,7 +35,7 @@ export default async function LedgerListPage() {
           <h2 className="mb-2 text-sm font-semibold uppercase text-gray-500">
             {typeLabels[type]}
           </h2>
-          <div className="overflow-hidden rounded-xl border bg-white shadow-sm divide-y">
+          <div className="overflow-x-auto rounded-xl border bg-white shadow-sm divide-y">
             {(grouped[type] ?? []).map((acc) => (
               <Link
                 key={acc.id}

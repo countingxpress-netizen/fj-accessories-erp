@@ -80,7 +80,7 @@ export default async function ProfitLossPage({
       </form>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="overflow-hidden rounded-xl border bg-white shadow-sm">
+        <div className="overflow-x-auto rounded-xl border bg-white shadow-sm">
           <div className="bg-green-50 px-4 py-2 font-semibold text-green-800">Income</div>
           <table className="w-full text-sm">
             <tbody>
@@ -107,7 +107,7 @@ export default async function ProfitLossPage({
           </table>
         </div>
 
-        <div className="overflow-hidden rounded-xl border bg-white shadow-sm">
+        <div className="overflow-x-auto rounded-xl border bg-white shadow-sm">
           <div className="bg-red-50 px-4 py-2 font-semibold text-red-800">Expenses</div>
           <table className="w-full text-sm">
             <tbody>

@@ -108,7 +108,7 @@ export default function EditPaymentForm({
     <form onSubmit={handleSubmit} className="rounded-xl border bg-white p-6 shadow-sm space-y-4 max-w-2xl">
       <p className="text-sm text-gray-600">Total Amount: <strong>{money(totalAmount)}</strong></p>
 
-      <div className="rounded-lg border overflow-hidden">
+      <div className="rounded-lg border overflow-x-auto">
         <div className="bg-gray-50 px-3 py-2 text-sm font-semibold text-gray-700">Invoice Allocations</div>
         <table className="w-full text-sm">
           <thead className="text-left text-gray-500 border-t">

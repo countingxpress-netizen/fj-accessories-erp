@@ -61,7 +61,7 @@ export default async function AccountLedgerPage({
       </h1>
       <p className="text-sm text-gray-500 mb-4 capitalize">{account.account_type}</p>
 
-      <div className="overflow-hidden rounded-xl border bg-white shadow-sm">
+      <div className="overflow-x-auto rounded-xl border bg-white shadow-sm">
         <table className="w-full text-sm">
           <thead className="bg-gray-50 text-left text-gray-600">
             <tr>

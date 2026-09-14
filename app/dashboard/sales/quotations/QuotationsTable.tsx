@@ -74,7 +74,7 @@ export default function QuotationsTable({ quotations: allQuotations }: { quotati
       />
       <p className="mb-2 text-xs text-gray-400">{quotations.length} / {allQuotations.length} টা Quotation দেখানো হচ্ছে</p>
       <BulkActionBar count={selectedCount} itemLabel="Quotation" onDeleteSelected={handleBulkDelete} onClear={clear} />
-      <div className="overflow-hidden rounded-xl border bg-white shadow-sm">
+      <div className="overflow-x-auto rounded-xl border bg-white shadow-sm">
         <table className="w-full text-sm">
           <thead className="bg-gray-50 text-left text-gray-600">
             <tr>

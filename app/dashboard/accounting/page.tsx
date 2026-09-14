@@ -66,7 +66,7 @@ export default async function AccountingPage() {
           <h2 className="mb-2 text-sm font-semibold uppercase text-gray-500">
             {typeLabels[type]}
           </h2>
-          <div className="overflow-hidden rounded-xl border bg-white shadow-sm">
+          <div className="overflow-x-auto rounded-xl border bg-white shadow-sm">
             <table className="w-full text-sm">
               <thead className="bg-gray-50 text-left text-gray-600">
                 <tr>

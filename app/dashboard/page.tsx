@@ -237,7 +237,7 @@ export default async function DashboardPage() {
           groupMap={groupMap}
         />
 
-        <div className="rounded-xl border bg-white shadow-sm overflow-hidden">
+        <div className="rounded-xl border bg-white shadow-sm overflow-x-auto">
           <div className="px-4 py-3 border-b">
             <h2 className="text-sm font-semibold uppercase text-gray-500">Booking Status</h2>
           </div>

@@ -1407,7 +1407,7 @@ export default function BookingForm({
       </button>
 
       {pendingItems.length > 0 && (
-        <div className="rounded-lg border overflow-hidden">
+        <div className="rounded-lg border overflow-x-auto">
           <div className="bg-gray-100 px-3 py-2 text-sm font-semibold text-gray-700">
             যোগ করা প্রোডাক্ট তালিকা ({pendingItems.length}টি)
           </div>

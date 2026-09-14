@@ -46,7 +46,7 @@ export default async function ProfitDistributionPage({
         <button type="submit" className="rounded-lg bg-gray-900 px-4 py-2 text-sm text-white">দেখুন</button>
       </form>
 
-      <div className="rounded-xl border bg-white shadow-sm overflow-hidden mb-4">
+      <div className="rounded-xl border bg-white shadow-sm overflow-x-auto mb-4">
         <div className="bg-gray-50 px-4 py-2 text-sm font-semibold text-gray-700">{monthLabel(year, month)}</div>
         <table className="w-full text-sm">
           <tbody>
@@ -68,7 +68,7 @@ export default async function ProfitDistributionPage({
           <Link href="/dashboard/accounting/journal" className="font-medium underline">{already}</Link>
         </p>
       ) : (
-        <div className="rounded-xl border bg-white shadow-sm overflow-hidden">
+        <div className="rounded-xl border bg-white shadow-sm overflow-x-auto">
           <div className="bg-gray-50 px-4 py-2 text-sm font-semibold text-gray-700">বণ্টন JV (auto)</div>
           <table className="w-full text-sm">
             <thead><tr className="text-left text-gray-500"><th className="px-4 py-2">Account</th><th className="px-4 py-2 text-right">Debit</th><th className="px-4 py-2 text-right">Credit</th></tr></thead>

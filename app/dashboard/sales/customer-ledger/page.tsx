@@ -27,7 +27,7 @@ export default async function CustomerLedgerListPage() {
         <Link href="/dashboard/sales" className="text-sm text-gray-500 hover:underline">← Sales-এ ফিরুন</Link>
       </div>
 
-      <div className="overflow-hidden rounded-xl border bg-white shadow-sm divide-y">
+      <div className="overflow-x-auto rounded-xl border bg-white shadow-sm divide-y">
         {rows.map((r) => (
           <Link key={r.key} href={ledgerHref(r)} className="flex items-center justify-between px-4 py-3 text-sm hover:bg-gray-50">
             <span className="font-medium text-gray-800">

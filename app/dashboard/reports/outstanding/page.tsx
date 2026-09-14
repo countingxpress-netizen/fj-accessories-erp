@@ -89,7 +89,7 @@ export default async function OutstandingReportPage() {
       </div>
 
       <h2 className="text-sm font-semibold uppercase text-gray-500 mb-2">Customer Due</h2>
-      <div className="overflow-hidden rounded-xl border bg-white shadow-sm mb-6">
+      <div className="overflow-x-auto rounded-xl border bg-white shadow-sm mb-6">
         <table className="w-full text-sm">
           <thead className="bg-gray-50 text-left text-gray-600">
             <tr><th className="px-4 py-2">Customer</th><th className="px-4 py-2 text-right">Due Amount</th></tr>
@@ -112,7 +112,7 @@ export default async function OutstandingReportPage() {
       </div>
 
       <h2 className="text-sm font-semibold uppercase text-gray-500 mb-2">Supplier Payable</h2>
-      <div className="overflow-hidden rounded-xl border bg-white shadow-sm">
+      <div className="overflow-x-auto rounded-xl border bg-white shadow-sm">
         <table className="w-full text-sm">
           <thead className="bg-gray-50 text-left text-gray-600">
             <tr><th className="px-4 py-2">Supplier</th><th className="px-4 py-2 text-right">Payable Amount</th></tr>

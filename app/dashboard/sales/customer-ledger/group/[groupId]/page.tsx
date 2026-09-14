@@ -160,7 +160,7 @@ export default async function GroupLedgerPage({
             )}
           </form>
 
-          <div className="overflow-hidden rounded-xl border bg-white shadow-sm mb-6">
+          <div className="overflow-x-auto rounded-xl border bg-white shadow-sm mb-6">
             <table className="w-full text-sm">
               <thead className="bg-gray-50 text-left text-gray-600">
                 <tr>
@@ -213,7 +213,7 @@ export default async function GroupLedgerPage({
           </div>
 
           <h2 className="text-sm font-semibold uppercase text-gray-500 mb-2">কাস্টমার-ওয়াইজ (পুরো ইতিহাস)</h2>
-          <div className="overflow-hidden rounded-xl border bg-white shadow-sm">
+          <div className="overflow-x-auto rounded-xl border bg-white shadow-sm">
             <table className="w-full text-sm">
               <thead className="bg-gray-50 text-left text-gray-600">
                 <tr>

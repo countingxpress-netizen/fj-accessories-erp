@@ -200,7 +200,7 @@ export default function PaymentForm({
             </label>
           </div>
 
-          <div className="rounded-lg border overflow-hidden">
+          <div className="rounded-lg border overflow-x-auto">
             <div className="bg-gray-50 px-3 py-2 text-sm font-semibold text-gray-700">Unpaid Invoices</div>
             <table className="w-full text-sm">
               <thead className="text-left text-gray-500 border-t">

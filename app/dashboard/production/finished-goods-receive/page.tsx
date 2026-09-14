@@ -28,7 +28,7 @@ export default async function FinishedGoodsReceivePage() {
 
       <ReceiveForm orders={(orders ?? []) as any} warehouses={warehouses ?? []} />
 
-      <div className="mt-6 overflow-hidden rounded-xl border bg-white shadow-sm">
+      <div className="mt-6 overflow-x-auto rounded-xl border bg-white shadow-sm">
         <table className="w-full text-sm">
           <thead className="bg-gray-50 text-left text-gray-600">
             <tr>

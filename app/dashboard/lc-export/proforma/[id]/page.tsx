@@ -41,7 +41,7 @@ export default async function ProformaViewPage({ params }: { params: Promise<{ i
         <p><span className="text-gray-500">Status:</span> {pi.status}</p>
       </div>
 
-      <div className="overflow-hidden rounded-xl border bg-white shadow-sm mb-4">
+      <div className="overflow-x-auto rounded-xl border bg-white shadow-sm mb-4">
         <table className="w-full text-sm">
           <thead className="bg-gray-50 text-left text-gray-600">
             <tr>

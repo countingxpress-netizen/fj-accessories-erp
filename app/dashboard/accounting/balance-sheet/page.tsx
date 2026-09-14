@@ -109,7 +109,7 @@ export default async function BalanceSheetPage({
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* ASSETS */}
-        <div className="overflow-hidden rounded-xl border bg-white shadow-sm">
+        <div className="overflow-x-auto rounded-xl border bg-white shadow-sm">
           <div className="bg-blue-50 px-4 py-2 font-semibold text-blue-800">Assets</div>
           <table className="w-full text-sm">
             <tbody>
@@ -134,7 +134,7 @@ export default async function BalanceSheetPage({
 
         {/* LIABILITIES + EQUITY */}
         <div className="space-y-4">
-          <div className="overflow-hidden rounded-xl border bg-white shadow-sm">
+          <div className="overflow-x-auto rounded-xl border bg-white shadow-sm">
             <div className="bg-orange-50 px-4 py-2 font-semibold text-orange-800">Liabilities</div>
             <table className="w-full text-sm">
               <tbody>
@@ -157,7 +157,7 @@ export default async function BalanceSheetPage({
             </table>
           </div>
 
-          <div className="overflow-hidden rounded-xl border bg-white shadow-sm">
+          <div className="overflow-x-auto rounded-xl border bg-white shadow-sm">
             <div className="bg-purple-50 px-4 py-2 font-semibold text-purple-800">Equity</div>
             <table className="w-full text-sm">
               <tbody>

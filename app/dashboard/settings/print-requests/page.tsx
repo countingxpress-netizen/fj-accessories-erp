@@ -16,7 +16,7 @@ export default async function PrintRequestsPage() {
   return (
     <div>
       <h1 className="text-2xl font-semibold mb-4">Reprint Permission Requests</h1>
-      <div className="overflow-hidden rounded-xl border bg-white shadow-sm">
+      <div className="overflow-x-auto rounded-xl border bg-white shadow-sm">
         <table className="w-full text-sm">
           <thead className="bg-gray-50 text-left text-gray-600">
             <tr>

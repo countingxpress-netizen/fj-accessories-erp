@@ -61,7 +61,7 @@ export default async function ExpenseReportPage({
         <button type="submit" className="rounded-lg bg-gray-900 px-4 py-2 text-sm text-white">ফিল্টার করুন</button>
       </form>
 
-      <div className="overflow-hidden rounded-xl border bg-white shadow-sm">
+      <div className="overflow-x-auto rounded-xl border bg-white shadow-sm">
         <table className="w-full text-sm">
           <thead className="bg-gray-50 text-left text-gray-600">
             <tr><th className="px-4 py-2">Code</th><th className="px-4 py-2">Expense Head</th><th className="px-4 py-2 text-right">Amount</th><th className="px-4 py-2 text-right">%</th></tr>

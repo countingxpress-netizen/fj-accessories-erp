@@ -43,7 +43,7 @@ export default function BanksManager({ banks }: { banks: Bank[] }) {
   }
 
   return (
-    <div className="rounded-xl border bg-white shadow-sm overflow-hidden">
+    <div className="rounded-xl border bg-white shadow-sm overflow-x-auto">
       <table className="w-full text-sm">
         <thead className="bg-gray-50 text-left text-gray-600">
           <tr>

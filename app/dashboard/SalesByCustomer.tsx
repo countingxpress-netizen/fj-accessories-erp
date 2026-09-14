@@ -75,7 +75,7 @@ export default function SalesByCustomer({ customers, groupMap }: { customers: Cu
   const totLbs = shown.reduce((s, r) => s + r.lbs, 0);
 
   return (
-    <div className="lg:col-span-2 rounded-xl border bg-white shadow-sm overflow-hidden">
+    <div className="lg:col-span-2 rounded-xl border bg-white shadow-sm overflow-x-auto">
       <div className="flex items-center justify-between px-4 py-3 border-b">
         <h2 className="text-sm font-semibold uppercase text-gray-500">Sales by Customer</h2>
         <Link href="/dashboard/reports/sales-by-customer" className="text-xs text-blue-700 hover:underline">

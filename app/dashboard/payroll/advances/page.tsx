@@ -49,7 +49,7 @@ export default async function AdvancesPage() {
       <AdvanceForm employees={employees ?? []} cashBankAccounts={cashBank ?? []} />
 
       {outstanding.length > 0 && (
-        <div className="mt-6 rounded-xl border bg-white shadow-sm overflow-hidden">
+        <div className="mt-6 rounded-xl border bg-white shadow-sm overflow-x-auto">
           <div className="bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-800">বকেয়া অগ্রিম</div>
           <table className="w-full text-sm">
             <thead className="bg-gray-50 text-left text-gray-600">
@@ -74,7 +74,7 @@ export default async function AdvancesPage() {
         </div>
       )}
 
-      <div className="mt-6 rounded-xl border bg-white shadow-sm overflow-hidden">
+      <div className="mt-6 rounded-xl border bg-white shadow-sm overflow-x-auto">
         <div className="bg-gray-50 px-3 py-2 text-sm font-semibold text-gray-700">অগ্রিমের ইতিহাস</div>
         <table className="w-full text-sm">
           <thead className="bg-gray-50 text-left text-gray-600">

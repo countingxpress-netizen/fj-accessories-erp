@@ -100,7 +100,7 @@ export default async function RawMaterialStockPage() {
           const totalKg = data.total * 0.453592;
           const totalBags = data.total / LBS_PER_BAG;
           return (
-            <div key={id} className="overflow-hidden rounded-xl border bg-white shadow-sm">
+            <div key={id} className="overflow-x-auto rounded-xl border bg-white shadow-sm">
               <div className="flex items-center justify-between bg-gray-50 px-4 py-3">
                 <Link href={`/dashboard/inventory/raw-material/${id}`} className="font-semibold text-gray-800 hover:underline hover:text-blue-700">
                   {data.name}
