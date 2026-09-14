@@ -9,8 +9,8 @@ import { getCurrentUserId } from "@/lib/currentUser";
 import { resolveRate, type RateHistoryRow } from "@/lib/rateHistory";
 import { money, qty as qtyFmt } from "@/lib/format";
 
-type Customer = { id: string; name: string; address: string | null; default_print_rate: number | null; default_adhesive_rate: number | null; price_per_lbs: number | null; plain_cm_conversion?: boolean | null };
-type PriceHistoryRow = RateHistoryRow & { customer_id: string };
+type Customer = { id: string; name: string; address: string | null; default_print_rate: number | null; default_adhesive_rate: number | null; price_per_lbs_pe: number | null; price_per_lbs_pp: number | null; plain_cm_conversion?: boolean | null };
+type PriceHistoryRow = RateHistoryRow & { customer_id: string; material_type: "pe" | "pp" | null };
 type Warehouse = { id: string; name: string };
 type Material = { id: string; material_name: string };
 type CustomLine = { material_id: string; percentage: string };
@@ -374,11 +374,14 @@ export default function BookingForm({
   }
   const customTotalPercent = customLines.reduce((s, l) => s + (parseFloat(l.percentage) || 0), 0);
 
-  // Price/Pc হিসাব — Sales Invoice ঠিক যেভাবে করে সেভাবেই (customer price_per_lbs + rate_history,
-  // booking_date ধরে effective rate বের করে)। priceOverride দিলে সেটাই প্রাধান্য পাবে।
+  // Price/Pc হিসাব — Sales Invoice ঠিক যেভাবে করে সেভাবেই (customer price_per_lbs_pe/pp +
+  // rate_history, booking_date ধরে effective rate বের করে)। PP হলে PP-র রেট, বাকি সব
+  // (PE/PE-RLD/Custom) PE-র রেট নেয়। priceOverride দিলে সেটাই প্রাধান্য পাবে।
   const selectedCustomer = customersList.find((c) => c.id === customerId);
-  const historyForCustomer = priceHistory.filter((h) => h.customer_id === customerId);
-  const resolvedPricePerLbs = resolveRate(historyForCustomer, bookingDate, selectedCustomer?.price_per_lbs ?? 0);
+  const bagMaterialBucket: "pe" | "pp" = materialType === "pp" ? "pp" : "pe";
+  const historyForCustomer = priceHistory.filter((h) => h.customer_id === customerId && h.material_type === bagMaterialBucket);
+  const customerPriceForBucket = bagMaterialBucket === "pp" ? selectedCustomer?.price_per_lbs_pp : selectedCustomer?.price_per_lbs_pe;
+  const resolvedPricePerLbs = resolveRate(historyForCustomer, bookingDate, customerPriceForBucket ?? 0);
   const pricePerLbs = parseFloat(priceOverride) || resolvedPricePerLbs;
 
   // আইরিশ / দেবনিয়ার গার্মেন্টস (Customer) — cm→inch এ die-size টেবিল বাদ, সরল ÷2.54
@@ -639,12 +642,12 @@ export default function BookingForm({
     const { data, error } = await supabase
       .from("customers")
       .insert({ name: trimmedName })
-      .select("id, name, address, price_per_lbs, plain_cm_conversion")
+      .select("id, name, address, price_per_lbs_pe, price_per_lbs_pp, plain_cm_conversion")
       .single();
 
     if (error) throw error;
     if (data) {
-      setCustomersList((prev) => [...prev, { id: data.id, name: data.name, address: data.address ?? null, default_print_rate: null, default_adhesive_rate: null, price_per_lbs: data.price_per_lbs ?? null, plain_cm_conversion: data.plain_cm_conversion ?? false }]);
+      setCustomersList((prev) => [...prev, { id: data.id, name: data.name, address: data.address ?? null, default_print_rate: null, default_adhesive_rate: null, price_per_lbs_pe: data.price_per_lbs_pe ?? null, price_per_lbs_pp: data.price_per_lbs_pp ?? null, plain_cm_conversion: data.plain_cm_conversion ?? false }]);
       setCustomerId(data.id);
       setCustomerNameInput(data.name);
       return { customerId: data.id, customerName: data.name };
@@ -1129,7 +1132,7 @@ export default function BookingForm({
             placeholder={resolvedPricePerLbs ? String(resolvedPricePerLbs) : "0"}
             className="w-full rounded-lg border px-3 py-2 text-sm"
           />
-          <p className="mt-1 text-xs text-gray-400">Customer Default: {money(resolvedPricePerLbs)}</p>
+          <p className="mt-1 text-xs text-gray-400">Customer Default ({bagMaterialBucket.toUpperCase()}): {money(resolvedPricePerLbs)}</p>
         </div>
       </div>
 

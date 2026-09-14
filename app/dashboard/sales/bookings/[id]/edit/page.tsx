@@ -78,11 +78,13 @@ export default async function EditBookingPage({ params }: { params: Promise<{ id
 
   // ── Locked → পুরনো soft-field ফর্ম ──────────────────────────────────────
   if (structuralLocked) {
+    const bagMaterialBucket: "pe" | "pp" = first.material_type === "pp" ? "pp" : "pe";
     const { data: customer } = await supabase
-      .from("customers").select("price_per_lbs").eq("id", first.customer_id).maybeSingle();
+      .from("customers").select("price_per_lbs_pe, price_per_lbs_pp").eq("id", first.customer_id).maybeSingle();
     const { data: rateHistory } = await supabase
-      .from("rate_history").select("effective_from, rate").eq("customer_id", first.customer_id);
-    const pricePerLbs = resolveRate(rateHistory ?? [], first.booking_date, customer?.price_per_lbs ?? 0);
+      .from("rate_history").select("effective_from, rate").eq("customer_id", first.customer_id).eq("material_type", bagMaterialBucket);
+    const customerPriceForBucket = bagMaterialBucket === "pp" ? customer?.price_per_lbs_pp : customer?.price_per_lbs_pe;
+    const pricePerLbs = resolveRate(rateHistory ?? [], first.booking_date, customerPriceForBucket ?? 0);
 
     const reason = productionStarted
       ? "এই বুকিং-এর Production শুরু হয়ে গেছে"
@@ -118,7 +120,7 @@ export default async function EditBookingPage({ params }: { params: Promise<{ id
     supabase.from("buyers").select("id, customer_id, name, booking_thickness_mm, production_thickness_mm, pi_thickness_mm, print_colors_default, adhesive_rate_per_inch").order("name"),
     supabase.from("garments").select("id, customer_id, name, address").order("name"),
     supabase.from("merchants").select("id, name").order("name"),
-    supabase.from("rate_history").select("customer_id, effective_from, rate").not("customer_id", "is", null),
+    supabase.from("rate_history").select("customer_id, effective_from, rate, material_type").not("customer_id", "is", null),
     supabase.from("sales_invoices").select("payment_received").eq("source_booking_group_id", groupId).eq("auto_generated", true).maybeSingle(),
   ]);
 
@@ -130,8 +132,10 @@ export default async function EditBookingPage({ params }: { params: Promise<{ id
   // Booking Date-এ কার্যকর Price/Lbs — পুরনো Adjust/Pc implied ভাবে বের করতে লাগে
   // (quoted_unit_price − formula দাম)। এই ফর্ম আলাদা adjustment কলাম রাখে না।
   const editCustomer = (customers ?? []).find((c: any) => c.id === first.customer_id);
-  const historyForCustomer = (priceHistory ?? []).filter((h: any) => h.customer_id === first.customer_id);
-  const effRate = resolveRate(historyForCustomer, first.booking_date, Number(editCustomer?.price_per_lbs ?? 0));
+  const firstBagMaterialBucket: "pe" | "pp" = first.material_type === "pp" ? "pp" : "pe";
+  const historyForCustomer = (priceHistory ?? []).filter((h: any) => h.customer_id === first.customer_id && h.material_type === firstBagMaterialBucket);
+  const editCustomerPriceForBucket = firstBagMaterialBucket === "pp" ? editCustomer?.price_per_lbs_pp : editCustomer?.price_per_lbs_pe;
+  const effRate = resolveRate(historyForCustomer, first.booking_date, Number(editCustomerPriceForBucket ?? 0));
 
   const items = bookings.map((b: any) => {
     const fg = b.finished_goods;

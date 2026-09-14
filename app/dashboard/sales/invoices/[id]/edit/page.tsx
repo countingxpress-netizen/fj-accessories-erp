@@ -97,7 +97,7 @@ export default async function EditInvoicePage({ params }: { params: Promise<{ id
       .select("id, booking_no, booking_date, quantity_pcs, product_id, customer_id, style, garments_name, buyers(name), merchants(name), delivery_point, customer_booking_ref, has_print, print_colors, rate_per_color, rate_per_inch, measurement_type, measurement_unit, length_val, width_val, flap_val, gusset_val, pillow_val, thickness_mm, material_type, plain_cm_conversion, finished_goods(product_name, length_cm, width_cm, thickness)")
       .order("booking_date", { ascending: false })
       .order("created_at", { ascending: true }),
-    supabase.from("rate_history").select("customer_id, effective_from, rate").not("customer_id", "is", null),
+    supabase.from("rate_history").select("customer_id, effective_from, rate, material_type").not("customer_id", "is", null),
     supabase.from("sales_invoice_items").select("booking_id, quantity_pcs"),
     supabase.from("sales_invoice_items").select("id, booking_id, quantity_pcs, unit_price, line_type").eq("invoice_id", id),
   ]);
@@ -117,7 +117,6 @@ export default async function EditInvoicePage({ params }: { params: Promise<{ id
   });
 
   const customer = (customers ?? []).find((c: any) => c.id === invoice.customer_id);
-  const historyForCustomer = (priceHistory ?? []).filter((h: any) => h.customer_id === invoice.customer_id);
 
   const productLines = (myItems ?? []).filter((it: any) => it.booking_id);
   const lines = productLines.map((it: any) => ({
@@ -132,7 +131,10 @@ export default async function EditInvoicePage({ params }: { params: Promise<{ id
     productLines.forEach((it: any) => {
       const b: any = (bookings ?? []).find((x: any) => x.id === it.booking_id);
       if (!b) return;
-      const rate = resolveRate(historyForCustomer, b.booking_date, Number(customer?.price_per_lbs ?? 0));
+      const bucket: "pe" | "pp" = b.material_type === "pp" ? "pp" : "pe";
+      const historyForBucket = (priceHistory ?? []).filter((h: any) => h.customer_id === invoice.customer_id && h.material_type === bucket);
+      const customerRate = bucket === "pp" ? customer?.price_per_lbs_pp : customer?.price_per_lbs_pe;
+      const rate = resolveRate(historyForBucket, b.booking_date, Number(customerRate ?? 0));
       const formulaUnit = calcQuotedUnitPrice(b, rate, b.thickness_mm);
       const seed = Math.round((Number(it.unit_price || 0) - formulaUnit) * 100) / 100;
       if (Math.abs(seed) > 0.001) adjustmentSeed[it.booking_id] = String(seed);

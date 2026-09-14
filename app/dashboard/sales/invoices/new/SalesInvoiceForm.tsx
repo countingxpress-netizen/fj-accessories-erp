@@ -22,9 +22,10 @@ type Booking = {
 };
 type Customer = {
   id: string; name: string; price_per_lbs: number | null;
+  price_per_lbs_pe: number | null; price_per_lbs_pp: number | null;
   lbs_invoicing_enabled?: boolean | null; making_cutting_rate?: number | null;
 };
-type PriceHistoryRow = { customer_id: string; effective_from: string; rate: number };
+type PriceHistoryRow = { customer_id: string; effective_from: string; rate: number; material_type: "pe" | "pp" | null };
 
 function formatMeasurement(b: Booking) {
   const unit = b.measurement_unit;
@@ -100,15 +101,14 @@ export default function SalesInvoiceForm({
   // standard invoice standard-ই থাকবে, উল্টোটাও)।
   const showLbs = isEdit ? editInvoice!.invoiceType === "lbs" : isLbsCustomer;
 
-  const historyForCustomer = useMemo(
-    () => priceHistory.filter((h) => h.customer_id === customerId),
-    [priceHistory, customerId]
-  );
-
-  // Booking-এর Booking Date ধরে সেই দিনে কার্যকর Price/Lbs (history না থাকলে
-  // customer-এর বর্তমান price_per_lbs fallback)।
+  // Booking-এর নিজের Material Type (PP হলে PP-র রেট, বাকি সব PE/PE-RLD/Custom হলে
+  // PE-র রেট) আর Booking Date ধরে সেই দিনে কার্যকর Price/Lbs (history না থাকলে
+  // customer-এর বর্তমান price_per_lbs_pe/pp fallback)।
   function bookingPricePerLbs(b: Booking) {
-    return resolveRate(historyForCustomer, b.booking_date, selectedCustomer?.price_per_lbs ?? 0);
+    const bucket: "pe" | "pp" = b.material_type === "pp" ? "pp" : "pe";
+    const history = priceHistory.filter((h) => h.customer_id === customerId && h.material_type === bucket);
+    const customerRate = bucket === "pp" ? selectedCustomer?.price_per_lbs_pp : selectedCustomer?.price_per_lbs_pe;
+    return resolveRate(history, b.booking_date, customerRate ?? 0);
   }
 
   // এডিট মোডে invoice-এর প্রতিটা লাইনের আগের Qty

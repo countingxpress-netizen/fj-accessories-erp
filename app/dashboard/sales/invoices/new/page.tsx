@@ -11,7 +11,7 @@ export default async function NewSalesInvoicePage() {
     .order("created_at", { ascending: true });
   const { data: priceHistory } = await supabase
     .from("rate_history")
-    .select("customer_id, effective_from, rate")
+    .select("customer_id, effective_from, rate, material_type")
     .not("customer_id", "is", null);
   const { data: allItems } = await supabase.from("sales_invoice_items").select("booking_id, quantity_pcs");
 

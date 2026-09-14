@@ -11,11 +11,19 @@ import { usePermission } from "@/app/dashboard/PermissionProvider";
 // cached copy — এখানে row যোগ/মুছলে সেটা re-sync করা হয়।
 
 type Kind = "customer" | "buyer";
+type MaterialType = "pe" | "pp";
 
-const CONFIG: Record<Kind, { table: string; rateColumn: string; refColumn: string; rateLabel: string }> = {
-  customer: { table: "customers", rateColumn: "price_per_lbs", refColumn: "customer_id", rateLabel: "Price/Lbs" },
-  buyer: { table: "buyers", rateColumn: "rate_per_lbs_value", refColumn: "buyer_id", rateLabel: "Rate/Lbs" },
+const CONFIG: Record<Kind, { table: string; refColumn: string; rateLabel: string }> = {
+  customer: { table: "customers", refColumn: "customer_id", rateLabel: "Price/Lbs" },
+  buyer: { table: "buyers", refColumn: "buyer_id", rateLabel: "Rate/Lbs" },
 };
+
+// Customer-এর জন্য rateColumn Material Type অনুযায়ী আলাদা (PE/PP দুটো আলাদা রেট);
+// Buyer-এর জন্য একটাই কলাম (material split প্রযোজ্য না)।
+function rateColumnFor(kind: Kind, materialType?: MaterialType): string {
+  if (kind === "buyer") return "rate_per_lbs_value";
+  return materialType === "pp" ? "price_per_lbs_pp" : "price_per_lbs_pe";
+}
 
 type Row = {
   id: string;
@@ -27,9 +35,11 @@ type Row = {
 };
 
 export default function RateHistoryPanel({
-  kind, refId, label,
-}: { kind: Kind; refId: string; label: string }) {
+  kind, refId, label, materialType,
+}: { kind: Kind; refId: string; label: string; materialType?: MaterialType }) {
   const cfg = CONFIG[kind];
+  const rateColumn = rateColumnFor(kind, materialType);
+  const rateLabel = kind === "customer" ? `${cfg.rateLabel} (${(materialType ?? "pe").toUpperCase()})` : cfg.rateLabel;
   const supabase = createClient();
   const router = useRouter();
   const { allowed: canEdit } = usePermission(cfg.table, refId, "edit");
@@ -44,24 +54,35 @@ export default function RateHistoryPanel({
   const [newRate, setNewRate] = useState("");
   const [newNote, setNewNote] = useState("");
 
+  // Customer-এর জন্য material_type-ও ফিল্টার করতে হয় (PE আর PP-র history আলাদা);
+  // Buyer-এর জন্য material_type প্রযোজ্য না (সবসময় NULL)।
   const load = useCallback(async () => {
     setLoading(true);
-    const { data, error } = await supabase
+    let q = supabase
       .from("rate_history")
       .select("id, rate, effective_from, note, created_at, creator:app_users!rate_history_created_by_fkey(full_name)")
-      .eq(cfg.refColumn, refId)
-      .order("effective_from", { ascending: false });
+      .eq(cfg.refColumn, refId);
+    if (kind === "customer") q = q.eq("material_type", materialType ?? "pe");
+    const { data, error } = await q.order("effective_from", { ascending: false });
     if (error) setError(error.message);
     setRows((data ?? []) as any);
     setLoading(false);
-  }, [supabase, cfg.refColumn, refId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [supabase, cfg.refColumn, refId, kind, materialType]);
 
   useEffect(() => { load(); }, [load]);
 
   // row বদলের পর master টেবিলের cached rate কলাম re-sync
   async function syncCachedRate(freshRows: RateHistoryRow[]) {
     const next = freshRows.length ? currentRate(freshRows, null) : null;
-    await supabase.from(cfg.table).update({ [cfg.rateColumn]: next }).eq("id", refId);
+    await supabase.from(cfg.table).update({ [rateColumn]: next }).eq("id", refId);
+  }
+
+  async function fetchFreshRows() {
+    let q = supabase.from("rate_history").select("rate, effective_from").eq(cfg.refColumn, refId);
+    if (kind === "customer") q = q.eq("material_type", materialType ?? "pe");
+    const { data } = await q;
+    return (data ?? []) as RateHistoryRow[];
   }
 
   async function handleAdd(e: React.FormEvent) {
@@ -74,6 +95,7 @@ export default function RateHistoryPanel({
     const createdBy = await getCurrentUserId(supabase);
     const { error } = await supabase.from("rate_history").insert({
       [cfg.refColumn]: refId, rate, effective_from: newDate, note: newNote.trim() || null, created_by: createdBy,
+      ...(kind === "customer" ? { material_type: materialType ?? "pe" } : {}),
     });
     if (error) {
       setBusy(false);
@@ -81,8 +103,8 @@ export default function RateHistoryPanel({
       return;
     }
 
-    const { data: fresh } = await supabase.from("rate_history").select("rate, effective_from").eq(cfg.refColumn, refId);
-    await syncCachedRate((fresh ?? []) as RateHistoryRow[]);
+    const fresh = await fetchFreshRows();
+    await syncCachedRate(fresh);
     setNewRate(""); setNewNote(""); setNewDate(today);
     setBusy(false);
     await load();
@@ -96,8 +118,8 @@ export default function RateHistoryPanel({
     const { error } = await supabase.from("rate_history").delete().eq("id", id);
     if (error) { setBusy(false); setError(error.message); return; }
 
-    const { data: fresh } = await supabase.from("rate_history").select("rate, effective_from").eq(cfg.refColumn, refId);
-    await syncCachedRate((fresh ?? []) as RateHistoryRow[]);
+    const fresh = await fetchFreshRows();
+    await syncCachedRate(fresh);
     setBusy(false);
     await load();
     router.refresh();
@@ -108,7 +130,7 @@ export default function RateHistoryPanel({
   return (
     <div className="rounded-lg border bg-white p-4 space-y-3">
       <div className="flex items-baseline justify-between">
-        <h3 className="text-sm font-semibold text-gray-800">{label} — {cfg.rateLabel} History</h3>
+        <h3 className="text-sm font-semibold text-gray-800">{label} — {rateLabel} History</h3>
         <span className="text-xs text-gray-500">
           আজকের কার্যকর: <strong>{effectiveToday ?? "—"}</strong>
         </span>
@@ -121,7 +143,7 @@ export default function RateHistoryPanel({
             <input type="date" value={newDate} onChange={(e) => setNewDate(e.target.value)} className="rounded border px-2 py-1 text-sm" />
           </div>
           <div className="flex flex-col">
-            <label className="text-[11px] text-gray-500 mb-0.5">{cfg.rateLabel}</label>
+            <label className="text-[11px] text-gray-500 mb-0.5">{rateLabel}</label>
             <input type="number" step="0.0001" value={newRate} onChange={(e) => setNewRate(e.target.value)} className="w-28 rounded border px-2 py-1 text-sm" />
           </div>
           <div className="flex flex-col flex-1 min-w-[160px]">
@@ -148,7 +170,7 @@ export default function RateHistoryPanel({
             <thead className="text-left text-gray-500">
               <tr>
                 <th className="py-1 pr-4">কার্যকর তারিখ</th>
-                <th className="py-1 pr-4">{cfg.rateLabel}</th>
+                <th className="py-1 pr-4">{rateLabel}</th>
                 <th className="py-1 pr-4">মন্তব্য</th>
                 <th className="py-1 pr-4">যোগ করেছেন</th>
                 <th className="py-1"></th>

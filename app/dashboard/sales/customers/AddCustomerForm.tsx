@@ -13,7 +13,8 @@ export default function AddCustomerForm() {
   const [address, setAddress] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
-  const [pricePerLbs, setPricePerLbs] = useState("");
+  const [pricePerLbsPe, setPricePerLbsPe] = useState("");
+  const [pricePerLbsPp, setPricePerLbsPp] = useState("");
   const [priceEffectiveFrom, setPriceEffectiveFrom] = useState(new Date().toISOString().slice(0, 10));
   const [defaultPrintRate, setDefaultPrintRate] = useState("0.20");
   const [defaultAdhesiveRate, setDefaultAdhesiveRate] = useState("0.02");
@@ -22,6 +23,7 @@ export default function AddCustomerForm() {
   const [commissionEnabled, setCommissionEnabled] = useState(false);
   const [commissionPercentage, setCommissionPercentage] = useState("1");
   const [lbsInvoicingEnabled, setLbsInvoicingEnabled] = useState(false);
+  const [lbsPowderRate, setLbsPowderRate] = useState("0");
   const [makingCuttingRate, setMakingCuttingRate] = useState("0");
   const [plainCmConversion, setPlainCmConversion] = useState(false);
   const [error, setError] = useState("");
@@ -39,7 +41,9 @@ export default function AddCustomerForm() {
       address,
       phone,
       email,
-      price_per_lbs: pricePerLbs ? parseFloat(pricePerLbs) : null,
+      price_per_lbs_pe: pricePerLbsPe ? parseFloat(pricePerLbsPe) : null,
+      price_per_lbs_pp: pricePerLbsPp ? parseFloat(pricePerLbsPp) : null,
+      price_per_lbs: lbsInvoicingEnabled ? (parseFloat(lbsPowderRate) || 0) : null,
       default_print_rate: parseFloat(defaultPrintRate) || 0.20,
       default_adhesive_rate: parseFloat(defaultAdhesiveRate) || 0.02,
       opening_balance: parseFloat(openingBalance) || 0,
@@ -55,27 +59,26 @@ export default function AddCustomerForm() {
       setError(error?.message ?? "Customer তৈরি ব্যর্থ হয়েছে।");
       return;
     }
-    // শুরুর Price/Lbs টা rate_history-তে প্রথম এন্ট্রি হিসেবে বসে — পরের পরিবর্তনগুলো
-    // Customer রো-এর "History" প্যানেল থেকে তারিখ-ভিত্তিক ভাবে যোগ হবে।
-    if (pricePerLbs) {
+    // শুরুর Price/Lbs (PE/PP) টা rate_history-তে প্রথম এন্ট্রি হিসেবে বসে — পরের
+    // পরিবর্তনগুলো Customer রো-এর "History" প্যানেল থেকে তারিখ-ভিত্তিক ভাবে যোগ হবে।
+    if (pricePerLbsPe || pricePerLbsPp) {
       const createdBy = await getCurrentUserId(supabase);
-      await supabase.from("rate_history").insert({
-        customer_id: created.id,
-        rate: parseFloat(pricePerLbs),
-        effective_from: priceEffectiveFrom || new Date().toISOString().slice(0, 10),
-        note: "শুরুর দাম",
-        created_by: createdBy,
-      });
+      const effectiveFrom = priceEffectiveFrom || new Date().toISOString().slice(0, 10);
+      const rows = [];
+      if (pricePerLbsPe) rows.push({ customer_id: created.id, rate: parseFloat(pricePerLbsPe), effective_from: effectiveFrom, material_type: "pe", note: "শুরুর দাম", created_by: createdBy });
+      if (pricePerLbsPp) rows.push({ customer_id: created.id, rate: parseFloat(pricePerLbsPp), effective_from: effectiveFrom, material_type: "pp", note: "শুরুর দাম", created_by: createdBy });
+      await supabase.from("rate_history").insert(rows);
     }
     // opening balance দিলে consolidated Customer opening JV আপডেট হবে
     await syncCustomerOpeningJv(supabase);
     setLoading(false);
-    setName(""); setCode(""); setCodeTouched(false); setAddress(""); setPhone(""); setEmail(""); setPricePerLbs("");
+    setName(""); setCode(""); setCodeTouched(false); setAddress(""); setPhone(""); setEmail("");
+    setPricePerLbsPe(""); setPricePerLbsPp("");
     setPriceEffectiveFrom(new Date().toISOString().slice(0, 10));
     setDefaultPrintRate("0.20"); setDefaultAdhesiveRate("0.02");
     setOpeningBalance("0"); setOpeningBalanceDate(new Date().toISOString().slice(0, 10));
     setCommissionEnabled(false); setCommissionPercentage("1");
-    setLbsInvoicingEnabled(false); setMakingCuttingRate("0");
+    setLbsInvoicingEnabled(false); setLbsPowderRate("0"); setMakingCuttingRate("0");
     setPlainCmConversion(false);
     router.refresh();
   }
@@ -92,10 +95,14 @@ export default function AddCustomerForm() {
       </div>
       <div className="flex flex-wrap gap-3 items-end">
         <div>
-          <label className="block text-xs text-gray-500 mb-1">Price/Lbs (ঐচ্ছিক)</label>
-          <input type="number" step="0.01" value={pricePerLbs} onChange={(e) => setPricePerLbs(e.target.value)} className="w-40 rounded-lg border px-3 py-2 text-sm" />
+          <label className="block text-xs text-gray-500 mb-1">Price/Lbs (PE) (ঐচ্ছিক)</label>
+          <input type="number" step="0.01" value={pricePerLbsPe} onChange={(e) => setPricePerLbsPe(e.target.value)} className="w-36 rounded-lg border px-3 py-2 text-sm" title="PE / PE-RLD / Custom বুকিং-এ এই রেট ব্যবহার হবে" />
         </div>
-        {pricePerLbs && (
+        <div>
+          <label className="block text-xs text-gray-500 mb-1">Price/Lbs (PP) (ঐচ্ছিক)</label>
+          <input type="number" step="0.01" value={pricePerLbsPp} onChange={(e) => setPricePerLbsPp(e.target.value)} className="w-36 rounded-lg border px-3 py-2 text-sm" title="শুধু PP বুকিং-এ এই রেট ব্যবহার হবে" />
+        </div>
+        {(pricePerLbsPe || pricePerLbsPp) && (
           <div>
             <label className="block text-xs text-gray-500 mb-1">দাম কার্যকর তারিখ থেকে</label>
             <input type="date" value={priceEffectiveFrom} onChange={(e) => setPriceEffectiveFrom(e.target.value)} className="rounded-lg border px-3 py-2 text-sm" />
@@ -132,10 +139,10 @@ export default function AddCustomerForm() {
             LBS Invoicing
           </label>
           {lbsInvoicingEnabled && (
-            <>
+            <div className="flex gap-2 mt-1">
+              <input type="number" step="0.01" value={lbsPowderRate} onChange={(e) => setLbsPowderRate(e.target.value)} className="w-32 rounded-lg border px-3 py-2 text-sm" placeholder="Powder Rate/Lb" title="Powder Bill rate — BDT / Lb (PE/PP-এর Price/Lbs থেকে আলাদা)" />
               <input type="number" step="0.01" value={makingCuttingRate} onChange={(e) => setMakingCuttingRate(e.target.value)} className="w-32 rounded-lg border px-3 py-2 text-sm" placeholder="Making-Cutting Rate" title="Making + Cutting চার্জ — BDT / Lb" />
-              <p className="text-[11px] text-gray-400 mt-1 max-w-[13rem]">Powder Bill rate = উপরের <b>Price/Lbs</b> — সেটাও দিন।</p>
-            </>
+            </div>
           )}
         </div>
         <button type="submit" disabled={loading} className="rounded-lg bg-gray-900 px-4 py-2 text-sm text-white disabled:opacity-50">

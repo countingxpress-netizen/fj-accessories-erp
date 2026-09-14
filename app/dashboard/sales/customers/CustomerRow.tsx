@@ -11,6 +11,7 @@ import RateHistoryPanel from "@/app/dashboard/sales/RateHistoryPanel";
 type Customer = {
   id: string; name: string; code: string | null; address: string | null;
   phone: string | null; email: string | null; price_per_lbs: number | null;
+  price_per_lbs_pe: number | null; price_per_lbs_pp: number | null;
   default_print_rate: number | null; default_adhesive_rate: number | null;
   opening_balance: number | null;
   commission_enabled: boolean | null; commission_percentage: number | null;
@@ -94,8 +95,9 @@ export default function CustomerRow({
 
   const historyRow = showHistory ? (
     <tr className="border-t bg-gray-50">
-      <td colSpan={COL_SPAN} className="px-4 py-3">
-        <RateHistoryPanel kind="customer" refId={customer.id} label={customer.name} />
+      <td colSpan={COL_SPAN} className="px-4 py-3 space-y-3">
+        <RateHistoryPanel kind="customer" refId={customer.id} label={customer.name} materialType="pe" />
+        <RateHistoryPanel kind="customer" refId={customer.id} label={customer.name} materialType="pp" />
       </td>
     </tr>
   ) : null;
@@ -109,8 +111,9 @@ export default function CustomerRow({
           <td className="px-4 py-2"><input value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} className="w-20 rounded border px-2 py-1 text-sm" placeholder="AT" /></td>
           <td className="px-4 py-2"><input value={address} onChange={(e) => setAddress(e.target.value)} className="w-full rounded border px-2 py-1 text-sm" /></td>
           <td className="px-4 py-2"><input value={phone} onChange={(e) => setPhone(e.target.value)} className="w-full rounded border px-2 py-1 text-sm" /></td>
-          <td className="px-4 py-2 text-gray-500">
-            {customer.price_per_lbs ?? "-"}
+          <td className="px-4 py-2 text-gray-500 text-xs">
+            <div>PE: {customer.price_per_lbs_pe ?? "-"}</div>
+            <div>PP: {customer.price_per_lbs_pp ?? "-"}</div>
             <span className="block text-[11px] text-gray-400">Price History থেকে</span>
           </td>
           <td className="px-4 py-2"><input type="number" step="0.01" value={printRate} onChange={(e) => setPrintRate(e.target.value)} className="w-20 rounded border px-2 py-1 text-sm" /></td>
@@ -162,11 +165,12 @@ export default function CustomerRow({
         <td className="px-4 py-2 text-gray-500">{customer.code || "-"}</td>
         <td className="px-4 py-2 text-gray-500">{customer.address || "-"}</td>
         <td className="px-4 py-2 text-gray-500">{customer.phone || "-"}</td>
-        <td className="px-4 py-2 text-gray-500">
-          {customer.price_per_lbs ?? "-"}
+        <td className="px-4 py-2 text-gray-500 text-xs">
+          <div>PE: {customer.price_per_lbs_pe ?? "-"}</div>
+          <div>PP: {customer.price_per_lbs_pp ?? "-"}</div>
           <button
             onClick={() => setShowHistory((v) => !v)}
-            className="ml-2 text-xs text-blue-600 hover:underline"
+            className="text-xs text-blue-600 hover:underline"
           >
             {showHistory ? "History ▲" : "History ▼"}
           </button>

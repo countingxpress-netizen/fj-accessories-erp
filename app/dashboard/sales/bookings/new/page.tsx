@@ -14,7 +14,7 @@ export default async function NewBookingPage() {
   const { data: merchantsMaster } = await supabase.from("merchants").select("id, name").order("name");
   const { data: priceHistory } = await supabase
     .from("rate_history")
-    .select("customer_id, effective_from, rate")
+    .select("customer_id, effective_from, rate, material_type")
     .not("customer_id", "is", null);
 
   return (
