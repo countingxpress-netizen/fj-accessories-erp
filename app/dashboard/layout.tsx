@@ -6,6 +6,7 @@ import SidebarMenu from "./SidebarMenu";
 import PermissionProvider from "./PermissionProvider";
 import NavIcon from "./NavIcon";
 import Link from "next/link";
+import FloatingScrollSync from "./FloatingScrollSync";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient();
@@ -61,6 +62,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
           {children}
         </PermissionProvider>
       </main>
+      <FloatingScrollSync />
     </div>
   );
 }
