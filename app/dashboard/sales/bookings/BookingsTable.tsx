@@ -36,17 +36,31 @@ export default function BookingsTable({
     return Array.from(seen, ([value, label]) => ({ value, label })).sort((a, b) => a.label.localeCompare(b.label));
   }, [allBookingsUnfiltered]);
 
+  // Customer সিলেক্ট থাকলে Buyer/Garments ড্রপডাউন শুধু সেই কাস্টমারের আন্ডারেরগুলোই দেখাবে —
+  // অন্য কাস্টমারের বায়ার/গার্মেন্টস মিশে থাকবে না।
+  const bookingsForOptions = useMemo(
+    () => (customerId ? allBookingsUnfiltered.filter((b: any) => b.customer_id === customerId) : allBookingsUnfiltered),
+    [allBookingsUnfiltered, customerId]
+  );
+
   const buyerOptions = useMemo(() => {
     const seen = new Map<string, string>();
-    allBookingsUnfiltered.forEach((b: any) => { if (b.buyer_id && b.buyers?.name) seen.set(b.buyer_id, b.buyers.name); });
+    bookingsForOptions.forEach((b: any) => { if (b.buyer_id && b.buyers?.name) seen.set(b.buyer_id, b.buyers.name); });
     return Array.from(seen, ([value, label]) => ({ value, label })).sort((a, b) => a.label.localeCompare(b.label));
-  }, [allBookingsUnfiltered]);
+  }, [bookingsForOptions]);
 
   const garmentsOptions = useMemo(() => {
     const set = new Set<string>();
-    allBookingsUnfiltered.forEach((b: any) => { if (b.garments_name) set.add(b.garments_name); });
+    bookingsForOptions.forEach((b: any) => { if (b.garments_name) set.add(b.garments_name); });
     return Array.from(set).sort().map((v) => ({ value: v, label: v }));
-  }, [allBookingsUnfiltered]);
+  }, [bookingsForOptions]);
+
+  // Customer বদলালে আগের Buyer/Garments সিলেকশন নতুন কাস্টমারে নাও থাকতে পারে — রিসেট করি।
+  function handleCustomerChange(v: string) {
+    setCustomerId(v);
+    setBuyerId("");
+    setGarments("");
+  }
 
   function matches(b: any) {
     if (customerId && b.customer_id !== customerId) return false;
@@ -106,7 +120,7 @@ export default function BookingsTable({
     <div>
       <ListFilterBar
         search={search} onSearchChange={setSearch} searchPlaceholder="Booking No / Style / Ref..."
-        customers={customerOptions} customerId={customerId} onCustomerChange={setCustomerId}
+        customers={customerOptions} customerId={customerId} onCustomerChange={handleCustomerChange}
         buyers={buyerOptions} buyerId={buyerId} onBuyerChange={setBuyerId}
         garmentsOptions={garmentsOptions} garments={garments} onGarmentsChange={setGarments}
         dateFrom={dateFrom} onDateFromChange={setDateFrom} dateTo={dateTo} onDateToChange={setDateTo}

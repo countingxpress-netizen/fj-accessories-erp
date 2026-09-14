@@ -30,11 +30,23 @@ export default function InvoicesTable({ invoices: allInvoices, buyerNameMap = {}
     return Array.from(seen, ([value, label]) => ({ value, label })).sort((a, b) => a.label.localeCompare(b.label));
   }, [allInvoices]);
 
+  // Customer সিলেক্ট থাকলে Buyer ড্রপডাউন শুধু সেই কাস্টমারের Invoice-গুলোর বায়ারই দেখাবে।
+  const invoicesForOptions = useMemo(
+    () => (customerId ? allInvoices.filter((inv: any) => inv.customer_id === customerId) : allInvoices),
+    [allInvoices, customerId]
+  );
+
   const buyerOptions = useMemo(() => {
     const ids = new Set<string>();
-    allInvoices.forEach((inv: any) => invoiceBuyerIds(inv).forEach((id) => ids.add(id)));
+    invoicesForOptions.forEach((inv: any) => invoiceBuyerIds(inv).forEach((id) => ids.add(id)));
     return Array.from(ids).map((id) => ({ value: id, label: buyerNameMap[id] ?? id })).sort((a, b) => a.label.localeCompare(b.label));
-  }, [allInvoices, buyerNameMap]);
+  }, [invoicesForOptions, buyerNameMap]);
+
+  // Customer বদলালে আগের Buyer সিলেকশন নতুন কাস্টমারে নাও থাকতে পারে — রিসেট করি।
+  function handleCustomerChange(v: string) {
+    setCustomerId(v);
+    setBuyerId("");
+  }
 
   const invoices = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -80,7 +92,7 @@ export default function InvoicesTable({ invoices: allInvoices, buyerNameMap = {}
     <div>
       <ListFilterBar
         search={search} onSearchChange={setSearch} searchPlaceholder="Invoice No / Customer..."
-        customers={customerOptions} customerId={customerId} onCustomerChange={setCustomerId}
+        customers={customerOptions} customerId={customerId} onCustomerChange={handleCustomerChange}
         buyers={buyerOptions} buyerId={buyerId} onBuyerChange={setBuyerId}
         dateFrom={dateFrom} onDateFromChange={setDateFrom} dateTo={dateTo} onDateToChange={setDateTo}
         onClear={clearFilters}

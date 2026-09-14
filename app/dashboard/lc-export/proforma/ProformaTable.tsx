@@ -21,17 +21,31 @@ export default function ProformaTable({ rows }: { rows: Row[] }) {
     return Array.from(seen, ([value, label]) => ({ value, label })).sort((a, b) => a.label.localeCompare(b.label));
   }, [rows]);
 
+  // Customer সিলেক্ট থাকলে Buyer/Garments ড্রপডাউন শুধু সেই কাস্টমারের PI-গুলো থেকেই বানাব —
+  // অন্য কাস্টমারের বায়ার/গার্মেন্টস মিশে থাকবে না।
+  const rowsForOptions = useMemo(
+    () => (customerId ? rows.filter((r) => r.pi.customer_id === customerId) : rows),
+    [rows, customerId]
+  );
+
   const buyerOptions = useMemo(() => {
     const set = new Set<string>();
-    rows.forEach((r) => { if (r.pi.buyer_name) set.add(r.pi.buyer_name); });
+    rowsForOptions.forEach((r) => { if (r.pi.buyer_name) set.add(r.pi.buyer_name); });
     return Array.from(set).sort().map((v) => ({ value: v, label: v }));
-  }, [rows]);
+  }, [rowsForOptions]);
 
   const garmentsOptions = useMemo(() => {
     const set = new Set<string>();
-    rows.forEach((r) => { if (r.garments && r.garments !== "-") set.add(r.garments); });
+    rowsForOptions.forEach((r) => { if (r.garments && r.garments !== "-") set.add(r.garments); });
     return Array.from(set).sort().map((v) => ({ value: v, label: v }));
-  }, [rows]);
+  }, [rowsForOptions]);
+
+  // Customer বদলালে আগের Buyer/Garments সিলেকশন নতুন কাস্টমারে নাও থাকতে পারে — রিসেট করি।
+  function handleCustomerChange(v: string) {
+    setCustomerId(v);
+    setBuyerName("");
+    setGarments("");
+  }
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -57,7 +71,7 @@ export default function ProformaTable({ rows }: { rows: Row[] }) {
     <div>
       <ListFilterBar
         search={search} onSearchChange={setSearch} searchPlaceholder="PI No / Buyer / Customer..."
-        customers={customerOptions} customerId={customerId} onCustomerChange={setCustomerId}
+        customers={customerOptions} customerId={customerId} onCustomerChange={handleCustomerChange}
         buyers={buyerOptions} buyerId={buyerName} onBuyerChange={setBuyerName}
         garmentsOptions={garmentsOptions} garments={garments} onGarmentsChange={setGarments}
         dateFrom={dateFrom} onDateFromChange={setDateFrom} dateTo={dateTo} onDateToChange={setDateTo}
