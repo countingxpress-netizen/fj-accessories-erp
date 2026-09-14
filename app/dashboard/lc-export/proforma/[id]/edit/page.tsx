@@ -27,7 +27,8 @@ export default async function EditProformaPage({ params }: { params: Promise<{ i
       .from("bookings")
       .select("id, booking_no, booking_date, quantity_pcs, product_id, customer_id, style, customer_booking_ref, garments_name, buyer_id, buyers(name), merchants(name), measurement_type, measurement_unit, length_val, width_val, flap_val, gusset_val, pillow_val, pi_thickness_mm, material_type, has_print, print_colors, rate_per_color, plain_cm_conversion, finished_goods(product_name, length_cm, width_cm, thickness)")
       .eq("customer_id", pi.customer_id)
-      .order("booking_date", { ascending: false });
+      .order("booking_date", { ascending: false })
+      .order("created_at", { ascending: true });
 
     const { data: usedItems } = await supabase.from("pi_items").select("booking_id").not("booking_id", "is", null);
     const usedIds = new Set((usedItems ?? []).map((it: any) => it.booking_id));

@@ -18,7 +18,8 @@ export default async function NewDeliveryChallanPage() {
       .from("bookings")
       .select("id, booking_no, quantity_pcs, product_id, customer_id, warehouse_id, style, garments_name, buyers(name), merchants(name), delivery_point, customer_booking_ref, finished_goods(product_name)")
       .neq("status", "cancelled")
-      .order("booking_date", { ascending: false }),
+      .order("booking_date", { ascending: false })
+      .order("created_at", { ascending: true }),
     supabase.from("warehouses").select("id, name").order("name"),
     supabase.from("delivery_challan_items").select("quantity_pcs, booking_id, delivery_challans(booking_id)"),
     // প্রতিটা product কোন warehouse-এ কত pcs আছে — challan ফর্মে warehouse বাছাই ও

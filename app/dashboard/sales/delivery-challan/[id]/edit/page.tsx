@@ -42,7 +42,7 @@ export default async function EditChallanPage({ params }: { params: Promise<{ id
       supabase.from("customers").select("id, name, code").order("name"),
       supabase.from("bookings")
         .select("id, booking_no, quantity_pcs, product_id, customer_id, warehouse_id, style, garments_name, buyers(name), merchants(name), delivery_point, customer_booking_ref, finished_goods(product_name)")
-        .neq("status", "cancelled").order("booking_date", { ascending: false }),
+        .neq("status", "cancelled").order("booking_date", { ascending: false }).order("created_at", { ascending: true }),
       supabase.from("warehouses").select("id, name").order("name"),
       supabase.from("delivery_challan_items").select("quantity_pcs, booking_id, challan_id"),
       supabase.from("finished_goods_stock").select("product_id, warehouse_id, quantity_pcs"),

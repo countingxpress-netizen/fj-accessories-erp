@@ -296,17 +296,16 @@ export default function ProformaForm({
     return roundPrice((parseFloat(bookingPrice[id] || "0") || 0) + (parseFloat(bookingAdjust[id] || "0") || 0));
   }
 
-  const bookingLineItems = Object.keys(selectedBookings)
-    .filter((id) => selectedBookings[id])
-    .map((id) => {
-      const b = customerBookings.find((bk) => bk.id === id);
-      if (!b) return null;
-      const priceUnit = effectivePriceUnit(id);
-      const basis = bookingBasis[id] || "pcs";
+  // selectedBookings-এর key-order (click sequence) নয় — customerBookings-এর নিজস্ব
+  // order (booking entry sequence) থেকেই লাইন বসে, যাতে PI-র Sl No বুকিং এন্ট্রি সিরিয়াল মেনে চলে।
+  const bookingLineItems = customerBookings
+    .filter((b) => selectedBookings[b.id])
+    .map((b) => {
+      const priceUnit = effectivePriceUnit(b.id);
+      const basis = bookingBasis[b.id] || "pcs";
       const amount = calcLineAmount(b.quantity_pcs, priceUnit, basis);
       return { booking: b, priceUnit, basis, amount };
-    })
-    .filter((li): li is { booking: Booking; priceUnit: number; basis: "pcs" | "dzn"; amount: number } => li !== null);
+    });
 
   const manualLineItems = manualLines
     .filter((l) => l.description && parseFloat(l.qtyPcs) > 0)
