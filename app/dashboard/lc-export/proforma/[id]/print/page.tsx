@@ -30,7 +30,7 @@ export default async function PIPrintPage({ params }: { params: Promise<{ id: st
 
   const subtotal = (items ?? []).reduce((s, it: any) => {
     const amt = it.price_basis === "dzn" ? (it.qty_pcs / 12) * it.price_unit : it.qty_pcs * it.price_unit;
-    return s + amt;
+    return s + Math.round(amt * 100) / 100;
   }, 0);
   const discountAmount = pi.discount_type === "percentage" ? (subtotal * pi.discount_value) / 100
     : pi.discount_type === "fixed" ? pi.discount_value : 0;
@@ -38,6 +38,16 @@ export default async function PIPrintPage({ params }: { params: Promise<{ id: st
   const totalQtyPcs = (items ?? []).reduce((s, it: any) => s + it.qty_pcs, 0);
   const totalQtyDzn = totalQtyPcs / 12;
   const signatureUrl = pi.creator?.signature_url || company?.signature_url;
+
+  // একই Description (Style) পরপর কয়েক লাইনে থাকলে Excel টেমপলেটের মতোই একটা সেলে
+  // merge + center করে দেখানো হয় — rowSpan দিয়ে প্রথম রো-তে বসে, বাকিগুলোয় সেল বাদ যায়।
+  const descriptionSpans: number[] = new Array((items ?? []).length).fill(0);
+  for (let i = 0; i < (items ?? []).length; ) {
+    let j = i + 1;
+    while (j < (items ?? []).length && items![j].description === items![i].description) j++;
+    descriptionSpans[i] = j - i;
+    i = j;
+  }
 
   const excelRows: (string | number | null)[][] = [
     [company?.name || ""],
@@ -133,12 +143,19 @@ export default async function PIPrintPage({ params }: { params: Promise<{ id: st
           </tr>
         </thead>
         <tbody>
-          {(items ?? []).map((it: any) => {
+          {(items ?? []).map((it: any, idx: number) => {
             const amount = it.price_basis === "dzn" ? (it.qty_pcs / 12) * it.price_unit : it.qty_pcs * it.price_unit;
             return (
               <tr key={it.id}>
                 <td className="border border-gray-800 text-center py-1 px-2">{it.sl_no}</td>
-                <td className="border border-gray-800 py-1 px-2 whitespace-pre-line">{it.description}</td>
+                {descriptionSpans[idx] > 0 && (
+                  <td
+                    rowSpan={descriptionSpans[idx]}
+                    className="border border-gray-800 py-1 px-2 whitespace-pre-line text-center align-middle"
+                  >
+                    {it.description}
+                  </td>
+                )}
                 <td className="border border-gray-800 py-1 px-2">{it.measurement}</td>
                 <td className="border border-gray-800 text-right py-1 px-2">{it.qty_pcs.toLocaleString("en-IN")}</td>
                 <td className="border border-gray-800 text-right py-1 px-2">{money((it.qty_pcs / 12))}</td>

@@ -166,7 +166,7 @@ export default function ProformaForm({
     if (!rule || rule.pricing_rule === "manual") return 0;
     const rate = parseFloat(exchangeRate) || 107;
     const thickness = thicknessOverride ?? lineThickness(b);
-    const printRate = selectedCustomer?.default_print_rate ?? 0.2;
+    const printRate = rule.print_colors_default ?? selectedCustomer?.default_print_rate ?? 0.2;
     // Booking-এর Booking Date ধরে সেই দিনে কার্যকর Buyer Rate/Lbs (history না থাকলে
     // buyer-এর বর্তমান rate_per_lbs_value fallback)।
     const ratePerLbs = resolveRate(
@@ -286,8 +286,8 @@ export default function ProformaForm({
   }
 
   function calcLineAmount(qtyPcs: number, priceUnit: number, basis: "pcs" | "dzn") {
-    if (basis === "dzn") return (qtyPcs / 12) * priceUnit;
-    return qtyPcs * priceUnit;
+    const raw = basis === "dzn" ? (qtyPcs / 12) * priceUnit : qtyPcs * priceUnit;
+    return Math.round(raw * 100) / 100;
   }
 
   // Effective Price/Unit = (দেওয়া দাম + Adjustment) → precision অনুযায়ী round।
@@ -328,7 +328,7 @@ export default function ProformaForm({
     : manualLineItems.reduce((s, li) => s + li.weightLbs / 2.2, 0);
 
   useEffect(() => {
-    if (!weightTouched && autoWeightKg > 0) setTotalWeightKg(autoWeightKg.toFixed(2));
+    if (!weightTouched && autoWeightKg > 0) setTotalWeightKg(String(Math.round(autoWeightKg)));
   }, [autoWeightKg, weightTouched]);
 
   useEffect(() => {
@@ -730,8 +730,8 @@ export default function ProformaForm({
           <div className="flex items-center gap-2">
             <input type="number" step="0.01" value={totalWeightKg} onChange={(e) => { setTotalWeightKg(e.target.value); setWeightTouched(true); }} className="rounded-lg border px-3 py-2 text-sm w-32" />
             {weightTouched && autoWeightKg > 0 && (
-              <button type="button" onClick={() => { setWeightTouched(false); setTotalWeightKg(autoWeightKg.toFixed(2)); }} className="text-xs text-blue-600 hover:underline whitespace-nowrap">
-                Auto {money(autoWeightKg)}
+              <button type="button" onClick={() => { setWeightTouched(false); setTotalWeightKg(String(Math.round(autoWeightKg))); }} className="text-xs text-blue-600 hover:underline whitespace-nowrap">
+                Auto {Math.round(autoWeightKg)}
               </button>
             )}
           </div>
