@@ -52,6 +52,11 @@ export default async function CustomerLedgerDetailPage({
     .select("sale_no, sale_date, amount")
     .eq("customer_id", id);
 
+  const { data: rawMaterialSales } = await supabase
+    .from("raw_material_sales")
+    .select("sale_no, sale_date, amount")
+    .eq("customer_id", id);
+
   type Row = { date: string; type: "opening" | "invoice" | "payment"; ref: string; desc: string; debit: number; credit: number };
   const rows: Row[] = [];
 
@@ -75,6 +80,10 @@ export default async function CustomerLedgerDetailPage({
 
   (wastageSales ?? []).forEach((w: any) => {
     rows.push({ date: w.sale_date, type: "invoice", ref: w.sale_no, desc: "Wastage / Scrap বিক্রি (বাকি)", debit: Number(w.amount || 0), credit: 0 });
+  });
+
+  (rawMaterialSales ?? []).forEach((r: any) => {
+    rows.push({ date: r.sale_date, type: "invoice", ref: r.sale_no, desc: "Raw Material বিক্রি (বাকি)", debit: Number(r.amount || 0), credit: 0 });
   });
 
   rows.sort((a, b) => a.date.localeCompare(b.date));
