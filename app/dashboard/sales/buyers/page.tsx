@@ -8,10 +8,10 @@ export default async function BuyersPage() {
   const { data: customers } = await supabase.from("customers").select("id, name").order("name");
   const { data: buyers } = await supabase.from("buyers").select("*, customers(name)").order("name");
 
-  const grouped: Record<string, { customerName: string; items: any[] }> = {};
+  const grouped: Record<string, { customerId: string; customerName: string; items: any[] }> = {};
   (buyers ?? []).forEach((b: any) => {
     const key = b.customer_id;
-    if (!grouped[key]) grouped[key] = { customerName: b.customers?.name ?? "-", items: [] };
+    if (!grouped[key]) grouped[key] = { customerId: b.customer_id, customerName: b.customers?.name ?? "-", items: [] };
     grouped[key].items.push(b);
   });
 
