@@ -12,6 +12,10 @@ export default async function NewBookingPage() {
     .order("name");
   const { data: garmentsMaster } = await supabase.from("garments").select("id, customer_id, name, address").order("name");
   const { data: merchantsMaster } = await supabase.from("merchants").select("id, name").order("name");
+  const { data: bookingMerchantLinks } = await supabase
+    .from("bookings")
+    .select("customer_id, merchant_id")
+    .not("merchant_id", "is", null);
   const { data: priceHistory } = await supabase
     .from("rate_history")
     .select("customer_id, effective_from, rate, material_type")
@@ -23,6 +27,7 @@ export default async function NewBookingPage() {
       <BookingForm
         customers={customers ?? []} warehouses={warehouses ?? []} materials={materials ?? []}
         buyersMaster={buyersMaster ?? []} garmentsMaster={garmentsMaster ?? []} merchantsMaster={merchantsMaster ?? []}
+        bookingMerchantLinks={(bookingMerchantLinks ?? []) as any}
         priceHistory={(priceHistory ?? []) as any}
       />
     </div>

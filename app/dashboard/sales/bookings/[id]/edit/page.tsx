@@ -112,7 +112,7 @@ export default async function EditBookingPage({ params }: { params: Promise<{ id
   const [
     { data: customers }, { data: warehouses }, { data: materials },
     { data: buyersMaster }, { data: garmentsMaster }, { data: merchantsMaster }, { data: priceHistory },
-    { data: autoInvoice },
+    { data: autoInvoice }, { data: bookingMerchantLinks },
   ] = await Promise.all([
     supabase.from("customers").select("*").order("name"),
     supabase.from("warehouses").select("id, name").order("name"),
@@ -122,6 +122,7 @@ export default async function EditBookingPage({ params }: { params: Promise<{ id
     supabase.from("merchants").select("id, name").order("name"),
     supabase.from("rate_history").select("customer_id, effective_from, rate, material_type").not("customer_id", "is", null),
     supabase.from("sales_invoices").select("payment_received").eq("source_booking_group_id", groupId).eq("auto_generated", true).maybeSingle(),
+    supabase.from("bookings").select("customer_id, merchant_id").not("merchant_id", "is", null),
   ]);
 
   const warehouseName: Record<string, string> = {};
@@ -216,6 +217,7 @@ export default async function EditBookingPage({ params }: { params: Promise<{ id
         buyersMaster={buyersMaster ?? []}
         garmentsMaster={garmentsMaster ?? []}
         merchantsMaster={merchantsMaster ?? []}
+        bookingMerchantLinks={(bookingMerchantLinks ?? []) as any}
         priceHistory={(priceHistory ?? []) as any}
         editContext={editContext}
       />

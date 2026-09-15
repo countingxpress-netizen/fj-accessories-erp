@@ -257,10 +257,15 @@ export type BookingEditContext = {
 
 export default function BookingForm({
   customers, warehouses, materials, buyersMaster, garmentsMaster, merchantsMaster, priceHistory,
+  bookingMerchantLinks = [],
   editContext,
 }: {
   customers: Customer[]; warehouses: Warehouse[]; materials: Material[];
   buyersMaster: BuyerMaster[]; garmentsMaster: GarmentMaster[]; merchantsMaster: MerchantMaster[]; priceHistory: PriceHistoryRow[];
+  // merchants টেবিলে customer_id নেই (merchant কোনো নির্দিষ্ট কাস্টমারের মালিকানাধীন না) —
+  // তাই কাস্টমার-ভিত্তিক scoping বুকিং-হিস্ট্রি থেকে বের করতে হয় (কোন merchant আগে এই
+  // কাস্টমারের বুকিং-এ ব্যবহৃত হয়েছে) — ঠিক যেভাবে Style filter করা হয় ProformaForm-এ।
+  bookingMerchantLinks?: { customer_id: string; merchant_id: string }[];
   editContext?: BookingEditContext;
 }) {
   const isEdit = !!editContext;
@@ -386,6 +391,12 @@ export default function BookingForm({
 
   // আইরিশ / দেবনিয়ার গার্মেন্টস (Customer) — cm→inch এ die-size টেবিল বাদ, সরল ÷2.54
   const customerPlainCmConversion = !!customersList.find((c) => c.id === customerId)?.plain_cm_conversion;
+
+  // Merchant কোনো নির্দিষ্ট কাস্টমারের মালিকানাধীন না (merchants টেবিলে customer_id নেই),
+  // তাই আগে এই কাস্টমারের বুকিং-এ যে merchant-গুলো ব্যবহৃত হয়েছে সেগুলোই দেখানো হয়।
+  const merchantsForCustomer = customerId
+    ? merchantsList.filter((m) => bookingMerchantLinks.some((l) => l.customer_id === customerId && l.merchant_id === m.id))
+    : merchantsList;
 
   function updateRow(rowId: string, field: keyof MeasurementRow, value: string | boolean) {
     setRows((prev) => prev.map((r) => (r.rowId === rowId ? { ...r, [field]: value } : r)));
@@ -1120,7 +1131,7 @@ export default function BookingForm({
             className="w-full rounded-lg border px-3 py-2 text-sm"
           >
             <option value="">-- বাছুন --</option>
-            {merchantsList.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+            {merchantsForCustomer.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
           </select>
           <input value={merchantNameInput} onChange={(e) => { setMerchantNameInput(e.target.value); if (!e.target.value.trim()) setMerchantId(""); }} className="mt-2 w-full rounded-lg border px-3 py-2 text-sm" placeholder="নতুন Merchant লিখুন" />
           <p className="mt-1 text-xs text-gray-500">নতুন Merchant লিখলে সাবমিটের সময় অটোমেটিক যোগ হবে</p>
