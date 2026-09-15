@@ -3,7 +3,7 @@ import { useState, useEffect, Fragment } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { generatePiNo } from "@/lib/docNumber";
-import { calcPiUnitPrice, calcPiUnitPriceBreakdown, calcPiUnitPriceWithMarkup, calcPiWeightLbs, calcTubeCutting, toInches } from "@/lib/calcTubeCutting";
+import { calcPiUnitPrice, calcPiUnitPriceBreakdown, calcPiUnitPriceWithMarkup, calcPiWeightLbs, calcTubeCutting, toInches, convertBreakdownToPrice } from "@/lib/calcTubeCutting";
 import { resolveRate } from "@/lib/rateHistory";
 import { amountInWords } from "@/lib/numberToWords";
 import { getCurrentUserId } from "@/lib/currentUser";
@@ -244,14 +244,13 @@ export default function ProformaForm({
   function computeFinalPrice(b: Booking, patch?: BreakdownPatch, rateOverride?: string, basisOverride?: "pcs" | "dzn") {
     const rate = parseFloat(rateOverride ?? exchangeRate) || 107;
     const basis = basisOverride ?? bookingBasis[b.id] ?? "pcs";
-    const factor = basisFactor(basis);
     const bd = lineBreakdown(b, patch);
     const r = resolvedLineInputs(b, patch, basis);
-    const bdt = bd.withMarkup * factor;
-    const baseInCurrency = currency === "USD" ? bdt / rate : bdt;
-    const extraInCurrency = currency === "USD" ? r.extra : r.extra * rate;
-    const otherChargeInCurrency = currency === "USD" ? r.otherCharge / rate : r.otherCharge;
-    return { bd, r, basis, priceInCurrency: baseInCurrency + extraInCurrency + otherChargeInCurrency };
+    const priceInCurrency = convertBreakdownToPrice({
+      withMarkupBdt: bd.withMarkup, extraUsd: r.extra, otherChargeBdt: r.otherCharge,
+      basis, currency, exchangeRate: rate,
+    });
+    return { bd, r, basis, priceInCurrency };
   }
 
   // breakdown-এর কোনো ফিল্ড বদলালে (existing changeThickness-এর মতোই কনভেনশন) Price/Unit

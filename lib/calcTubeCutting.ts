@@ -147,15 +147,48 @@ export type PiUnitPriceBreakdown = {
   weightLbs: number;
 };
 
-// AT Accessories বাদে বাকি সব কাস্টমারের New PI "Booking" মোডে প্রতিটা লাইনের দাম-ব্রেকডাউন
-// স্বচ্ছভাবে দেখানো ও এডিট করার জন্য (calcPiUnitPriceWithMarkup-এর মতোই সূত্র):
+export type PiBreakdownCore = { base: number; subtotal: number; withMarkup: number };
+
+// বুকিং ছাড়াই — শুধু সংখ্যা থেকে — base/subtotal/withMarkup বের করে। New PI (বুকিং থেকে
+// Tube"/Cutting" ডেরাইভ করে) আর Edit PI (আগে থেকেই সেভ করা tube_inch/cutting_inch থেকে,
+// কোনো বুকিং অবজেক্ট ছাড়াই) — দুটোতেই এই একই কোর ফর্মুলা লাগে, তাই আলাদা করা:
 //   subtotal   = round(base + adhesiveCharge + printCharge)
-//   withMarkup = subtotal × (1 + percentageValue/100)
-// এই withMarkup-ই একমাত্র "per-Pc" পরিমাণ — Basis Dzn হলে caller (ProformaForm.tsx)
-// এটাকে ×12 করে। Extra আর Other Charge এখানে নেই — দুটোই Basis-লিঙ্কড (ইউজার যেই
-// Basis-এ টাইপ করেছে সেটাই সরাসরি, কোনো ×12 হয় না) এবং কারেন্সি-কনভার্সনের নিয়মও আলাদা
-// (Extra সবসময় USD — getSuggestedPrice()-এর কনভেনশনে; Other Charge BDT, rate দিয়ে ভাগ
-// হয়) — তাই computeFinalPrice()-এ যোগ হয়, এখানে না।
+//   withMarkup = subtotal × (1 + percentageValue/100)   ← per-Pc, BDT
+export function calcPiBreakdownCore(opts: {
+  pricePerLbs: number; tubeInch: number; cuttingInch: number; thicknessMm: number;
+  adhesiveCharge: number; printCharge: number; percentageValue?: number;
+}): PiBreakdownCore {
+  if (!opts.thicknessMm || !opts.tubeInch || !opts.cuttingInch || !opts.pricePerLbs) {
+    return { base: 0, subtotal: 0, withMarkup: 0 };
+  }
+  const base = (opts.pricePerLbs * opts.tubeInch * opts.cuttingInch * opts.thicknessMm) / 75000;
+  const subtotal = round2(round4(base + opts.adhesiveCharge + opts.printCharge));
+  const withMarkup = subtotal * (1 + (opts.percentageValue || 0) / 100);
+  return { base, subtotal, withMarkup };
+}
+
+// withMarkup (BDT, per-Pc) + Extra (USD, buyers.usd_surcharge_per_pc-এর কনভেনশন) +
+// Other Charge (BDT) থেকে ফাইনাল Price/Unit (currency-তে) বানায়। Extra/Other Charge
+// দুটোই Basis-লিঙ্কড — ইউজার যেই Basis-এ টাইপ করেছে সেটাই সরাসরি (কোনো ×12 হয় না),
+// শুধু withMarkup-টাই (per-Pc বলে) Basis Dzn হলে ×12 হয়। New PI আর Edit PI দুটোতেই
+// এই একই ফাংশন — ফর্মুলা কখনো আলাদা হয়ে না যায়।
+export function convertBreakdownToPrice(opts: {
+  withMarkupBdt: number; extraUsd: number; otherChargeBdt: number;
+  basis: "pcs" | "dzn"; currency: string; exchangeRate: number;
+}): number {
+  const factor = opts.basis === "dzn" ? 12 : 1;
+  const rate = opts.exchangeRate || 107;
+  const bdt = opts.withMarkupBdt * factor;
+  const baseInCurrency = opts.currency === "USD" ? bdt / rate : bdt;
+  const extraInCurrency = opts.currency === "USD" ? opts.extraUsd : opts.extraUsd * rate;
+  const otherChargeInCurrency = opts.currency === "USD" ? opts.otherChargeBdt / rate : opts.otherChargeBdt;
+  return baseInCurrency + extraInCurrency + otherChargeInCurrency;
+}
+
+// AT Accessories বাদে বাকি সব কাস্টমারের New PI "Booking" মোডে প্রতিটা লাইনের দাম-ব্রেকডাউন
+// স্বচ্ছভাবে দেখানো ও এডিট করার জন্য — বুকিং থেকে Tube"/Cutting" বের করে calcPiBreakdownCore()
+// কল করে (Edit PI-তে ব্যবহৃত হয় না, ওখানে সরাসরি সেভ করা tube_inch/cutting_inch দিয়ে
+// calcPiBreakdownCore() সরাসরি কল হয়)।
 export function calcPiUnitPriceBreakdown(
   booking: any,
   opts: {
@@ -179,12 +212,6 @@ export function calcPiUnitPriceBreakdown(
   const tubeInch = opts.tubeInchOverride || computed.tubeInch;
   const cuttingInch = opts.cuttingInchOverride || computed.cuttingInch;
 
-  if (!thickness || !tubeInch || !cuttingInch || !opts.pricePerLbs) {
-    return { tubeInch, cuttingInch, base: 0, adhesiveCharge: 0, printCharge: 0, subtotal: 0, withMarkup: 0, weightLbs: 0 };
-  }
-
-  const base = (opts.pricePerLbs * tubeInch * cuttingInch * thickness) / 75000;
-
   const hasAdhesive = hasAdhesiveCharge(booking.measurement_type);
   const adhesiveCharge = opts.adhesiveChargeOverride != null
     ? opts.adhesiveChargeOverride
@@ -196,12 +223,14 @@ export function calcPiUnitPriceBreakdown(
     ? opts.printChargeOverride
     : colors * printRate * (cuttingInch > 29 ? 2 : 1);
 
-  const subtotal = round2(round4(base + adhesiveCharge + printCharge));
-  const withMarkup = subtotal * (1 + (opts.percentageValue || 0) / 100);
+  const core = calcPiBreakdownCore({
+    pricePerLbs: opts.pricePerLbs, tubeInch, cuttingInch, thicknessMm: thickness || 0,
+    adhesiveCharge, printCharge, percentageValue: opts.percentageValue,
+  });
 
-  const weightLbs = (opts.qtyPcs * tubeInch * cuttingInch * thickness) / 75000;
+  const weightLbs = thickness && tubeInch && cuttingInch ? (opts.qtyPcs * tubeInch * cuttingInch * thickness) / 75000 : 0;
 
-  return { tubeInch, cuttingInch, base, adhesiveCharge, printCharge, subtotal, withMarkup, weightLbs };
+  return { tubeInch, cuttingInch, adhesiveCharge, printCharge, ...core, weightLbs };
 }
 
 export { round2 as piRound2, round4 as piRound4 };

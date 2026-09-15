@@ -47,7 +47,7 @@ export default async function EditProformaPage({ params }: { params: Promise<{ i
   }
 
   const { data: customerRow } = pi.customer_id
-    ? await supabase.from("customers").select("default_print_rate").eq("id", pi.customer_id).single()
+    ? await supabase.from("customers").select("code, default_print_rate").eq("id", pi.customer_id).single()
     : { data: null };
 
   return (
@@ -63,6 +63,7 @@ export default async function EditProformaPage({ params }: { params: Promise<{ i
         buyerRateHistory={buyerRateHistory as any}
         lastUnitPriceByBooking={lastUnitPriceByBooking}
         customerDefaultPrintRate={customerRow?.default_print_rate ?? null}
+        isAtAccessories={customerRow?.code === "AT"}
       />
     </div>
   );
