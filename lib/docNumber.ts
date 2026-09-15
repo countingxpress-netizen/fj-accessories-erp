@@ -44,12 +44,9 @@ export function deriveCustomerCode(name: string): string {
 // কাস্টমার-প্রতি আলাদা সিরিজ: {docPrefix}/FNJ-{seq}-{CODE}/{year} — seq প্রতি কাস্টমারের
 // নিজের কোডের মধ্যে সবচেয়ে বড় সংখ্যা +1 (কখনো delete হলেও ঠিক থাকে, count-based না)।
 // customer-এর code না থাকলে নাম থেকে ডিরাইভ; একেবারেই না পেলে পুরনো গ্লোবাল
-// {docPrefix}-{year}-{NNNN} ফরম্যাটে fallback করে। PI (generatePiNo) আর Delivery
-// Challan (generateChallanNo) দুটোতেই ব্যবহৃত — নতুন কোনো ডকুমেন্টেও একই প্যাটার্নে
-// কাস্টমার-ভিত্তিক নম্বর লাগলে এটাই রিইউজ করুন।
-// ERP-এ ঢোকার আগে কাস্টমারের কাগজের চালান বইয়ে যে সিরিয়াল পর্যন্ত ব্যবহার হয়ে গেছে,
-// সেটাকেও maxNum হিসাব করার সময় বিবেচনায় নেয় (customers.challan_next_serial_hint থেকে
-// আসা "পরবর্তী সিরিয়াল" বাদ ১) — যাতে কাস্টমারের প্রথম ERP চালান শূন্য থেকে শুরু না করে।
+// {docPrefix}-{year}-{NNNN} ফরম্যাটে fallback করে। এখন শুধু PI (generatePiNo)-তে
+// ব্যবহৃত — Delivery Challan প্লেইন সিরিয়াল ব্যবহার করে (নিচে generateChallanNo দেখুন,
+// ওখানে prefix/code লাগে না)। নতুন কোনো কোডেড ডকুমেন্ট নম্বর লাগলে এটাই রিইউজ করুন।
 export function buildCustomerCodedDocNo(
   docPrefix: string,
   customer: { name?: string | null; code?: string | null } | null,
@@ -105,13 +102,29 @@ export async function generatePiNo(
   return generateCustomerCodedDocNo(supabase, "proforma_invoices", "pi_no", "PI", "pi_date", customer, piDate);
 }
 
+// Delivery Challan নম্বর — prefix/customer-code/year ছাড়া শুধু প্লেইন সিরিয়াল (কাগজের
+// চালান বইয়ের নম্বরের মতো, যেমন শুধু "20399")। প্রতিটা কাস্টমারের নিজের বই/সিরিজ, তাই
+// এই কাস্টমারের বিদ্যমান delivery_challans-এর challan_no-গুলোর মধ্যে সবচেয়ে বড় সংখ্যা +1
+// (challan_next_serial_hint থাকলে সেটাকেও floor হিসেবে বিবেচনা করা হয়)। DB-তে
+// UNIQUE(customer_id, challan_no) — তাই দুই ভিন্ন কাস্টমারের নম্বর মিলে যেতে পারে, সমস্যা না।
 export async function generateChallanNo(
   supabase: SupabaseClient,
-  customer: { name?: string | null; code?: string | null; challan_next_serial_hint?: number | null } | null,
-  challanDate: string
+  customer: { id: string; challan_next_serial_hint?: number | null } | null,
+  _challanDate: string
 ): Promise<string> {
-  return generateCustomerCodedDocNo(
-    supabase, "delivery_challans", "challan_no", "DC", "challan_date", customer, challanDate,
-    customer?.challan_next_serial_hint
-  );
+  if (!customer?.id) return "1";
+
+  const { data } = await supabase
+    .from("delivery_challans")
+    .select("challan_no")
+    .eq("customer_id", customer.id);
+
+  let maxNum = customer.challan_next_serial_hint && customer.challan_next_serial_hint > 0
+    ? customer.challan_next_serial_hint - 1 : 0;
+  (data ?? []).forEach((row: any) => {
+    const n = parseInt(row.challan_no, 10);
+    if (Number.isFinite(n) && n > maxNum) maxNum = n;
+  });
+
+  return String(maxNum + 1);
 }

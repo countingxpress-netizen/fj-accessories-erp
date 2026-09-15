@@ -2,7 +2,8 @@
 import { useEffect, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
 import ChallanPrintButton from "./ChallanPrintButton";
-import { downloadExcel } from "@/lib/exportExcel";
+import { downloadChallanExcel } from "@/lib/exportChallanExcel";
+import { groupChallanItemsByProduct } from "@/lib/challanProductGroups";
 
 const nf = new Intl.NumberFormat("en-US");
 
@@ -21,33 +22,8 @@ export default function ChallanPrintView({
   const totalPackets = items.reduce((s, i) => s + Number(i.packets || 0), 0);
   const hasPackets = items.some((i) => i.packets != null);
 
-  function handleExcelDownload() {
-    const rows: (string | number | null)[][] = [
-      [company?.name || ""],
-      [company?.address || ""],
-      [`Phone: ${company?.phone || ""} | Email: ${company?.email || ""}`],
-      [],
-      ["Delivery Challan"],
-      [],
-      ["Deliver To:", "", "", "", "Challan No:", challan.challan_no],
-      [challan.delivery_point || challan.customers?.name || "-", "", "", "", "Date:", challanDateLabel],
-      ...(challan.buyer_name ? [[`Buyer: ${challan.buyer_name}`]] : []),
-      ...(challan.merchant_name ? [[`Merchant: ${challan.merchant_name}`]] : []),
-      ...(challan.style ? [[`Style: ${challan.style}`]] : []),
-      ...(challan.customer_booking_ref ? [[`Customer Booking Ref: ${challan.customer_booking_ref}`]] : []),
-      [],
-      hasPackets ? ["Product", "Measurement", "Quantity", "Packets"] : ["Product", "Measurement", "Quantity"],
-      ...items.map((item) => {
-        const label = item.print_label || item.finished_goods?.product_name || "-";
-        const row: (string | number)[] = [label, measurementByItem[item.id] || "-", Number(item.quantity_pcs || 0)];
-        if (hasPackets) row.push(Number(item.packets || 0));
-        return row;
-      }),
-      hasPackets ? ["Total", "", totalQty, totalPackets] : ["Total", "", totalQty],
-      [],
-      ["Received the above goods as per order with good condition."],
-    ];
-    downloadExcel(`Challan-${challan.challan_no}`, [{ name: "Challan", rows }]);
+  async function handleExcelDownload() {
+    await downloadChallanExcel({ challan, company, challanDateLabel, measurementByItem });
   }
 
   // এক পেজে না আঁটলে নন-প্রিন্ট ওয়ার্নিং — re-render ছাড়াই DOM-এ
@@ -58,13 +34,17 @@ export default function ChallanPrintView({
     }
   }, []);
 
-  async function saveLabel(itemId: string, text: string, fallback: string) {
+  // মার্জ করা Product সেল এডিট করলে গ্রুপের সবগুলো লাইনেই লেবেল বসে — যাতে পরে qty/packets
+  // বদলে গ্রুপ ভেঙে গেলেও প্রতিটা লাইনের লেবেল ঠিক থাকে
+  async function saveLabel(itemIds: string[], text: string, fallback: string) {
     const clean = text.trim();
     await supabase
       .from("delivery_challan_items")
       .update({ print_label: clean && clean !== fallback ? clean : null })
-      .eq("id", itemId);
+      .in("id", itemIds);
   }
+
+  const groupedItems = groupChallanItemsByProduct(items);
 
   return (
     <div className="mx-auto max-w-[210mm] bg-white text-gray-900 challan-root">
@@ -135,20 +115,28 @@ export default function ChallanPrintView({
               </tr>
             </thead>
             <tbody>
-              {items.map((item) => {
-                const fallback = item.finished_goods?.product_name || "-";
+              {groupedItems.map((g, idx) => {
+                const item = g.item;
                 return (
                   <tr key={item.id} className="border-b">
-                    <td className="py-1.5 pr-3">
-                      <span
-                        className="cell-edit inline-block min-w-[3rem]"
-                        contentEditable
-                        suppressContentEditableWarning
-                        onBlur={(e) => saveLabel(item.id, e.currentTarget.textContent || "", fallback)}
+                    {g.groupStart && (
+                      <td
+                        className={`py-1.5 pr-3 align-middle${g.groupSize > 1 ? " text-center" : ""}`}
+                        rowSpan={g.groupSize}
                       >
-                        {item.print_label || fallback}
-                      </span>
-                    </td>
+                        <span
+                          className="cell-edit inline-block min-w-[3rem]"
+                          contentEditable
+                          suppressContentEditableWarning
+                          onBlur={(e) => {
+                            const groupIds = groupedItems.slice(idx, idx + g.groupSize).map((x) => x.item.id);
+                            saveLabel(groupIds, e.currentTarget.textContent || "", g.label);
+                          }}
+                        >
+                          {g.label}
+                        </span>
+                      </td>
+                    )}
                     <td className="py-1.5 pr-3 text-gray-700">{measurementByItem[item.id] || "-"}</td>
                     <td className="py-1.5 text-right">{nf.format(Number(item.quantity_pcs || 0))} Pcs</td>
                     {hasPackets && <td className="py-1.5 text-right">{Number(item.packets || 0)} Pkts</td>}

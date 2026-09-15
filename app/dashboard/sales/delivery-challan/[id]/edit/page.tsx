@@ -14,12 +14,15 @@ export default async function EditChallanPage({ params }: { params: Promise<{ id
     .single();
   if (!challan) return notFound();
 
-  // শুধু সর্বশেষ চালান (highest challan_no) এডিট করা যায়
+  // শুধু এই কাস্টমারের সর্বশেষ চালান এডিট করা যায় — challan_no এখন প্লেইন সিরিয়াল
+  // (কাস্টমার-ভিত্তিক, string-max অর্থহীন), তাই created_at দিয়ে সাম্প্রতিকতম বের করা হয়
   const { data: latest } = await supabase
-    .from("delivery_challans").select("challan_no").order("challan_no", { ascending: false }).limit(1).maybeSingle();
+    .from("delivery_challans").select("id")
+    .eq("customer_id", challan.customer_id)
+    .order("created_at", { ascending: false }).limit(1).maybeSingle();
 
   const blocked =
-    latest?.challan_no !== challan.challan_no
+    latest?.id !== challan.id
       ? "শুধু সর্বশেষ চালানটাই এডিট করা যায় — এর পরে নতুন চালান তৈরি হয়ে গেছে।"
       : challan.delivery_status === "challan_received"
         ? "Challan Received হয়ে যাওয়া চালান আর এডিট করা যায় না।"

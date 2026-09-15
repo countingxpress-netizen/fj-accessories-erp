@@ -3,6 +3,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { formatDate } from "@/lib/formatDate";
 import { formatMeasurement } from "@/lib/formatMeasurement";
+import { cleanProductLabel } from "@/lib/cleanProductLabel";
 import DeliveryStatusBadge from "./DeliveryStatusBadge";
 
 const nf = new Intl.NumberFormat("en-US");
@@ -17,7 +18,7 @@ export default function ChallanRow({
   const totalPackets = items.reduce((s: number, i: any) => s + Number(i.packets || 0), 0);
   const hasPackets = items.some((i: any) => i.packets != null);
   const productNames = Array.from(
-    new Set(items.map((i: any) => i.print_label || i.finished_goods?.product_name).filter(Boolean)),
+    new Set(items.map((i: any) => i.print_label || cleanProductLabel(i.finished_goods?.product_name)).filter(Boolean)),
   ).join(", ");
 
   function measurementFor(item: any) {
@@ -87,7 +88,7 @@ export default function ChallanRow({
                 <tbody>
                   {items.map((it: any) => (
                     <tr key={it.id} className="border-t">
-                      <td className="px-3 py-1.5">{it.print_label || it.finished_goods?.product_name || "-"}</td>
+                      <td className="px-3 py-1.5">{it.print_label || cleanProductLabel(it.finished_goods?.product_name)}</td>
                       <td className="px-3 py-1.5 text-gray-500">{bkById[it.booking_id]?.booking_no ?? challan.bookings?.booking_no ?? "-"}</td>
                       <td className="px-3 py-1.5 text-gray-600">{measurementFor(it)}</td>
                       <td className="px-3 py-1.5 text-right">{nf.format(Number(it.quantity_pcs || 0))} Pcs</td>

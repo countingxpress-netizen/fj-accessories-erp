@@ -1,9 +1,9 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, Fragment } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { generatePiNo } from "@/lib/docNumber";
-import { calcPiUnitPrice, calcPiUnitPriceWithMarkup, calcPiWeightLbs, calcTubeCutting, toInches } from "@/lib/calcTubeCutting";
+import { calcPiUnitPrice, calcPiUnitPriceBreakdown, calcPiUnitPriceWithMarkup, calcPiWeightLbs, calcTubeCutting, toInches } from "@/lib/calcTubeCutting";
 import { resolveRate } from "@/lib/rateHistory";
 import { amountInWords } from "@/lib/numberToWords";
 import { getCurrentUserId } from "@/lib/currentUser";
@@ -28,6 +28,14 @@ type ManualLine = {
   description: string; measurement: string; qtyPcs: string; priceUnit: string; priceBasis: "pcs" | "dzn";
   tubeInch: string; cuttingInch: string; thicknessMm: string; // Weight অটো-ক্যালকুলেশনের জন্য, ঐচ্ছিক
 };
+// AT Accessories বাদে বাকি কাস্টমারদের বুকিং-লাইন দাম-ব্রেকডাউনে একটা ফিল্ড সদ্য বদলালে
+// সেই মানটা সরাসরি পাস করার জন্য (setState অ্যাসিঙ্ক বলে state read-back করলে এক টিক পুরনো
+// মান পাওয়া যেত) — lineThickness/lineTubeCuttingInches/lineQty/lineBreakdown সবাই এটা নেয়।
+type BreakdownPatch = Partial<{
+  qty: string; thickness: string; tubeInch: string; cuttingInch: string;
+  pricePerLbs: string; adhesivePc: string; printPc: string;
+  percentage: string; extra: string; otherCharge: string;
+}>;
 
 const DEFAULT_TERMS = `01) 100% IRREVOCABLE LETTER OF CREDIT AT SIGHT.
 02) PARTIAL SHIPMENT MUST BE ALLOWED IN THE L/C.
@@ -90,6 +98,7 @@ export default function ProformaForm({
   const [rateTouched, setRateTouched] = useState(false);
   const [discountType, setDiscountType] = useState<"none" | "percentage" | "fixed">("none");
   const [discountValue, setDiscountValue] = useState("0");
+  const [adjustmentAmount, setAdjustmentAmount] = useState("0"); // Subtotal-Discount-এর উপরে ± ম্যানুয়াল সংশোধনী
   const [priceDecimals, setPriceDecimals] = useState("4");
   const [termsConditions, setTermsConditions] = useState(DEFAULT_TERMS);
   const [garmentsAddress, setGarmentsAddress] = useState("");
@@ -110,6 +119,20 @@ export default function ProformaForm({
   const [bookingBasis, setBookingBasis] = useState<Record<string, "pcs" | "dzn">>({});
   const [bookingThickness, setBookingThickness] = useState<Record<string, string>>({});
 
+  // AT Accessories বাদে বাকি সব কাস্টমারের জন্য — প্রতি লাইনের দাম-ব্রেকডাউন (স্বচ্ছ, এডিটেবল)।
+  // Description/Measurement/Qty (Pcs)-ও এই কাস্টমারদের জন্য এডিটেবল, তাই আলাদা override state।
+  const [bookingDescription, setBookingDescription] = useState<Record<string, string>>({});
+  const [bookingMeasurement, setBookingMeasurement] = useState<Record<string, string>>({});
+  const [bookingQty, setBookingQty] = useState<Record<string, string>>({});
+  const [bookingTubeInch, setBookingTubeInch] = useState<Record<string, string>>({});
+  const [bookingCuttingInch, setBookingCuttingInch] = useState<Record<string, string>>({});
+  const [bookingPricePerLbs, setBookingPricePerLbs] = useState<Record<string, string>>({});
+  const [bookingAdhesivePc, setBookingAdhesivePc] = useState<Record<string, string>>({});
+  const [bookingPrintPc, setBookingPrintPc] = useState<Record<string, string>>({});
+  const [bookingPercentage, setBookingPercentage] = useState<Record<string, string>>({});
+  const [bookingExtra, setBookingExtra] = useState<Record<string, string>>({});
+  const [bookingOtherCharge, setBookingOtherCharge] = useState<Record<string, string>>({});
+
   const [manualLines, setManualLines] = useState<ManualLine[]>([
     { description: "", measurement: "", qtyPcs: "", priceUnit: "", priceBasis: "pcs", tubeInch: "", cuttingInch: "", thicknessMm: "" },
   ]);
@@ -121,14 +144,19 @@ export default function ProformaForm({
 
   const selectedCustomer = customers.find((c) => c.id === customerId);
   const selectedGarment = garments.find((g) => g.id === garmentsId);
+  // AT Accessories-এর জন্য পুরনো বাল্ক-টেবিল (single Price/Unit) অক্ষুণ্ণ থাকবে — বাকি সব
+  // কাস্টমারের জন্য নতুন লাইন-বাই-লাইন দাম-ব্রেকডাউন (ইনলাইন এক্সপ্যান্ড) দেখাবে।
+  const isAtAccessories = selectedCustomer?.code === "AT";
 
   // Price/Unit-এ দশমিকের পর কয় ঘর (auto-round + print display)
   const pd = Math.max(0, Math.min(8, parseInt(priceDecimals) || 4));
   const roundPrice = (n: number) => { const f = Math.pow(10, pd); return Math.round(n * f) / f; };
 
-  // per-line PI thickness (এডিটেবল) — না দিলে buyer-এর default
-  function lineThickness(b: Booking): number {
-    const raw = bookingThickness[b.id];
+  // per-line PI thickness (এডিটেবল) — না দিলে buyer-এর default। `patch` দিলে সেই মানটাই
+  // ব্যবহার হয় — state আপডেট আর তার উপর নির্ভরশীল ক্যালকুলেশন একই সিঙ্ক্রোনাস কলে করতে হলে
+  // (setState অ্যাসিঙ্ক বলে) সদ্য-বদলানো মান সরাসরি পাস করাই লাগে, state read-back না করে।
+  function lineThickness(b: Booking, patch?: BreakdownPatch): number {
+    const raw = patch?.thickness ?? bookingThickness[b.id];
     if (raw !== undefined && raw !== "") return parseFloat(raw) || 0;
     return getBuyerRule(b)?.pi_thickness_mm ?? b.pi_thickness_mm ?? 0;
   }
@@ -154,10 +182,95 @@ export default function ProformaForm({
   }
 
   // Booking-এর Tube"/Cutting" (inch) — pi_items-এ স্ন্যাপশট হিসেবে সেভ থাকে, যাতে
-  // Edit পেজে Thickness বদলালে Weight/Price/Unit রিক্যালকুলেট করা যায়।
-  function lineTubeCuttingInches(b: Booking): { tubeInch: number; cuttingInch: number } {
+  // Edit পেজে Thickness বদলালে Weight/Price/Unit রিক্যালকুলেট করা যায়। AT বাদে বাকি
+  // কাস্টমারদের জন্য ইউজার সরাসরি Tube Inch/Cutting Inch ওভাররাইড করতে পারে।
+  function lineTubeCuttingInches(b: Booking, patch?: BreakdownPatch): { tubeInch: number; cuttingInch: number } {
     const { tube, cutting } = calcTubeCutting(b);
-    return toInches(tube, cutting, b.measurement_unit, b.material_type, b.has_print, !!b.plain_cm_conversion);
+    const computed = toInches(tube, cutting, b.measurement_unit, b.material_type, b.has_print, !!b.plain_cm_conversion);
+    const tubeOverride = parseFloat((patch?.tubeInch ?? bookingTubeInch[b.id]) || "");
+    const cuttingOverride = parseFloat((patch?.cuttingInch ?? bookingCuttingInch[b.id]) || "");
+    return {
+      tubeInch: tubeOverride > 0 ? tubeOverride : computed.tubeInch,
+      cuttingInch: cuttingOverride > 0 ? cuttingOverride : computed.cuttingInch,
+    };
+  }
+
+  // Qty (Pcs) — AT বাদে বাকি কাস্টমারদের জন্য বুকিং থেকে অটো কিন্তু এডিটেবল
+  function lineQty(b: Booking, patch?: BreakdownPatch): number {
+    const raw = patch?.qty ?? bookingQty[b.id];
+    if (raw !== undefined && raw !== "") return parseFloat(raw) || 0;
+    return b.quantity_pcs;
+  }
+
+  function lineDescriptionText(b: Booking): string {
+    return bookingDescription[b.id] ?? buildBookingDescription(b);
+  }
+
+  function lineMeasurementText(b: Booking): string {
+    return bookingMeasurement[b.id] ?? formatMeasurement(b);
+  }
+
+  function lineWeightLbs(b: Booking, patch?: BreakdownPatch): number {
+    const { tubeInch, cuttingInch } = lineTubeCuttingInches(b, patch);
+    const thickness = lineThickness(b, patch);
+    if (!thickness || !tubeInch || !cuttingInch) return 0;
+    return (lineQty(b, patch) * tubeInch * cuttingInch * thickness) / 75000;
+  }
+
+  // AT বাদে বাকি কাস্টমারদের জন্য — প্রতি লাইনের দাম-ব্রেকডাউন (শুধু Price/Lbs+Adhesive+
+  // Print+Percentage, BDT-তে, per-Pc)। Extra আর Other Charge এখানে নেই — দুটোই
+  // Basis-লিঙ্কড (কোনো ×12 হয় না), নিচে computeFinalPrice()-এ যোগ হয়।
+  function lineBreakdown(b: Booking, patch?: BreakdownPatch) {
+    const r = resolvedLineInputs(b, patch);
+    return calcPiUnitPriceBreakdown(b, {
+      qtyPcs: lineQty(b, patch),
+      pricePerLbs: r.ratePerLbs,
+      piThicknessMm: lineThickness(b, patch),
+      adhesiveRatePerInch: r.rule?.adhesive_rate_per_inch,
+      printRatePerColor: r.printRate,
+      percentageValue: r.percentage,
+      tubeInchOverride: r.tubeInch,
+      cuttingInchOverride: r.cuttingInch,
+      adhesiveChargeOverride: r.adhesiveOverride,
+      printChargeOverride: r.printOverride,
+    });
+  }
+
+  // BDT ব্রেকডাউন (Basis অনুযায়ী ×12) + Extra + Other Charge থেকে ফাইনাল Price/Unit
+  // (currency-তে) বানায়। Extra সবসময় USD (buyers.usd_surcharge_per_pc-এর কনভেনশন —
+  // getSuggestedPrice() দেখুন), Other Charge BDT — দুটোই Basis-লিঙ্কড (ইউজার যেই Basis-এ
+  // টাইপ করেছে সেটাই সরাসরি যোগ হয়, কোনো ×12 হয় না)। basisOverride/rateOverride/patch —
+  // সদ্য বদলানো মান সরাসরি পাস করার জন্য (state read-back এক টিক পুরনো হতো)।
+  function computeFinalPrice(b: Booking, patch?: BreakdownPatch, rateOverride?: string, basisOverride?: "pcs" | "dzn") {
+    const rate = parseFloat(rateOverride ?? exchangeRate) || 107;
+    const basis = basisOverride ?? bookingBasis[b.id] ?? "pcs";
+    const factor = basisFactor(basis);
+    const bd = lineBreakdown(b, patch);
+    const r = resolvedLineInputs(b, patch, basis);
+    const bdt = bd.withMarkup * factor;
+    const baseInCurrency = currency === "USD" ? bdt / rate : bdt;
+    const extraInCurrency = currency === "USD" ? r.extra : r.extra * rate;
+    const otherChargeInCurrency = currency === "USD" ? r.otherCharge / rate : r.otherCharge;
+    return { bd, r, basis, priceInCurrency: baseInCurrency + extraInCurrency + otherChargeInCurrency };
+  }
+
+  // breakdown-এর কোনো ফিল্ড বদলালে (existing changeThickness-এর মতোই কনভেনশন) Price/Unit
+  // আবার রিক্যালকুলেট হয়ে বসে — ইউজার চাইলে Price/Unit বক্সে সরাসরি এডিটও করতে পারে
+  // (পরের বদলে আবার ওভাররাইট হবে)।
+  function recomputeBreakdownPrice(b: Booking, patch?: BreakdownPatch, rateOverride?: string, basisOverride?: "pcs" | "dzn") {
+    const { priceInCurrency } = computeFinalPrice(b, patch, rateOverride, basisOverride);
+    setBookingPrice((prev) => ({ ...prev, [b.id]: roundPrice(priceInCurrency).toFixed(pd) }));
+  }
+
+  // ব্রেকডাউনের যেকোনো ফিল্ড (Tube Inch, Cutting Inch, Price/Lbs, Adhesive/Pc, Print/Pc,
+  // Percentage, Extra, Other Charge, Qty) বদলালে state আপডেট + Price/Unit রিক্যালকুলেট —
+  // সদ্য বদলানো মানটা patch হিসেবে সরাসরি পাস করি (state read-back এক টিক পুরনো হতো)।
+  function applyBreakdownChange(
+    b: Booking, key: keyof BreakdownPatch,
+    setter: React.Dispatch<React.SetStateAction<Record<string, string>>>, value: string
+  ) {
+    setter((prev) => ({ ...prev, [b.id]: value }));
+    recomputeBreakdownPrice(b, { [key]: value } as BreakdownPatch);
   }
 
   // buyer rule অনুযায়ী per-piece suggested price (currency অনুযায়ী)
@@ -213,42 +326,69 @@ export default function ProformaForm({
     }
   }
 
-  function maybePrefillRate(b: Booking) {
-    if (rateTouched || currency !== "USD") return;
+  // rate state আপডেট অ্যাসিঙ্ক বলে, একই টিকে breakdown রিক্যালকুলেট করতে হলে নতুন রেটটা
+  // সরাসরি রিটার্ন করে দিতে হয় (recomputeBreakdownPrice-এ patch হিসেবে পাস করার জন্য) —
+  // নাহলে পুরনো exchangeRate দিয়েই BDT→currency কনভার্সন হয়ে ভুল Price/Unit বসে যেত।
+  function maybePrefillRate(b: Booking): string | undefined {
+    if (rateTouched || currency !== "USD") return undefined;
     const rule = getBuyerRule(b);
-    if (rule?.usd_bdt_rate) setExchangeRate(String(rule.usd_bdt_rate));
+    if (rule?.usd_bdt_rate) {
+      setExchangeRate(String(rule.usd_bdt_rate));
+      return String(rule.usd_bdt_rate);
+    }
+    return undefined;
   }
 
-  // চেকবক্সে টিক দিলেই Basis + Price/Unit অটো বসবে
+  // চেকবক্সে টিক দিলেই Basis + Price/Unit অটো বসবে (AT), অথবা পুরো breakdown প্রিফিল
+  // হয়ে ইনলাইন এক্সপ্যান্ড হবে (বাকি সব কাস্টমার)
   function toggleBooking(b: Booking, checked: boolean) {
     setSelectedBookings((prev) => ({ ...prev, [b.id]: checked }));
     if (!checked) return;
     const rule = getBuyerRule(b);
+
+    let thicknessPatch: string | undefined;
+    if (bookingThickness[b.id] === undefined) {
+      const thk = rule?.pi_thickness_mm ?? b.pi_thickness_mm ?? 0;
+      if (thk) {
+        setBookingThickness((prev) => ({ ...prev, [b.id]: String(thk) }));
+        thicknessPatch = String(thk);
+      }
+    }
+    const ratePatch = maybePrefillRate(b);
+
     const basis: "pcs" | "dzn" =
       bookingBasis[b.id] || (rule?.price_basis_default === "dzn" ? "dzn" : "pcs");
     setBookingBasis((prev) => ({ ...prev, [b.id]: basis }));
-    if (bookingThickness[b.id] === undefined) {
-      const thk = rule?.pi_thickness_mm ?? b.pi_thickness_mm ?? 0;
-      if (thk) setBookingThickness((prev) => ({ ...prev, [b.id]: String(thk) }));
+
+    if (isAtAccessories) {
+      applyAutoPrice(b.id, basis);
+      return;
     }
-    maybePrefillRate(b);
-    applyAutoPrice(b.id, basis);
+
+    recomputeBreakdownPrice(b, thicknessPatch !== undefined ? { thickness: thicknessPatch } : undefined, ratePatch, basis);
   }
 
   function changeBasis(b: Booking, basis: "pcs" | "dzn") {
     setBookingBasis((prev) => ({ ...prev, [b.id]: basis }));
-    applyAutoPrice(b.id, basis);
+    if (isAtAccessories) {
+      applyAutoPrice(b.id, basis);
+      return;
+    }
+    recomputeBreakdownPrice(b, undefined, undefined, basis);
   }
 
   function changeThickness(b: Booking, value: string) {
     setBookingThickness((prev) => ({ ...prev, [b.id]: value }));
-    if (selectedBookings[b.id]) {
-      // thickness বদলালে suggested দাম রি-ক্যালকুলেট (setState async, তাই override দিয়ে)
-      const basis = bookingBasis[b.id] || "pcs";
-      const perPc = getSuggestedPrice(b, parseFloat(value) || 0);
-      if (perPc > 0) {
-        setBookingPrice((prev) => ({ ...prev, [b.id]: (perPc * basisFactor(basis)).toFixed(pd) }));
-      }
+    if (!selectedBookings[b.id]) return;
+    if (!isAtAccessories) {
+      recomputeBreakdownPrice(b, { thickness: value });
+      return;
+    }
+    // thickness বদলালে suggested দাম রি-ক্যালকুলেট (setState async, তাই override দিয়ে)
+    const basis = bookingBasis[b.id] || "pcs";
+    const perPc = getSuggestedPrice(b, parseFloat(value) || 0);
+    if (perPc > 0) {
+      setBookingPrice((prev) => ({ ...prev, [b.id]: (perPc * basisFactor(basis)).toFixed(pd) }));
     }
   }
 
@@ -290,6 +430,35 @@ export default function ProformaForm({
     return Math.round(raw * 100) / 100;
   }
 
+  // ব্রেকডাউনের প্রতিটা ইনপুটের "রিজলভড" মান (ওভাররাইড থাকলে সেটা, নাহলে buyer rule থেকে
+  // ডিফল্ট) — lineBreakdown() আর ব্রেকডাউন প্যানেলের ইনপুট-ভ্যালু দেখানো, দুটোতেই লাগে।
+  // Extra (USD) Basis-লিঙ্কড — ইউজার নিজে টাইপ করলে সেটাই যেই Basis-এই থাকুক (আর কোনো ×12
+  // হয় না), কিন্তু buyer rule-এর ডিফল্ট (usd_surcharge_per_pc, সবসময় per-Pc) থেকে সাজেস্ট
+  // করার সময় Basis Dzn হলে ×12 করে সাজেস্ট করি — যাতে ডিফল্ট বক্সটাও সঠিক ইউনিটে দেখায়।
+  function resolvedLineInputs(b: Booking, patch?: BreakdownPatch, basisOverride?: "pcs" | "dzn") {
+    const rule = getBuyerRule(b);
+    const { tubeInch, cuttingInch } = lineTubeCuttingInches(b, patch);
+    const pricePerLbsRaw = patch?.pricePerLbs ?? bookingPricePerLbs[b.id];
+    const ratePerLbs = pricePerLbsRaw !== undefined && pricePerLbsRaw !== ""
+      ? parseFloat(pricePerLbsRaw) || 0
+      : resolveRate(buyerRateHistory.filter((h) => h.buyer_id === rule?.id), b.booking_date, rule?.rate_per_lbs_value || 0);
+    const percentageRaw = patch?.percentage ?? bookingPercentage[b.id];
+    const percentage = percentageRaw !== undefined && percentageRaw !== "" ? parseFloat(percentageRaw) || 0 : rule?.percentage_value || 0;
+    const basis = basisOverride ?? bookingBasis[b.id] ?? "pcs";
+    const extraRaw = patch?.extra ?? bookingExtra[b.id];
+    const extra = extraRaw !== undefined && extraRaw !== ""
+      ? parseFloat(extraRaw) || 0
+      : (rule?.usd_surcharge_per_pc || 0) * basisFactor(basis);
+    const otherChargeRaw = patch?.otherCharge ?? bookingOtherCharge[b.id];
+    const otherCharge = parseFloat(otherChargeRaw || "") || 0;
+    const adhesiveRaw = patch?.adhesivePc ?? bookingAdhesivePc[b.id];
+    const adhesiveOverride = adhesiveRaw !== undefined && adhesiveRaw !== "" ? parseFloat(adhesiveRaw) || 0 : null;
+    const printRaw = patch?.printPc ?? bookingPrintPc[b.id];
+    const printOverride = printRaw !== undefined && printRaw !== "" ? parseFloat(printRaw) || 0 : null;
+    const printRate = rule?.print_colors_default ?? selectedCustomer?.default_print_rate ?? 0.2;
+    return { rule, tubeInch, cuttingInch, ratePerLbs, percentage, extra, otherCharge, adhesiveOverride, printOverride, printRate };
+  }
+
   // Effective Price/Unit = (দেওয়া দাম + Adjustment) → precision অনুযায়ী round।
   // Sales Invoice-এর মতোই Adjustment per-unit, ঋণাত্মকও হতে পারে।
   function effectivePriceUnit(id: string): number {
@@ -303,8 +472,9 @@ export default function ProformaForm({
     .map((b) => {
       const priceUnit = effectivePriceUnit(b.id);
       const basis = bookingBasis[b.id] || "pcs";
-      const amount = calcLineAmount(b.quantity_pcs, priceUnit, basis);
-      return { booking: b, priceUnit, basis, amount };
+      const qty = lineQty(b);
+      const amount = calcLineAmount(qty, priceUnit, basis);
+      return { booking: b, priceUnit, basis, qty, amount };
     });
 
   const manualLineItems = manualLines
@@ -322,8 +492,9 @@ export default function ProformaForm({
     });
 
   // Total Weight (Kg) — PI Thickness ধরে অটো: Σ (Qty × Tube" × Cutting" × PI_Thk / 75000) / 2.2
+  // (AT বাদে বাকি কাস্টমারদের জন্য lineWeightLbs Qty/Tube/Cutting override-ও ধরে)
   const autoWeightKg = mode === "booking"
-    ? bookingLineItems.reduce((s, li) => s + calcPiWeightLbs(li.booking, lineThickness(li.booking)) / 2.2, 0)
+    ? bookingLineItems.reduce((s, li) => s + lineWeightLbs(li.booking) / 2.2, 0)
     : manualLineItems.reduce((s, li) => s + li.weightLbs / 2.2, 0);
 
   useEffect(() => {
@@ -344,7 +515,7 @@ export default function ProformaForm({
     ? (parseFloat(discountValue) || 0)
     : 0;
 
-  const totalAmount = Math.max(subtotal - discountAmount, 0);
+  const totalAmount = Math.max(subtotal - discountAmount + (parseFloat(adjustmentAmount) || 0), 0);
 
   function updateManualLine(i: number, field: keyof ManualLine, value: string) {
     setManualLines((prev) => prev.map((l, idx) => (idx === i ? { ...l, [field]: value } : l)));
@@ -410,6 +581,7 @@ export default function ProformaForm({
         hs_code: hsCode, bin_no: binNo,
         total_amount: totalAmount,
         currency, discount_type: discountType, discount_value: parseFloat(discountValue) || 0,
+        adjustment_amount: parseFloat(adjustmentAmount) || 0,
         price_decimals: pd,
         exchange_rate_to_bdt: parseFloat(exchangeRate) || 107,
         terms_conditions: termsConditions, is_manual: mode === "manual", status: "draft",
@@ -423,16 +595,31 @@ export default function ProformaForm({
     }
 
     if (mode === "booking") {
+      const rate = parseFloat(exchangeRate) || 107;
       const { error: itemsError } = await supabase.from("pi_items").insert(
         bookingLineItems.map((li, i) => {
           const { tubeInch, cuttingInch } = lineTubeCuttingInches(li.booking);
-          return {
+          const base = {
             pi_id: pi.id, booking_id: li.booking.id, sl_no: i + 1,
-            description: buildBookingDescription(li.booking),
-            measurement: formatMeasurement(li.booking),
-            qty_pcs: li.booking.quantity_pcs, price_unit: li.priceUnit, price_basis: li.basis,
+            description: lineDescriptionText(li.booking),
+            measurement: lineMeasurementText(li.booking),
+            qty_pcs: li.qty, price_unit: li.priceUnit, price_basis: li.basis,
             pi_thickness_mm: lineThickness(li.booking) || null,
             tube_inch: tubeInch || null, cutting_inch: cuttingInch || null,
+          };
+          // AT-এর জন্য ব্রেকডাউন কলামগুলো খালি থাকে (আগের মতোই একটা Price/Unit ম্যানুয়াল)
+          if (isAtAccessories) return base;
+          const bd = lineBreakdown(li.booking);
+          return {
+            ...base,
+            print_charge: currency === "USD" ? bd.printCharge / rate : bd.printCharge,
+            adhesive_charge: currency === "USD" ? bd.adhesiveCharge / rate : bd.adhesiveCharge,
+            price_per_lbs: parseFloat(bookingPricePerLbs[li.booking.id] || "") ||
+              resolveRate(buyerRateHistory.filter((h) => h.buyer_id === getBuyerRule(li.booking)?.id), li.booking.booking_date, getBuyerRule(li.booking)?.rate_per_lbs_value || 0),
+            percentage_value: parseFloat(bookingPercentage[li.booking.id] || "") || getBuyerRule(li.booking)?.percentage_value || 0,
+            extra_charge: parseFloat(bookingExtra[li.booking.id] || "") || getBuyerRule(li.booking)?.usd_surcharge_per_pc || 0,
+            other_charge: parseFloat(bookingOtherCharge[li.booking.id] || "") || 0,
+            weight_kg: lineWeightLbs(li.booking) / 2.2 || null,
           };
         })
       );
@@ -461,6 +648,26 @@ export default function ProformaForm({
     setLoading(false);
     router.push("/dashboard/lc-export/proforma");
     router.refresh();
+  }
+
+  // ব্রেকডাউন প্যানেলের ছোট লেবেলড ইনপুট (Tube Inch, Price/Lbs ইত্যাদি) — সবগুলোই একই স্টাইল
+  function miniField(
+    label: string, value: string, onChange?: (v: string) => void, opts?: { placeholder?: string; width?: string }
+  ) {
+    const readOnly = !onChange;
+    return (
+      <div className={opts?.width || "w-24"}>
+        <label className="block text-[10px] text-gray-500">{label}</label>
+        <input
+          type="number" step="0.0001"
+          value={value}
+          readOnly={readOnly}
+          onChange={(e) => onChange?.(e.target.value)}
+          placeholder={opts?.placeholder}
+          className={`w-full rounded border px-2 py-1 text-xs ${readOnly ? "bg-gray-100 text-gray-500" : ""}`}
+        />
+      </div>
+    );
   }
 
   return (
@@ -546,7 +753,7 @@ export default function ProformaForm({
         )}
       </div>
 
-      {mode === "booking" && customerId && (
+      {mode === "booking" && customerId && isAtAccessories && (
         <div className="overflow-x-auto rounded-lg border">
           <table className="w-full text-sm">
             <thead className="bg-gray-50 text-left text-gray-600">
@@ -636,6 +843,125 @@ export default function ProformaForm({
               })}
               {customerBookings.length === 0 && (
                 <tr><td colSpan={11} className="px-3 py-3 text-gray-400 italic">এই ফিল্টারে কোনো বুকিং নেই</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {mode === "booking" && customerId && !isAtAccessories && (
+        <div className="overflow-x-auto rounded-lg border">
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50 text-left text-gray-600">
+              <tr>
+                <th className="px-3 py-2 w-10"></th>
+                <th className="px-3 py-2">Booking</th>
+                <th className="px-3 py-2">Garments</th>
+                <th className="px-3 py-2">Style</th>
+                <th className="px-3 py-2">Measurement</th>
+                <th className="px-3 py-2 text-right w-24">Qty (Pcs)</th>
+                <th className="px-3 py-2 w-20">Basis</th>
+                <th className="px-3 py-2 w-28">Price/Unit</th>
+                <th className="px-3 py-2 text-right">Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              {customerBookings.map((b) => {
+                const checked = !!selectedBookings[b.id];
+                const qty = lineQty(b);
+                const basis = bookingBasis[b.id] || "pcs";
+                return (
+                  <Fragment key={b.id}>
+                    <tr className="border-t align-top">
+                      <td className="px-3 py-2">
+                        <input type="checkbox" checked={checked} onChange={(e) => toggleBooking(b, e.target.checked)} />
+                      </td>
+                      <td className="px-3 py-2 font-medium">{b.booking_no}</td>
+                      <td className="px-3 py-2 text-gray-500">{b.garments_name || "-"}</td>
+                      <td className="px-3 py-2 text-gray-500">{b.style || "-"}</td>
+                      <td className="px-3 py-2">
+                        <input
+                          value={bookingMeasurement[b.id] ?? formatMeasurement(b)}
+                          onChange={(e) => setBookingMeasurement((prev) => ({ ...prev, [b.id]: e.target.value }))}
+                          className="w-full min-w-[140px] rounded border px-2 py-1 text-xs text-gray-600"
+                        />
+                      </td>
+                      <td className="px-3 py-2">
+                        <input
+                          type="number"
+                          value={bookingQty[b.id] ?? String(b.quantity_pcs)}
+                          onChange={(e) => applyBreakdownChange(b, "qty", setBookingQty, e.target.value)}
+                          className="w-full rounded border px-2 py-1 text-sm text-right"
+                        />
+                      </td>
+                      <td className="px-3 py-2">
+                        <select value={basis} onChange={(e) => changeBasis(b, e.target.value as "pcs" | "dzn")} className="w-full rounded border px-1 py-1 text-xs">
+                          <option value="pcs">Per Pc</option>
+                          <option value="dzn">Per Dzn</option>
+                        </select>
+                      </td>
+                      <td className="px-3 py-2">
+                        <input
+                          type="number" step="0.0001"
+                          value={bookingPrice[b.id] || ""}
+                          onChange={(e) => setBookingPrice((prev) => ({ ...prev, [b.id]: e.target.value }))}
+                          className="w-full rounded border px-2 py-1 text-sm"
+                        />
+                      </td>
+                      <td className="px-3 py-2 text-right">
+                        {money(calcLineAmount(qty, effectivePriceUnit(b.id), basis))}
+                      </td>
+                    </tr>
+                    {checked && (() => {
+                      const r = resolvedLineInputs(b, undefined, basis);
+                      const bd = lineBreakdown(b);
+                      const weightKg = lineWeightLbs(b) / 2.2;
+                      return (
+                        <tr className="bg-gray-50/60 border-t">
+                          <td></td>
+                          <td colSpan={8} className="px-3 py-3">
+                            <div className="mb-2">
+                              <label className="block text-[10px] text-gray-500">Description</label>
+                              <input
+                                value={bookingDescription[b.id] ?? buildBookingDescription(b)}
+                                onChange={(e) => setBookingDescription((prev) => ({ ...prev, [b.id]: e.target.value }))}
+                                className="w-full max-w-md rounded border px-2 py-1 text-xs"
+                              />
+                            </div>
+                            <div className="flex flex-wrap gap-2 items-end">
+                              {miniField("Tube\"", bookingTubeInch[b.id] ?? (r.tubeInch ? r.tubeInch.toFixed(3) : ""),
+                                (v) => applyBreakdownChange(b, "tubeInch", setBookingTubeInch, v))}
+                              {miniField("Cutting\"", bookingCuttingInch[b.id] ?? (r.cuttingInch ? r.cuttingInch.toFixed(3) : ""),
+                                (v) => applyBreakdownChange(b, "cuttingInch", setBookingCuttingInch, v))}
+                              {miniField("Thickness (mm)", bookingThickness[b.id] ?? "", (v) => changeThickness(b, v),
+                                { placeholder: r.rule?.pi_thickness_mm != null ? String(r.rule.pi_thickness_mm) : "" })}
+                              {miniField("Price/Lbs (BDT)", bookingPricePerLbs[b.id] ?? (r.ratePerLbs ? r.ratePerLbs.toFixed(2) : ""),
+                                (v) => applyBreakdownChange(b, "pricePerLbs", setBookingPricePerLbs, v))}
+                              {miniField("Adhesive/Pc (BDT)", bookingAdhesivePc[b.id] ?? (bd.adhesiveCharge ? bd.adhesiveCharge.toFixed(4) : "0"),
+                                (v) => applyBreakdownChange(b, "adhesivePc", setBookingAdhesivePc, v))}
+                              {miniField("Print/Pc (BDT)", bookingPrintPc[b.id] ?? (bd.printCharge ? bd.printCharge.toFixed(4) : "0"),
+                                (v) => applyBreakdownChange(b, "printPc", setBookingPrintPc, v))}
+                              {miniField("Percentage (%)", bookingPercentage[b.id] ?? (r.percentage ? String(r.percentage) : "0"),
+                                (v) => applyBreakdownChange(b, "percentage", setBookingPercentage, v))}
+                              {miniField(`Extra (USD/${basis === "dzn" ? "dzn" : "pc"})`, bookingExtra[b.id] ?? (r.extra ? String(r.extra) : "0"),
+                                (v) => applyBreakdownChange(b, "extra", setBookingExtra, v))}
+                              {miniField(`Other Charge (BDT/${basis === "dzn" ? "dzn" : "pc"})`, bookingOtherCharge[b.id] ?? "0",
+                                (v) => applyBreakdownChange(b, "otherCharge", setBookingOtherCharge, v))}
+                              {miniField("Weight (Kg)", weightKg ? weightKg.toFixed(2) : "0")}
+                              {miniField("Qty (Dzn)", (qty / 12).toFixed(2))}
+                              <div className="text-[11px] text-gray-500 whitespace-nowrap pb-1">
+                                = {bd.withMarkup.toFixed(4)} BDT/pc + {r.extra || 0} USD (Extra) + {r.otherCharge || 0} BDT (Other) → {effectivePriceUnit(b.id).toFixed(pd)} {currency}/{basis === "dzn" ? "dzn" : "pc"}
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })()}
+                  </Fragment>
+                );
+              })}
+              {customerBookings.length === 0 && (
+                <tr><td colSpan={9} className="px-3 py-3 text-gray-400 italic">এই ফিল্টারে কোনো বুকিং নেই</td></tr>
               )}
             </tbody>
           </table>
@@ -764,6 +1090,11 @@ export default function ProformaForm({
             <input type="number" step="0.01" value={discountValue} onChange={(e) => setDiscountValue(e.target.value)} className="rounded-lg border px-3 py-2 text-sm w-32" />
           </div>
         )}
+        <div>
+          <label className="block text-sm text-gray-600 mb-1">Adjustment (±)</label>
+          <input type="number" step="0.01" value={adjustmentAmount} onChange={(e) => setAdjustmentAmount(e.target.value)} className="rounded-lg border px-3 py-2 text-sm w-32" placeholder="0" />
+          <p className="text-[11px] text-gray-400 mt-1">Discount-এর পরে, Total-এর আগে যোগ/বিয়োগ হবে</p>
+        </div>
       </div>
 
       <div>
@@ -775,6 +1106,9 @@ export default function ProformaForm({
       <div className="rounded-lg bg-gray-50 border p-4 space-y-1 text-sm">
         <p>Subtotal: <strong>{currency} {money(subtotal)}</strong></p>
         {discountType !== "none" && <p>Discount: <strong>{currency} {money(discountAmount)}</strong></p>}
+        {(parseFloat(adjustmentAmount) || 0) !== 0 && (
+          <p>Adjustment: <strong>{currency} {(parseFloat(adjustmentAmount) || 0) > 0 ? "+" : ""}{money(parseFloat(adjustmentAmount) || 0)}</strong></p>
+        )}
         <p className="text-base">Total: <strong>{currency} {money(totalAmount)}</strong></p>
         <p className="text-xs text-gray-500 italic">{amountInWords(totalAmount, currency)}</p>
       </div>

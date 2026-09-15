@@ -34,6 +34,7 @@ export default async function PIPrintPage({ params }: { params: Promise<{ id: st
   }, 0);
   const discountAmount = pi.discount_type === "percentage" ? (subtotal * pi.discount_value) / 100
     : pi.discount_type === "fixed" ? pi.discount_value : 0;
+  const adjustmentAmount = Number(pi.adjustment_amount) || 0;
 
   const totalQtyPcs = (items ?? []).reduce((s, it: any) => s + it.qty_pcs, 0);
   const totalQtyDzn = totalQtyPcs / 12;
@@ -73,6 +74,7 @@ export default async function PIPrintPage({ params }: { params: Promise<{ id: st
     }),
     ["Total", "", "", totalQtyPcs, Number(totalQtyDzn.toFixed(2)), "", Number(subtotal.toFixed(2))],
     ...(pi.discount_type !== "none" ? [["Discount", "", "", "", "", "", Number(discountAmount.toFixed(2))]] : []),
+    ...(adjustmentAmount !== 0 ? [["Adjustment", "", "", "", "", "", Number(adjustmentAmount.toFixed(2))]] : []),
     ["Grand Total", "", "", "", "", "", Number(pi.total_amount ?? 0)],
     [],
     [`SAY: ${amountInWords(pi.total_amount ?? 0, pi.currency)}`],
@@ -177,6 +179,14 @@ export default async function PIPrintPage({ params }: { params: Promise<{ id: st
                 (-) Discount {pi.discount_type === "percentage" ? `${pi.discount_value}%` : ""} =
               </td>
               <td className="border border-gray-800 text-right py-1 px-2">{sym}{money(discountAmount)}</td>
+            </tr>
+          )}
+          {adjustmentAmount !== 0 && (
+            <tr>
+              <td colSpan={6} className="border border-gray-800 text-right py-1 px-2">
+                {adjustmentAmount > 0 ? "(+)" : "(-)"} Adjustment =
+              </td>
+              <td className="border border-gray-800 text-right py-1 px-2">{sym}{money(Math.abs(adjustmentAmount))}</td>
             </tr>
           )}
           <tr className="font-bold">

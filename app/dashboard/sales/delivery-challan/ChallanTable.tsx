@@ -4,9 +4,9 @@ import ListFilterBar from "@/components/ListFilterBar";
 import ChallanRow from "./ChallanRow";
 
 export default function ChallanTable({
-  challans: allChallans, piNoByChallan = {}, latestChallanNo = "", bkById = {},
+  challans: allChallans, piNoByChallan = {}, latestChallanIdByCustomer = {}, bkById = {},
 }: {
-  challans: any[]; piNoByChallan?: Record<string, string>; latestChallanNo?: string;
+  challans: any[]; piNoByChallan?: Record<string, string>; latestChallanIdByCustomer?: Record<string, string>;
   bkById?: Record<string, any>;
 }) {
   const [search, setSearch] = useState("");
@@ -70,7 +70,7 @@ export default function ChallanTable({
                 key={c.id}
                 challan={c}
                 piNo={piNoByChallan[c.id] ?? ""}
-                isLatest={!!latestChallanNo && c.challan_no === latestChallanNo}
+                isLatest={latestChallanIdByCustomer[c.customer_id] === c.id}
                 bkById={bkById}
               />
             ))}

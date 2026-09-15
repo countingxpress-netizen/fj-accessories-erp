@@ -2,9 +2,10 @@
 import { useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { generateChallanNo, buildCustomerCodedDocNo } from "@/lib/docNumber";
+import { generateChallanNo } from "@/lib/docNumber";
 import { recalcBookingStatus } from "@/lib/recalcBookingStatus";
 import { formatStyle } from "@/lib/formatStyle";
+import { cleanProductLabel } from "@/lib/cleanProductLabel";
 import { getCurrentUserId } from "@/lib/currentUser";
 import { applyChallanLines, reverseChallanDerived, MAX_CHALLAN_LINES } from "@/lib/challanWrite";
 
@@ -223,7 +224,7 @@ export default function DeliveryChallanForm({
         setError("চালান সিরিয়াল একটা সঠিক পূর্ণসংখ্যা হতে হবে।");
         return;
       }
-      challanNo = buildCustomerCodedDocNo("DC", selectedCustomer, challanDate, serial);
+      challanNo = String(serial);
     } else {
       challanNo = await generateChallanNo(supabase, selectedCustomer, challanDate);
     }
@@ -347,7 +348,7 @@ export default function DeliveryChallanForm({
                     <td className="px-3 py-2 font-medium">{b.booking_no}</td>
                     <td className="px-3 py-2 text-gray-500">{formatStyle(b.style)}</td>
                     <td className="px-3 py-2 text-gray-500">{b.buyers?.name || "-"}</td>
-                    <td className="px-3 py-2">{b.finished_goods?.product_name}</td>
+                    <td className="px-3 py-2">{cleanProductLabel(b.finished_goods?.product_name)}</td>
                     <td className="px-3 py-2 text-right">{b.remaining}</td>
                     <td className="px-3 py-2">
                       <input

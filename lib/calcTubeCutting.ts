@@ -136,4 +136,72 @@ export function calcPiUnitPriceWithMarkup(
   return roundedBdt * (1 + (markupPercentage || 0) / 100);
 }
 
+export type PiUnitPriceBreakdown = {
+  tubeInch: number;
+  cuttingInch: number;
+  base: number;
+  adhesiveCharge: number;
+  printCharge: number;
+  subtotal: number;
+  withMarkup: number;
+  weightLbs: number;
+};
+
+// AT Accessories বাদে বাকি সব কাস্টমারের New PI "Booking" মোডে প্রতিটা লাইনের দাম-ব্রেকডাউন
+// স্বচ্ছভাবে দেখানো ও এডিট করার জন্য (calcPiUnitPriceWithMarkup-এর মতোই সূত্র):
+//   subtotal   = round(base + adhesiveCharge + printCharge)
+//   withMarkup = subtotal × (1 + percentageValue/100)
+// এই withMarkup-ই একমাত্র "per-Pc" পরিমাণ — Basis Dzn হলে caller (ProformaForm.tsx)
+// এটাকে ×12 করে। Extra আর Other Charge এখানে নেই — দুটোই Basis-লিঙ্কড (ইউজার যেই
+// Basis-এ টাইপ করেছে সেটাই সরাসরি, কোনো ×12 হয় না) এবং কারেন্সি-কনভার্সনের নিয়মও আলাদা
+// (Extra সবসময় USD — getSuggestedPrice()-এর কনভেনশনে; Other Charge BDT, rate দিয়ে ভাগ
+// হয়) — তাই computeFinalPrice()-এ যোগ হয়, এখানে না।
+export function calcPiUnitPriceBreakdown(
+  booking: any,
+  opts: {
+    qtyPcs: number;
+    pricePerLbs: number;
+    piThicknessMm?: number;
+    adhesiveRatePerInch?: number | null;
+    printRatePerColor?: number | null;
+    percentageValue?: number;
+    tubeInchOverride?: number | null;
+    cuttingInchOverride?: number | null;
+    // rate থেকে না বানিয়ে সরাসরি এই BDT অ্যামাউন্টই ব্যবহার করতে চাইলে (ইউজার Adhesive/Pc
+    // বা Print/Pc সেল সরাসরি এডিট করলে)
+    adhesiveChargeOverride?: number | null;
+    printChargeOverride?: number | null;
+  }
+): PiUnitPriceBreakdown {
+  const thickness = opts.piThicknessMm ?? booking.pi_thickness_mm;
+  const { tube, cutting } = calcTubeCutting(booking);
+  const computed = toInches(tube, cutting, booking.measurement_unit, booking.material_type, booking.has_print, !!booking.plain_cm_conversion);
+  const tubeInch = opts.tubeInchOverride || computed.tubeInch;
+  const cuttingInch = opts.cuttingInchOverride || computed.cuttingInch;
+
+  if (!thickness || !tubeInch || !cuttingInch || !opts.pricePerLbs) {
+    return { tubeInch, cuttingInch, base: 0, adhesiveCharge: 0, printCharge: 0, subtotal: 0, withMarkup: 0, weightLbs: 0 };
+  }
+
+  const base = (opts.pricePerLbs * tubeInch * cuttingInch * thickness) / 75000;
+
+  const hasAdhesive = hasAdhesiveCharge(booking.measurement_type);
+  const adhesiveCharge = opts.adhesiveChargeOverride != null
+    ? opts.adhesiveChargeOverride
+    : hasAdhesive ? cuttingInch * (opts.adhesiveRatePerInch || 0) : 0;
+
+  const printRate = opts.printRatePerColor ?? 0.2;
+  const colors = booking.has_print ? (booking.print_colors || 1) : 0;
+  const printCharge = opts.printChargeOverride != null
+    ? opts.printChargeOverride
+    : colors * printRate * (cuttingInch > 29 ? 2 : 1);
+
+  const subtotal = round2(round4(base + adhesiveCharge + printCharge));
+  const withMarkup = subtotal * (1 + (opts.percentageValue || 0) / 100);
+
+  const weightLbs = (opts.qtyPcs * tubeInch * cuttingInch * thickness) / 75000;
+
+  return { tubeInch, cuttingInch, base, adhesiveCharge, printCharge, subtotal, withMarkup, weightLbs };
+}
+
 export { round2 as piRound2, round4 as piRound4 };

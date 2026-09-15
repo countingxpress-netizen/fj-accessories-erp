@@ -16,7 +16,15 @@ export default async function DeliveryChallanListPage() {
   }
 
   const challanList = challans ?? [];
-  const latestChallanNo = challanList.reduce((mx: string, c: any) => (c.challan_no > mx ? c.challan_no : mx), "");
+  // প্রতি কাস্টমারের সবচেয়ে সাম্প্রতিক চালান — challan_no এখন কাস্টমার-ভিত্তিক প্লেইন
+  // সিরিয়াল বলে ভিন্ন কাস্টমারের মধ্যে string তুলনা অর্থহীন; date/created_at দিয়ে
+  // sorted লিস্টে প্রতি customer_id-র প্রথম occurrence-ই তার সাম্প্রতিক চালান।
+  const latestChallanIdByCustomer: Record<string, string> = {};
+  challanList.forEach((c: any) => {
+    if (c.customer_id && !(c.customer_id in latestChallanIdByCustomer)) {
+      latestChallanIdByCustomer[c.customer_id] = c.id;
+    }
+  });
 
   // PI No — প্রতিটা challan-এর item booking_id → pi_items → proforma_invoices.pi_no
   // (এক বুকিং একাধিক PI/revision-এ থাকতে পারে — সব PI No কমা দিয়ে দেখাই)
@@ -74,7 +82,7 @@ export default async function DeliveryChallanListPage() {
         </Link>
       </div>
 
-      <ChallanTable challans={challanList} piNoByChallan={piNoByChallan} latestChallanNo={latestChallanNo} bkById={bkById} />
+      <ChallanTable challans={challanList} piNoByChallan={piNoByChallan} latestChallanIdByCustomer={latestChallanIdByCustomer} bkById={bkById} />
     </div>
   );
 }
