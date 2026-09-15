@@ -20,7 +20,7 @@ const statusColors: Record<string, string> = {
   paid: "bg-green-100 text-green-700",
 };
 
-export default function ProformaRow({ pi, autoSalesInvoiceValue, garments }: { pi: any; autoSalesInvoiceValue: number; garments: string }) {
+export default function ProformaRow({ pi, autoSalesInvoiceValue, autoCommission, garments }: { pi: any; autoSalesInvoiceValue: number; autoCommission: number | null; garments: string }) {
   const router = useRouter();
   const supabase = createClient();
   // Sales Invoice Value / Commission / Notes — শুধু Admin এডিট করতে পারবে, Staff শুধু দেখবে
@@ -31,20 +31,18 @@ export default function ProformaRow({ pi, autoSalesInvoiceValue, garments }: { p
   // নাহলে booking-লিংকড sales_invoice_items থেকে অটো-হিসাব করা মান দেখায়।
   const [realAmount, setRealAmount] = useState(pi.real_amount != null ? String(pi.real_amount) : "");
   const [commissionAmount, setCommissionAmount] = useState(pi.commission_amount != null ? String(pi.commission_amount) : "");
-  const [notes, setNotes] = useState(pi.amount_notes ?? "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
   // Submit to Customer = Sales Invoice Value + Commission (PI Value/USD-এর সাথে এর
   // কোনো সম্পর্ক নেই — এটা পুরোপুরি Sales Invoice-এর নিজের মুদ্রায় (সাধারণত BDT))
   const realAmountLive = realAmount === "" ? (autoSalesInvoiceValue > 0 ? autoSalesInvoiceValue : 0) : (parseFloat(realAmount) || 0);
-  const commissionLive = parseFloat(commissionAmount) || 0;
+  const commissionLive = commissionAmount === "" ? (autoCommission ?? 0) : (parseFloat(commissionAmount) || 0);
   const submitToCustomer = realAmountLive + commissionLive;
 
   const dirty =
     (parseFloat(realAmount) || 0) !== (pi.real_amount ?? 0) ||
-    (parseFloat(commissionAmount) || 0) !== (pi.commission_amount ?? 0) ||
-    notes !== (pi.amount_notes ?? "");
+    (parseFloat(commissionAmount) || 0) !== (pi.commission_amount ?? 0);
 
   async function saveAmounts() {
     setSaving(true);
@@ -54,7 +52,6 @@ export default function ProformaRow({ pi, autoSalesInvoiceValue, garments }: { p
       .update({
         real_amount: realAmount === "" ? null : parseFloat(realAmount) || 0,
         commission_amount: commissionAmount === "" ? null : parseFloat(commissionAmount) || 0,
-        amount_notes: notes || null,
       })
       .eq("id", pi.id);
     setSaving(false);
@@ -107,7 +104,9 @@ export default function ProformaRow({ pi, autoSalesInvoiceValue, garments }: { p
       </td>
       <td className="px-4 py-2 text-right">
         {!isAdmin ? (
-          <span className="text-gray-500">{commissionLive > 0 ? money(commissionLive) : "-"}</span>
+          <span className="text-gray-500">{commissionLive !== 0 ? money(commissionLive) : "-"}</span>
+        ) : pi.commission_amount == null && autoCommission != null ? (
+          <span className="text-gray-500">{money(autoCommission)}</span>
         ) : (
           <input
             type="number" step="0.01" value={commissionAmount}
@@ -120,17 +119,8 @@ export default function ProformaRow({ pi, autoSalesInvoiceValue, garments }: { p
       <td className="px-4 py-2 text-right text-gray-700">
         {realAmountLive > 0 || commissionLive > 0 ? money(submitToCustomer) : "-"}
       </td>
-      <td className="px-4 py-2">
-        {!isAdmin ? (
-          <span className="text-gray-500 text-xs">{notes || "-"}</span>
-        ) : (
-          <input
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            placeholder="নোট (ঐচ্ছিক)"
-            className="w-28 rounded border px-2 py-1 text-sm"
-          />
-        )}
+      <td className="px-4 py-2 text-gray-500 text-xs">
+        {pi.buyer_name || "-"}
         {error && <p className="text-[11px] text-red-600 mt-0.5">{error}</p>}
       </td>
       <td className="px-4 py-2">

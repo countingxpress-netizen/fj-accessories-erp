@@ -3,7 +3,7 @@ import { useMemo, useState } from "react";
 import ProformaRow from "./ProformaRow";
 import ListFilterBar from "@/components/ListFilterBar";
 
-type Row = { pi: any; autoSalesInvoiceValue: number; garments: string };
+type Row = { pi: any; autoSalesInvoiceValue: number; autoCommission: number | null; garments: string };
 
 export default function ProformaTable({ rows }: { rows: Row[] }) {
   const [search, setSearch] = useState("");
@@ -90,14 +90,14 @@ export default function ProformaTable({ rows }: { rows: Row[] }) {
               <th className="px-4 py-2 text-right">Sales Invoice Value</th>
               <th className="px-4 py-2 text-right">Commission</th>
               <th className="px-4 py-2 text-right">Submit to Customer</th>
-              <th className="px-4 py-2">Notes</th>
+              <th className="px-4 py-2">Buyer</th>
               <th className="px-4 py-2">Status</th>
               <th className="px-4 py-2 text-right">Action</th>
             </tr>
           </thead>
           <tbody>
-            {filtered.map(({ pi, autoSalesInvoiceValue, garments: g }) => (
-              <ProformaRow key={pi.id} pi={pi} autoSalesInvoiceValue={autoSalesInvoiceValue} garments={g} />
+            {filtered.map(({ pi, autoSalesInvoiceValue, autoCommission, garments: g }) => (
+              <ProformaRow key={pi.id} pi={pi} autoSalesInvoiceValue={autoSalesInvoiceValue} autoCommission={autoCommission} garments={g} />
             ))}
             {filtered.length === 0 && (
               <tr><td colSpan={11} className="px-4 py-3 text-gray-400 italic">এই ফিল্টারে কোনো PI নেই</td></tr>
