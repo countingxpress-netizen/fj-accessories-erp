@@ -39,7 +39,7 @@ export default async function CustomerLedgerDetailPage({
 
   const { data: invoices } = await supabase
     .from("sales_invoices")
-    .select("id, invoice_no, invoice_date, sales_invoice_items(quantity_pcs, unit_price, amount, line_label, finished_goods(product_name))")
+    .select("id, invoice_no, invoice_date, payment_type, sales_invoice_items(quantity_pcs, unit_price, amount, line_label, finished_goods(product_name))")
     .eq("customer_id", id);
 
   const { data: payments } = await supabase
@@ -49,16 +49,21 @@ export default async function CustomerLedgerDetailPage({
 
   const { data: wastageSales } = await supabase
     .from("wastage_sales")
-    .select("sale_no, sale_date, amount")
+    .select("sale_no, sale_date, amount, payment_received")
     .eq("customer_id", id);
 
   const { data: rawMaterialSales } = await supabase
     .from("raw_material_sales")
-    .select("sale_no, sale_date, amount")
+    .select("sale_no, sale_date, amount, payment_received")
     .eq("customer_id", id);
 
   type Row = { date: string; type: "opening" | "invoice" | "payment"; ref: string; desc: string; debit: number; credit: number };
   const rows: Row[] = [];
+
+  // নগদ বিক্রি সব স্টেটমেন্টে দৃশ্যমান থাকে (সারি হিসেবে), কিন্তু Dr+Cr একইসাথে
+  // বসে বলে Due Balance-এ কোনো প্রভাব ফেলে না — শুধু বাকি বিক্রিই আসল বাকি বাড়ায়।
+  const saleRow = (amount: number, isCash: boolean) =>
+    isCash ? { debit: amount, credit: amount } : { debit: amount, credit: 0 };
 
   if (customer.opening_balance && customer.opening_balance !== 0) {
     rows.push({
@@ -70,8 +75,9 @@ export default async function CustomerLedgerDetailPage({
 
   (invoices ?? []).forEach((inv: any) => {
     const amount = (inv.sales_invoice_items ?? []).reduce((s: number, i: any) => s + (i.amount || 0), 0);
+    const isCash = inv.payment_type === "cash";
     const desc = (inv.sales_invoice_items ?? []).map((i: any) => `${i.finished_goods?.product_name ?? i.line_label ?? "-"} (${i.quantity_pcs})`).join(", ");
-    rows.push({ date: inv.invoice_date, type: "invoice", ref: inv.invoice_no, desc, debit: amount, credit: 0 });
+    rows.push({ date: inv.invoice_date, type: "invoice", ref: inv.invoice_no, desc: desc + (isCash ? " · নগদ" : ""), ...saleRow(amount, isCash) });
   });
 
   (payments ?? []).forEach((p: any) => {
@@ -79,11 +85,13 @@ export default async function CustomerLedgerDetailPage({
   });
 
   (wastageSales ?? []).forEach((w: any) => {
-    rows.push({ date: w.sale_date, type: "invoice", ref: w.sale_no, desc: "Wastage / Scrap বিক্রি (বাকি)", debit: Number(w.amount || 0), credit: 0 });
+    const isCash = !!w.payment_received;
+    rows.push({ date: w.sale_date, type: "invoice", ref: w.sale_no, desc: `Wastage / Scrap বিক্রি${isCash ? " · নগদ" : " (বাকি)"}`, ...saleRow(Number(w.amount || 0), isCash) });
   });
 
   (rawMaterialSales ?? []).forEach((r: any) => {
-    rows.push({ date: r.sale_date, type: "invoice", ref: r.sale_no, desc: "Raw Material বিক্রি (বাকি)", debit: Number(r.amount || 0), credit: 0 });
+    const isCash = !!r.payment_received;
+    rows.push({ date: r.sale_date, type: "invoice", ref: r.sale_no, desc: `Raw Material বিক্রি${isCash ? " · নগদ" : " (বাকি)"}`, ...saleRow(Number(r.amount || 0), isCash) });
   });
 
   rows.sort((a, b) => a.date.localeCompare(b.date));

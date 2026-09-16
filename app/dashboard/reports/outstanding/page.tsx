@@ -11,14 +11,18 @@ export default async function OutstandingReportPage() {
     { data: customers },
     { data: invoices },
     { data: customerPayments },
+    { data: wastageSales },
+    { data: rawMaterialSales },
     gm,
     { data: suppliers },
     { data: purchases },
     { data: supplierPayments },
   ] = await Promise.all([
     supabase.from("customers").select("id, name, opening_balance"),
-    supabase.from("sales_invoices").select("customer_id, sales_invoice_items(amount)"),
+    supabase.from("sales_invoices").select("customer_id, payment_type, sales_invoice_items(amount)"),
     supabase.from("customer_payments").select("customer_id, amount"),
+    supabase.from("wastage_sales").select("customer_id, amount, payment_received").not("customer_id", "is", null),
+    supabase.from("raw_material_sales").select("customer_id, amount, payment_received").not("customer_id", "is", null),
     loadGroupMap(supabase),
     supabase.from("suppliers").select("id, name"),
     supabase.from("purchase_entries").select("supplier_id, purchase_entry_items(quantity_lbs, rate_per_lbs)"),
@@ -30,8 +34,19 @@ export default async function OutstandingReportPage() {
     if (c.opening_balance) customerDue[c.id] = (customerDue[c.id] ?? 0) + c.opening_balance;
   });
   (invoices ?? []).forEach((inv: any) => {
+    if (inv.payment_type === "cash") return; // নগদ বিক্রি বাকি বাড়ায় না
     const amt = (inv.sales_invoice_items ?? []).reduce((s: number, i: any) => s + (i.amount || 0), 0);
     customerDue[inv.customer_id] = (customerDue[inv.customer_id] ?? 0) + amt;
+  });
+  // বাকিতে (payment_received = false) করা Wastage/Raw Material বিক্রিও কাস্টমারের বাকিতে যোগ —
+  // নগদগুলো বাদ (সেগুলো আসলে 1100 AR ছোঁয়ইনি)।
+  (wastageSales ?? []).forEach((w: any) => {
+    if (w.payment_received) return;
+    customerDue[w.customer_id] = (customerDue[w.customer_id] ?? 0) + Number(w.amount || 0);
+  });
+  (rawMaterialSales ?? []).forEach((r: any) => {
+    if (r.payment_received) return;
+    customerDue[r.customer_id] = (customerDue[r.customer_id] ?? 0) + Number(r.amount || 0);
   });
   (customerPayments ?? []).forEach((p: any) => {
     customerDue[p.customer_id] = (customerDue[p.customer_id] ?? 0) - p.amount;

@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/client";
 import ChallanPrintButton from "./ChallanPrintButton";
 import { downloadChallanExcel } from "@/lib/exportChallanExcel";
 import { groupChallanItemsByProduct } from "@/lib/challanProductGroups";
+import { buildPdfFilename } from "@/lib/saveAsPdf";
 
 const nf = new Intl.NumberFormat("en-US");
 
@@ -47,7 +48,7 @@ export default function ChallanPrintView({
   const groupedItems = groupChallanItemsByProduct(items);
 
   return (
-    <div className="mx-auto max-w-[210mm] bg-white text-gray-900 challan-root">
+    <div id="pdf-area" className="mx-auto max-w-[210mm] bg-white text-gray-900 challan-root">
       <style>{`
         @page { size: A4; margin: 0; }
         .challan-sheet { padding: 12mm 15mm; height: 297mm; display: flex; flex-direction: column; overflow: hidden; }
@@ -71,7 +72,11 @@ export default function ChallanPrintView({
         >
           📊 Excel ডাউনলোড
         </button>
-        <ChallanPrintButton challanId={challan.id} currentStatus={challan.delivery_status ?? "challan_ready"} />
+        <ChallanPrintButton
+          challanId={challan.id}
+          currentStatus={challan.delivery_status ?? "challan_ready"}
+          pdfFilename={buildPdfFilename([`Challan-${challan.challan_no}`, challan.buyer_name, challan.merchant_name])}
+        />
       </div>
 
       <div ref={sheetRef} className="challan-sheet">

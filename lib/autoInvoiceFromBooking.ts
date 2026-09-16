@@ -117,7 +117,8 @@ export async function syncAutoInvoiceForGroup(
       length_val, width_val, flap_val, gusset_val, pillow_val, plain_cm_conversion,
       has_print, print_colors, rate_per_color, rate_per_inch`)
     .eq("booking_group_id", groupId)
-    .neq("status", "cancelled");
+    .neq("status", "cancelled")
+    .order("created_at", { ascending: true });
 
   const existing = await findAutoInvoice(supabase, groupId);
 

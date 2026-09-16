@@ -4,7 +4,9 @@ import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import PrintButton from "@/app/dashboard/PrintButton";
 import { amountInWords } from "@/lib/numberToWords";
+import { buildPdfFilename } from "@/lib/saveAsPdf";
 import InvoiceSummary from "../InvoiceSummary";
+import InvoiceExcelButton from "../../InvoiceExcelButton";
 
 function fmt(n: number) {
   return n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -31,7 +33,7 @@ export default async function InvoicePrintPage({ params }: { params: Promise<{ i
     .select(`*, customers(name, code, address, phone, opening_balance, opening_balance_date),
       creator:app_users!sales_invoices_created_by_fkey(signature_url),
       sales_invoice_items(quantity_pcs, unit_price, amount, line_label,
-        bookings(booking_no, style, measurement_type, measurement_unit, length_val, width_val, flap_val, gusset_val, pillow_val),
+        bookings(booking_no, style, product_details, measurement_type, measurement_unit, length_val, width_val, flap_val, gusset_val, pillow_val, created_at),
         finished_goods(product_name))`)
     .eq("id", id)
     .single();
@@ -42,7 +44,31 @@ export default async function InvoicePrintPage({ params }: { params: Promise<{ i
   if (invoice.invoice_type === "lbs") redirect(`/dashboard/sales/invoices/${id}/print-lbs`);
 
   const isOther = invoice.invoice_type === "other";
-  const total = (invoice.sales_invoice_items ?? []).reduce((s: number, i: any) => s + (i.amount || 0), 0);
+  // Booking-এ যে সিরিয়ালে এন্ট্রি দেওয়া হয়েছে (created_at) সেই সিরিয়ালেই লাইন দেখাতে হবে —
+  // sales_invoice_items টেবিলে নিজস্ব কোনো order কলাম নেই, তাই read-এ sort করা হচ্ছে।
+  // Style/Product-এ বুকিং-এ যা সরাসরি দেওয়া হয়েছে (style, product_details) তাই দেখানো হয় —
+  // কিছু না থাকলে ব্ল্যাংক (booking_no বা generic "Product (WxH)" fallback-এর বদলে)।
+  const items = [...(invoice.sales_invoice_items ?? [])]
+    .sort((a: any, b: any) => (a.bookings?.created_at ?? "").localeCompare(b.bookings?.created_at ?? ""))
+    .map((item: any) => ({
+      ...item,
+      styleLabel: item.bookings?.style || "",
+      productLabel: item.bookings?.product_details || "",
+    }));
+  const total = items.reduce((s: number, i: any) => s + (i.amount || 0), 0);
+
+  // পরপর একই Style একাধিক লাইনে থাকলে Style কলাম merge & center হবে (Booking View-এর মতোই)
+  const styleRunSizeByStart: Record<number, number> = {};
+  if (!isOther) {
+    let runStart = 0;
+    for (let i = 1; i <= items.length; i++) {
+      const sameAsRunStart = i < items.length && items[i].styleLabel === items[runStart].styleLabel;
+      if (!sameAsRunStart) {
+        styleRunSizeByStart[runStart] = i - runStart;
+        runStart = i;
+      }
+    }
+  }
 
   // --- Previous Bill / This Bill / Running Due হিসাব ---
   const { data: allInvoices } = await supabase
@@ -100,47 +126,47 @@ export default async function InvoicePrintPage({ params }: { params: Promise<{ i
   const resolvedTotalDue = resolvedPrevDue + resolvedThisBill;
   const resolvedRunningDue = resolvedTotalDue - resolvedPaid;
 
-  const itemCols = isOther ? 4 : 6; // Total-এর আগে ফাঁকা কলাম সংখ্যা (Sl বাদে, Amount বাদে)
-
-  const excelRows: (string | number | null)[][] = [
-    [company?.name || ""],
-    [company?.address || ""],
-    [`Phone: ${company?.phone || ""} | Email: ${company?.email || ""}`],
-    [],
-    ["Sales Invoice"],
-    [],
-    ["Bill To:", "", "", "", "Invoice No:", invoice.invoice_no],
-    [invoice.customers?.name || "", "", "", "", "Date:", formatDate(invoice.invoice_date)],
-    [invoice.customers?.address || "", "", "", "", ...(invoice.delivery_point ? ["Delivery Point:", invoice.delivery_point] : [])],
-    ...(invoice.customers?.phone ? [[invoice.customers.phone]] : []),
-    ...(invoice.buyer_name ? [[`Buyer: ${invoice.buyer_name}`]] : []),
-    ...(invoice.merchant_name ? [[`Merchant: ${invoice.merchant_name}`]] : []),
-    ...(invoice.customer_booking_ref ? [[`Customer Booking Ref: ${invoice.customer_booking_ref}`]] : []),
-    [],
-    isOther
-      ? ["Sl", "Description", "Qty", "Unit Price", "Amount"]
-      : ["Sl", "Style", "Product", "Measurement", "Qty", "Unit Price", "Amount"],
-    ...(invoice.sales_invoice_items ?? []).map((item: any, i: number) =>
-      isOther
-        ? [i + 1, item.line_label, item.quantity_pcs, Number(item.unit_price), Number(item.amount)]
-        : [i + 1, item.bookings?.style || item.bookings?.booking_no || "-", item.finished_goods?.product_name, formatMeasurement(item.bookings), item.quantity_pcs, Number(item.unit_price), Number(item.amount)]
-    ),
-    ["Total", ...Array(itemCols - 1).fill(""), Number(total.toFixed(2))],
-    [],
-    ["Amount In Word (BDT):"],
-    [amountInWords(total, "BDT")],
-    [],
-    [`${previousLabel} Due =`, "", "", "", "BDT", Number(resolvedPrevDue.toFixed(2))],
-    [`This Bill-${invoice.invoice_no} =`, "", "", "", "BDT", Number(resolvedThisBill.toFixed(2))],
-    ["Total Due =", "", "", "", "BDT", Number(resolvedTotalDue.toFixed(2))],
-    [`Paid${lastPaymentDate ? ` on ${formatDate(lastPaymentDate)}` : ""} =`, "", "", "", "BDT", Number(resolvedPaid.toFixed(2))],
-    ["Running Due =", "", "", "", "BDT", Number(resolvedRunningDue.toFixed(2))],
-    ...(invoice.summary_note ? [[], ["Note:", invoice.summary_note]] : []),
-  ];
-
   return (
-    <div className="max-w-3xl mx-auto p-8 bg-white text-gray-900 print:p-0">
-      <PrintButton excelFilename={`Invoice-${invoice.invoice_no}`} excelSheets={[{ name: "Invoice", rows: excelRows }]} />
+    <div id="pdf-area" className="max-w-3xl mx-auto p-8 bg-white text-gray-900 print:p-0">
+      <PrintButton
+        pdfFilename={buildPdfFilename([`Invoice-${invoice.invoice_no}`, invoice.buyer_name, invoice.merchant_name])}
+        extraButtons={
+          <InvoiceExcelButton
+            filename={`Invoice-${invoice.invoice_no}`}
+            company={company}
+            invoiceNo={invoice.invoice_no}
+            invoiceDateLabel={formatDate(invoice.invoice_date)}
+            deliveryPoint={invoice.delivery_point}
+            buyerName={invoice.buyer_name}
+            merchantName={invoice.merchant_name}
+            customerBookingRef={invoice.customer_booking_ref}
+            customer={invoice.customers}
+            isOther={isOther}
+            items={items.map((item: any) => ({
+              style: item.styleLabel,
+              product: item.productLabel,
+              measurement: formatMeasurement(item.bookings),
+              quantity_pcs: item.quantity_pcs,
+              unit_price: item.unit_price,
+              amount: item.amount,
+              line_label: item.line_label,
+            }))}
+            total={total}
+            amountInWordsText={amountInWords(total, "BDT")}
+            summary={{
+              previousLabel,
+              prevDue: resolvedPrevDue,
+              thisBillLabel: `This Bill-${invoice.invoice_no}`,
+              thisBill: resolvedThisBill,
+              totalDue: resolvedTotalDue,
+              paidLabel: `Paid${lastPaymentDate ? ` on ${formatDate(lastPaymentDate)}` : ""}`,
+              paid: resolvedPaid,
+              runningDue: resolvedRunningDue,
+            }}
+            note={invoice.summary_note}
+          />
+        }
+      />
       {invoice.customers?.code === "AT" && (
         <div className="print:hidden mb-4 flex justify-end">
           <Link href={`/dashboard/sales/invoices/${invoice.id}/print-customer`} target="_blank" className="text-sm text-purple-700 hover:underline">
@@ -199,23 +225,28 @@ export default async function InvoicePrintPage({ params }: { params: Promise<{ i
           </tr>
         </thead>
         <tbody>
-          {(invoice.sales_invoice_items ?? []).map((item: any, i: number) => (
-            <tr key={i} className="border-b">
-              <td className="py-2 text-gray-600">{i + 1}</td>
-              {isOther ? (
-                <td className="py-2">{item.line_label}</td>
-              ) : (
-                <>
-                  <td className="py-2 text-gray-600">{item.bookings?.style || item.bookings?.booking_no || "-"}</td>
-                  <td className="py-2">{item.finished_goods?.product_name}</td>
-                  <td className="py-2 text-gray-600 text-xs">{formatMeasurement(item.bookings)}</td>
-                </>
-              )}
-              <td className="text-right py-2">{item.quantity_pcs}</td>
-              <td className="text-right py-2">{fmt(item.unit_price)}</td>
-              <td className="text-right py-2">{fmt(item.amount)}</td>
-            </tr>
-          ))}
+          {items.map((item: any, i: number) => {
+            const styleRunSize = styleRunSizeByStart[i]; // undefined হলে এই row আগের Style-এর continuation
+            return (
+              <tr key={i} className="border-b">
+                <td className="py-2 text-gray-600">{i + 1}</td>
+                {isOther ? (
+                  <td className="py-2">{item.line_label}</td>
+                ) : (
+                  <>
+                    {styleRunSize && (
+                      <td className="py-2 text-gray-600 text-center align-top" rowSpan={styleRunSize}>{item.styleLabel}</td>
+                    )}
+                    <td className="py-2">{item.productLabel}</td>
+                    <td className="py-2 text-gray-600 text-xs">{formatMeasurement(item.bookings)}</td>
+                  </>
+                )}
+                <td className="text-right py-2">{item.quantity_pcs}</td>
+                <td className="text-right py-2">{fmt(item.unit_price)}</td>
+                <td className="text-right py-2">{fmt(item.amount)}</td>
+              </tr>
+            );
+          })}
         </tbody>
         <tfoot>
           <tr className="border-t-2 border-gray-800 font-semibold">

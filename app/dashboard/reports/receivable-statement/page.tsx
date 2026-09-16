@@ -11,8 +11,12 @@ export default async function ReceivableStatementPage() {
   const { data: customers } = await supabase.from("customers").select("id, name, opening_balance").order("name");
   const { data: invoices } = await supabase
     .from("sales_invoices")
-    .select("customer_id, invoice_no, invoice_date, sales_invoice_items(amount)");
+    .select("customer_id, invoice_no, invoice_date, payment_type, sales_invoice_items(amount)");
   const { data: payments } = await supabase.from("customer_payments").select("customer_id, amount, payment_date");
+  const { data: wastageSales } = await supabase
+    .from("wastage_sales").select("customer_id, amount, sale_date, payment_received").not("customer_id", "is", null);
+  const { data: rawMaterialSales } = await supabase
+    .from("raw_material_sales").select("customer_id, amount, sale_date, payment_received").not("customer_id", "is", null);
 
   const customerData: Record<string, { invoiced: number; paid: number; lastInvoiceDate: string | null }> = {};
   (customers ?? []).forEach((c: any) => {
@@ -22,11 +26,23 @@ export default async function ReceivableStatementPage() {
   });
 
   (invoices ?? []).forEach((inv: any) => {
-    const amt = (inv.sales_invoice_items ?? []).reduce((s: number, i: any) => s + (i.amount || 0), 0);
     if (!customerData[inv.customer_id]) customerData[inv.customer_id] = { invoiced: 0, paid: 0, lastInvoiceDate: null };
-    customerData[inv.customer_id].invoiced += amt;
+    if (inv.payment_type !== "cash") { // নগদ বিক্রি বাকি বাড়ায় না, শুধু বাকিটাই "invoiced"
+      const amt = (inv.sales_invoice_items ?? []).reduce((s: number, i: any) => s + (i.amount || 0), 0);
+      customerData[inv.customer_id].invoiced += amt;
+    }
     if (!customerData[inv.customer_id].lastInvoiceDate || inv.invoice_date > customerData[inv.customer_id].lastInvoiceDate!) {
       customerData[inv.customer_id].lastInvoiceDate = inv.invoice_date;
+    }
+  });
+
+  // Wastage/Raw Material বিক্রি — বাকিটাই "invoiced"-এ যোগ (নগদগুলো বাদ), কিন্তু
+  // Last Invoice তারিখ নগদ+বাকি দুটোতেই এদের sale_date দিয়ে আপডেট হয় (শেষ কবে বিক্রি হলো)।
+  [...(wastageSales ?? []), ...(rawMaterialSales ?? [])].forEach((s: any) => {
+    if (!customerData[s.customer_id]) customerData[s.customer_id] = { invoiced: 0, paid: 0, lastInvoiceDate: null };
+    if (!s.payment_received) customerData[s.customer_id].invoiced += Number(s.amount || 0);
+    if (!customerData[s.customer_id].lastInvoiceDate || s.sale_date > customerData[s.customer_id].lastInvoiceDate!) {
+      customerData[s.customer_id].lastInvoiceDate = s.sale_date;
     }
   });
 

@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import PrintButton from "@/app/dashboard/PrintButton";
 import { amountInWords } from "@/lib/numberToWords";
 import { AT_DEFAULT_MARKUP_PERCENTAGE, calcAtCustomerLine } from "@/lib/atCommission";
+import { buildPdfFilename } from "@/lib/saveAsPdf";
 import InvoiceSummary from "../InvoiceSummary";
 
 function fmt(n: number) {
@@ -31,7 +32,7 @@ export default async function InvoicePrintCustomerPage({ params }: { params: Pro
     .select(`*, customers(name, address, phone, opening_balance, opening_balance_date),
       creator:app_users!sales_invoices_created_by_fkey(signature_url),
       sales_invoice_items(quantity_pcs, unit_price,
-        bookings(booking_no, style, required_lbs, buyer_id, measurement_type, measurement_unit, length_val, width_val, flap_val, gusset_val, pillow_val),
+        bookings(booking_no, style, product_details, required_lbs, buyer_id, measurement_type, measurement_unit, length_val, width_val, flap_val, gusset_val, pillow_val, created_at),
         finished_goods(product_name))`)
     .eq("id", id)
     .single();
@@ -52,17 +53,38 @@ export default async function InvoicePrintCustomerPage({ params }: { params: Pro
   // Actual Price-এর উপর Buyer-ভিত্তিক Markup % এবং প্রতি পিস Order Lbs-ভিত্তিক অতিরিক্ত চার্জ যোগ করে
   // Customer-কে দেখানোর Unit Price বের করা হচ্ছে (lib/atCommission.ts-এর শেয়ার্ড ফর্মুলা)।
   // এই পেজ শুধুই একটা print variant — হিসাব/Ledger-এর জন্য আসল Unit Price (normal invoice print) ব্যবহার হয়।
-  const items = (invoice.sales_invoice_items ?? []).map((item: any) => {
-    const actualPrice = item.unit_price || 0;
-    const qty = item.quantity_pcs || 0;
-    const orderLbs = item.bookings?.required_lbs || 0;
-    const markupPct = item.bookings?.buyer_id ? (markupMap[item.bookings.buyer_id] ?? AT_DEFAULT_MARKUP_PERCENTAGE) : AT_DEFAULT_MARKUP_PERCENTAGE;
-    const { customerUnitPrice, customerAmount } = calcAtCustomerLine(actualPrice, qty, orderLbs, markupPct);
-    return { ...item, customerUnitPrice, customerAmount, orderLbs };
-  });
+  // Booking-এ যে সিরিয়ালে এন্ট্রি দেওয়া হয়েছে (created_at) সেই সিরিয়ালেই লাইন দেখাতে হবে।
+  // Style/Product-এ বুকিং-এ যা সরাসরি দেওয়া হয়েছে তাই দেখানো হয় — কিছু না থাকলে ব্ল্যাংক।
+  const items = (invoice.sales_invoice_items ?? [])
+    .map((item: any) => {
+      const actualPrice = item.unit_price || 0;
+      const qty = item.quantity_pcs || 0;
+      const orderLbs = item.bookings?.required_lbs || 0;
+      const markupPct = item.bookings?.buyer_id ? (markupMap[item.bookings.buyer_id] ?? AT_DEFAULT_MARKUP_PERCENTAGE) : AT_DEFAULT_MARKUP_PERCENTAGE;
+      const { customerUnitPrice, customerAmount } = calcAtCustomerLine(actualPrice, qty, orderLbs, markupPct);
+      return {
+        ...item, customerUnitPrice, customerAmount, orderLbs,
+        styleLabel: item.bookings?.style || "",
+        productLabel: item.bookings?.product_details || "",
+      };
+    })
+    .sort((a: any, b: any) => (a.bookings?.created_at ?? "").localeCompare(b.bookings?.created_at ?? ""));
 
   const total = items.reduce((s: number, i: any) => s + i.customerAmount, 0);
   const totalOrderLbs = items.reduce((s: number, i: any) => s + i.orderLbs, 0);
+
+  // পরপর একই Style একাধিক লাইনে থাকলে Style কলাম merge & center হবে
+  const styleRunSizeByStart: Record<number, number> = {};
+  {
+    let runStart = 0;
+    for (let i = 1; i <= items.length; i++) {
+      const sameAsRunStart = i < items.length && items[i].styleLabel === items[runStart].styleLabel;
+      if (!sameAsRunStart) {
+        styleRunSizeByStart[runStart] = i - runStart;
+        runStart = i;
+      }
+    }
+  }
 
   // --- নিচের শর্ট সামারির অটো মান (regular print page-এর মতোই — কাস্টমার ledger) ---
   const [{ data: allInvoices }, { data: payments }] = await Promise.all([
@@ -124,7 +146,7 @@ export default async function InvoicePrintCustomerPage({ params }: { params: Pro
     [],
     ["Sl", "Style", "Item Description", "Measurement", "Qty (Pcs)", "Unit Price", "Amount"],
     ...items.map((item: any, i: number) => [
-      i + 1, item.bookings?.style || item.bookings?.booking_no || "-", item.finished_goods?.product_name, formatMeasurement(item.bookings), item.quantity_pcs, Number(item.customerUnitPrice.toFixed(2)), Number(item.customerAmount.toFixed(2)),
+      i + 1, item.styleLabel, item.productLabel, formatMeasurement(item.bookings), item.quantity_pcs, Number(item.customerUnitPrice.toFixed(2)), Number(item.customerAmount.toFixed(2)),
     ]),
     ["Total", "", "", "", "", "", Number(total.toFixed(2))],
     [],
@@ -142,8 +164,12 @@ export default async function InvoicePrintCustomerPage({ params }: { params: Pro
   ];
 
   return (
-    <div className="max-w-3xl mx-auto p-8 bg-white text-gray-900 print:p-0">
-      <PrintButton excelFilename={`Invoice-${invoice.invoice_no}-Customer`} excelSheets={[{ name: "Invoice", rows: excelRows }]} />
+    <div id="pdf-area" className="max-w-3xl mx-auto p-8 bg-white text-gray-900 print:p-0">
+      <PrintButton
+        excelFilename={`Invoice-${invoice.invoice_no}-Customer`}
+        excelSheets={[{ name: "Invoice", rows: excelRows }]}
+        pdfFilename={buildPdfFilename([`Invoice-${invoice.invoice_no}-Customer`, invoice.buyer_name, invoice.merchant_name])}
+      />
 
       <div className="mb-6 border-b pb-4 flex items-center justify-center gap-4">
         {company?.logo_url && (
@@ -186,17 +212,22 @@ export default async function InvoicePrintCustomerPage({ params }: { params: Pro
           </tr>
         </thead>
         <tbody>
-          {items.map((item: any, i: number) => (
-            <tr key={i} className="border-b">
-              <td className="py-2 text-gray-600">{i + 1}</td>
-              <td className="py-2 text-gray-600">{item.bookings?.style || item.bookings?.booking_no || "-"}</td>
-              <td className="py-2">{item.finished_goods?.product_name}</td>
-              <td className="py-2 text-gray-600 text-xs">{formatMeasurement(item.bookings)}</td>
-              <td className="text-right py-2">{item.quantity_pcs}</td>
-              <td className="text-right py-2">{fmt(item.customerUnitPrice)}</td>
-              <td className="text-right py-2">{fmt(item.customerAmount)}</td>
-            </tr>
-          ))}
+          {items.map((item: any, i: number) => {
+            const styleRunSize = styleRunSizeByStart[i]; // undefined হলে এই row আগের Style-এর continuation
+            return (
+              <tr key={i} className="border-b">
+                <td className="py-2 text-gray-600">{i + 1}</td>
+                {styleRunSize && (
+                  <td className="py-2 text-gray-600 text-center align-top" rowSpan={styleRunSize}>{item.styleLabel}</td>
+                )}
+                <td className="py-2">{item.productLabel}</td>
+                <td className="py-2 text-gray-600 text-xs">{formatMeasurement(item.bookings)}</td>
+                <td className="text-right py-2">{item.quantity_pcs}</td>
+                <td className="text-right py-2">{fmt(item.customerUnitPrice)}</td>
+                <td className="text-right py-2">{fmt(item.customerAmount)}</td>
+              </tr>
+            );
+          })}
         </tbody>
         <tfoot>
           <tr className="border-t-2 border-gray-800 font-semibold">

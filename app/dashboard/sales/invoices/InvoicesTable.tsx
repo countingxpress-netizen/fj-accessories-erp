@@ -116,6 +116,7 @@ export default function InvoicesTable({ invoices: allInvoices, buyerNameMap = {}
               <th className="px-4 py-2">Date</th>
               <th className="px-4 py-2">Customer</th>
               <th className="px-4 py-2">Bookings</th>
+              <th className="px-4 py-2">Buyer</th>
               <th className="px-4 py-2 text-right">Qty</th>
               <th className="px-4 py-2 text-right">Total Amount</th>
               <th className="px-4 py-2 text-right">Commission</th>
@@ -124,10 +125,10 @@ export default function InvoicesTable({ invoices: allInvoices, buyerNameMap = {}
           </thead>
           <tbody>
             {invoices.map((inv: any) => (
-              <InvoiceRow key={inv.id} invoice={inv} selected={isSelected(inv.id)} onToggleSelect={() => toggle(inv.id)} />
+              <InvoiceRow key={inv.id} invoice={inv} buyerNameMap={buyerNameMap} selected={isSelected(inv.id)} onToggleSelect={() => toggle(inv.id)} />
             ))}
             {invoices.length === 0 && (
-              <tr><td colSpan={9} className="px-4 py-3 text-gray-400 italic">
+              <tr><td colSpan={10} className="px-4 py-3 text-gray-400 italic">
                 {allInvoices.length === 0 ? "এখনো কোনো Sales Invoice নেই" : "এই ফিল্টারে কোনো Sales Invoice নেই"}
               </td></tr>
             )}

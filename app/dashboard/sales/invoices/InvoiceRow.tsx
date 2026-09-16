@@ -8,14 +8,17 @@ import GuardedAction from "@/app/dashboard/GuardedAction";
 import { money } from "@/lib/format";
 
 export default function InvoiceRow({
-  invoice, selected, onToggleSelect,
-}: { invoice: any; selected?: boolean; onToggleSelect?: () => void }) {
+  invoice, buyerNameMap = {}, selected, onToggleSelect,
+}: { invoice: any; buyerNameMap?: Record<string, string>; selected?: boolean; onToggleSelect?: () => void }) {
   const router = useRouter();
   const supabase = createClient();
 
   const total = (invoice.sales_invoice_items ?? []).reduce((s: number, i: any) => s + (i.amount || 0), 0);
   const qty = (invoice.sales_invoice_items ?? []).reduce((s: number, i: any) => s + (i.quantity_pcs || 0), 0);
   const bookingNos = Array.from(new Set((invoice.sales_invoice_items ?? []).map((i: any) => i.bookings?.booking_no))).join(", ");
+  const buyerNames = Array.from(
+    new Set((invoice.sales_invoice_items ?? []).map((i: any) => i.bookings?.buyer_id).filter(Boolean).map((id: string) => buyerNameMap[id]).filter(Boolean))
+  ).join(", ");
 
   async function handleDelete() {
     if (!window.confirm(`Invoice "${invoice.invoice_no}" মুছে ফেলতে চান? এর সাথে যুক্ত Journal Voucher-ও মুছে যাবে।`)) return;
@@ -53,6 +56,7 @@ export default function InvoiceRow({
       </td>
       <td className="px-4 py-2">{invoice.customers?.name ?? "-"}</td>
       <td className="px-4 py-2 text-xs text-gray-500">{bookingNos}</td>
+      <td className="px-4 py-2 text-xs text-gray-500">{buyerNames || "-"}</td>
       <td className="px-4 py-2 text-right">{qty.toLocaleString("en-IN")}</td>
       <td className="px-4 py-2 text-right">{money(total)}</td>
       <td className="px-4 py-2 text-right text-purple-700">{invoice.commission != null ? money(invoice.commission) : "-"}</td>

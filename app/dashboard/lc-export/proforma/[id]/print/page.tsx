@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import PrintButton from "@/app/dashboard/PrintButton";
 import { amountInWords, currencySymbol } from "@/lib/numberToWords";
 import { money } from "@/lib/format";
+import { buildPdfFilename } from "@/lib/saveAsPdf";
 
 export default async function PIPrintPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -85,8 +86,12 @@ export default async function PIPrintPage({ params }: { params: Promise<{ id: st
   ];
 
   return (
-    <div className="max-w-3xl mx-auto p-8 bg-white text-gray-900 print:p-0">
-      <PrintButton excelFilename={`PI-${pi.pi_no}`} excelSheets={[{ name: "PI", rows: excelRows }]} />
+    <div id="pdf-area" className="max-w-3xl mx-auto p-8 bg-white text-gray-900 print:p-0">
+      <PrintButton
+        excelFilename={`PI-${pi.pi_no}`}
+        excelSheets={[{ name: "PI", rows: excelRows }]}
+        pdfFilename={buildPdfFilename([`PI-${pi.pi_no}`, pi.buyer_name, pi.merchant_name])}
+      />
 
       <div className="mb-4 border-b-2 border-gray-800 pb-3">
         <div className="flex items-center justify-center gap-4">

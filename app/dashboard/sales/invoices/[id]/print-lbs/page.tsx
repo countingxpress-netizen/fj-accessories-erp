@@ -4,6 +4,7 @@ import { notFound, redirect } from "next/navigation";
 import PrintButton from "@/app/dashboard/PrintButton";
 import { amountInWords } from "@/lib/numberToWords";
 import { lbsFormatMeasurement } from "@/lib/lbsInvoice";
+import { buildPdfFilename } from "@/lib/saveAsPdf";
 
 function fmt(n: number) {
   return n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -29,7 +30,7 @@ export default async function LbsInvoicePrintPage({ params }: { params: Promise<
       creator:app_users!sales_invoices_created_by_fkey(signature_url),
       sales_invoice_items(quantity_pcs, unit_price, amount, line_type, line_label, required_lbs,
         bookings(booking_no, style, measurement_type, measurement_unit,
-          length_val, width_val, flap_val, gusset_val, pillow_val))`)
+          length_val, width_val, flap_val, gusset_val, pillow_val, created_at))`)
     .eq("id", id)
     .single();
 
@@ -40,7 +41,10 @@ export default async function LbsInvoicePrintPage({ params }: { params: Promise<
   if (invoice.invoice_type !== "lbs") redirect(`/dashboard/sales/invoices/${id}/print`);
 
   const items = (invoice.sales_invoice_items ?? []) as any[];
-  const productRows = items.filter((i) => i.line_type === "lbs_product");
+  // Booking-এ যে সিরিয়ালে এন্ট্রি দেওয়া হয়েছে (created_at) সেই সিরিয়ালেই প্রোডাক্ট লাইন দেখাতে হবে
+  const productRows = items
+    .filter((i) => i.line_type === "lbs_product")
+    .sort((a, b) => (a.bookings?.created_at ?? "").localeCompare(b.bookings?.created_at ?? ""));
   const chargeRows = items.filter((i) => String(i.line_type).startsWith("lbs_") && i.line_type !== "lbs_product");
   const total = items.reduce((s: number, i: any) => s + (Number(i.amount) || 0), 0);
 
@@ -120,8 +124,12 @@ export default async function LbsInvoicePrintPage({ params }: { params: Promise<
   ];
 
   return (
-    <div className="max-w-3xl mx-auto p-8 bg-white text-gray-900 print:p-0">
-      <PrintButton excelFilename={`Invoice-${invoice.invoice_no}`} excelSheets={[{ name: "Invoice", rows: excelRows }]} />
+    <div id="pdf-area" className="max-w-3xl mx-auto p-8 bg-white text-gray-900 print:p-0">
+      <PrintButton
+        excelFilename={`Invoice-${invoice.invoice_no}`}
+        excelSheets={[{ name: "Invoice", rows: excelRows }]}
+        pdfFilename={buildPdfFilename([`Invoice-${invoice.invoice_no}`, invoice.buyer_name, invoice.merchant_name])}
+      />
 
       <div className="text-center mb-1">
         <div className="flex items-center justify-center gap-3">

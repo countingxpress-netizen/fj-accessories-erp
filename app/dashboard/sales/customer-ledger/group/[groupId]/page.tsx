@@ -50,7 +50,7 @@ export default async function GroupLedgerPage({
   const { data: invoices } = memberIds.length
     ? await supabase
         .from("sales_invoices")
-        .select("id, customer_id, invoice_no, invoice_date, sales_invoice_items(quantity_pcs, amount, line_label, finished_goods(product_name))")
+        .select("id, customer_id, invoice_no, invoice_date, payment_type, sales_invoice_items(quantity_pcs, amount, line_label, finished_goods(product_name))")
         .in("customer_id", memberIds)
     : { data: [] };
 
@@ -58,8 +58,21 @@ export default async function GroupLedgerPage({
     ? await supabase.from("customer_payments").select("customer_id, amount, payment_date, note").in("customer_id", memberIds)
     : { data: [] };
 
+  const { data: wastageSales } = memberIds.length
+    ? await supabase.from("wastage_sales").select("customer_id, sale_no, sale_date, amount, payment_received").in("customer_id", memberIds)
+    : { data: [] };
+
+  const { data: rawMaterialSales } = memberIds.length
+    ? await supabase.from("raw_material_sales").select("customer_id, sale_no, sale_date, amount, payment_received").in("customer_id", memberIds)
+    : { data: [] };
+
   type Row = { date: string; type: "opening" | "invoice" | "payment"; customer: string; ref: string; desc: string; debit: number; credit: number };
   const rows: Row[] = [];
+
+  // নগদ বিক্রি সব স্টেটমেন্টে দৃশ্যমান থাকে (সারি হিসেবে), কিন্তু Dr+Cr একইসাথে
+  // বসে বলে Due Balance-এ কোনো প্রভাব ফেলে না — শুধু বাকি বিক্রিই আসল বাকি বাড়ায়।
+  const saleRow = (amount: number, isCash: boolean) =>
+    isCash ? { debit: amount, credit: amount } : { debit: amount, credit: 0 };
 
   memberList.forEach((m) => {
     if (m.opening_balance && m.opening_balance !== 0) {
@@ -73,12 +86,23 @@ export default async function GroupLedgerPage({
 
   (invoices ?? []).forEach((inv: any) => {
     const amount = (inv.sales_invoice_items ?? []).reduce((s: number, i: any) => s + (i.amount || 0), 0);
+    const isCash = inv.payment_type === "cash";
     const desc = (inv.sales_invoice_items ?? []).map((i: any) => `${i.finished_goods?.product_name ?? i.line_label ?? "-"} (${i.quantity_pcs})`).join(", ");
-    rows.push({ date: inv.invoice_date, type: "invoice", customer: nameById[inv.customer_id] ?? "-", ref: inv.invoice_no, desc, debit: amount, credit: 0 });
+    rows.push({ date: inv.invoice_date, type: "invoice", customer: nameById[inv.customer_id] ?? "-", ref: inv.invoice_no, desc: desc + (isCash ? " · নগদ" : ""), ...saleRow(amount, isCash) });
   });
 
   (payments ?? []).forEach((p: any) => {
     rows.push({ date: p.payment_date, type: "payment", customer: nameById[p.customer_id] ?? "-", ref: "Payment", desc: p.note || "Payment Received", debit: 0, credit: p.amount });
+  });
+
+  (wastageSales ?? []).forEach((w: any) => {
+    const isCash = !!w.payment_received;
+    rows.push({ date: w.sale_date, type: "invoice", customer: nameById[w.customer_id] ?? "-", ref: w.sale_no, desc: `Wastage / Scrap বিক্রি${isCash ? " · নগদ" : " (বাকি)"}`, ...saleRow(Number(w.amount || 0), isCash) });
+  });
+
+  (rawMaterialSales ?? []).forEach((r: any) => {
+    const isCash = !!r.payment_received;
+    rows.push({ date: r.sale_date, type: "invoice", customer: nameById[r.customer_id] ?? "-", ref: r.sale_no, desc: `Raw Material বিক্রি${isCash ? " · নগদ" : " (বাকি)"}`, ...saleRow(Number(r.amount || 0), isCash) });
   });
 
   rows.sort((a, b) => a.date.localeCompare(b.date));
@@ -109,14 +133,22 @@ export default async function GroupLedgerPage({
   const totalCredit = displayRows.reduce((s, r) => s + r.credit, 0);
   const finalBalance = displayRows.length ? displayRows[displayRows.length - 1].balance : carryForward;
 
-  // কাস্টমার-ওয়াইজ subtotal (পুরো ইতিহাসের, তারিখ-সীমা নির্বিশেষে বাকি)
+  // কাস্টমার-ওয়াইজ subtotal (পুরো ইতিহাসের, তারিখ-সীমা নির্বিশেষে বাকি) —
+  // শুধু বাকি (credit) বিক্রি "Invoiced"-এ যোগ হয়, নগদ বিক্রি বাদ (Due-তে প্রভাব ফেলবে না)।
   const perCustomer = memberList.map((m) => {
     const inv = (invoices ?? [])
-      .filter((i: any) => i.customer_id === m.id)
+      .filter((i: any) => i.customer_id === m.id && i.payment_type !== "cash")
       .reduce((s: number, i: any) => s + (i.sales_invoice_items ?? []).reduce((t: number, x: any) => t + (x.amount || 0), 0), 0);
+    const wsCredit = (wastageSales ?? [])
+      .filter((w: any) => w.customer_id === m.id && !w.payment_received)
+      .reduce((s: number, w: any) => s + Number(w.amount || 0), 0);
+    const rmsCredit = (rawMaterialSales ?? [])
+      .filter((r: any) => r.customer_id === m.id && !r.payment_received)
+      .reduce((s: number, r: any) => s + Number(r.amount || 0), 0);
     const opening = m.opening_balance || 0;
     const paid = (payments ?? []).filter((p: any) => p.customer_id === m.id).reduce((s: number, p: any) => s + p.amount, 0);
-    return { id: m.id, name: m.name, invoiced: opening + inv, paid, due: opening + inv - paid };
+    const invoiced = opening + inv + wsCredit + rmsCredit;
+    return { id: m.id, name: m.name, invoiced, paid, due: invoiced - paid };
   });
 
   return (
