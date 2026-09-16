@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import PrintButton from "@/app/dashboard/PrintButton";
 import { amountInWords } from "@/lib/numberToWords";
 import { AT_DEFAULT_MARKUP_PERCENTAGE, calcAtCustomerLine } from "@/lib/atCommission";
+import { isCommissionExcludedLine } from "@/lib/commission";
 import { buildPdfFilename } from "@/lib/saveAsPdf";
 import InvoiceSummary from "../InvoiceSummary";
 
@@ -45,14 +46,16 @@ export default async function InvoicePrintCustomerPage({ params }: { params: Pro
     new Set((invoice.sales_invoice_items ?? []).map((i: any) => i.bookings?.buyer_id).filter(Boolean))
   ) as string[];
   const { data: buyers } = buyerIds.length
-    ? await supabase.from("buyers").select("id, markup_percentage").in("id", buyerIds)
+    ? await supabase.from("buyers").select("id, name, markup_percentage").in("id", buyerIds)
     : { data: [] };
   const markupMap: Record<string, number> = {};
-  (buyers ?? []).forEach((b: any) => (markupMap[b.id] = b.markup_percentage ?? AT_DEFAULT_MARKUP_PERCENTAGE));
+  const buyerNameMap: Record<string, string> = {};
+  (buyers ?? []).forEach((b: any) => { markupMap[b.id] = b.markup_percentage ?? AT_DEFAULT_MARKUP_PERCENTAGE; buyerNameMap[b.id] = b.name; });
 
   // Actual Price-এর উপর Buyer-ভিত্তিক Markup % এবং প্রতি পিস Order Lbs-ভিত্তিক অতিরিক্ত চার্জ যোগ করে
   // Customer-কে দেখানোর Unit Price বের করা হচ্ছে (lib/atCommission.ts-এর শেয়ার্ড ফর্মুলা)।
   // এই পেজ শুধুই একটা print variant — হিসাব/Ledger-এর জন্য আসল Unit Price (normal invoice print) ব্যবহার হয়।
+  // নির্দিষ্ট Buyer/Measurement-এ (lib/commission.ts) কোনো markup যোগ হবে না — আসল দামই দেখাবে।
   // Booking-এ যে সিরিয়ালে এন্ট্রি দেওয়া হয়েছে (created_at) সেই সিরিয়ালেই লাইন দেখাতে হবে।
   // Style/Product-এ বুকিং-এ যা সরাসরি দেওয়া হয়েছে তাই দেখানো হয় — কিছু না থাকলে ব্ল্যাংক।
   const items = (invoice.sales_invoice_items ?? [])
@@ -60,8 +63,15 @@ export default async function InvoicePrintCustomerPage({ params }: { params: Pro
       const actualPrice = item.unit_price || 0;
       const qty = item.quantity_pcs || 0;
       const orderLbs = item.bookings?.required_lbs || 0;
+      const buyerName = item.bookings?.buyer_id ? (buyerNameMap[item.bookings.buyer_id] ?? null) : null;
+      const excluded = isCommissionExcludedLine(buyerName, item.bookings ? {
+        type: item.bookings.measurement_type ?? null, length: item.bookings.length_val ?? null, width: item.bookings.width_val ?? null,
+        flap: item.bookings.flap_val ?? null, gusset: item.bookings.gusset_val ?? null, unit: item.bookings.measurement_unit ?? null,
+      } : null);
       const markupPct = item.bookings?.buyer_id ? (markupMap[item.bookings.buyer_id] ?? AT_DEFAULT_MARKUP_PERCENTAGE) : AT_DEFAULT_MARKUP_PERCENTAGE;
-      const { customerUnitPrice, customerAmount } = calcAtCustomerLine(actualPrice, qty, orderLbs, markupPct);
+      const { customerUnitPrice, customerAmount } = excluded
+        ? { customerUnitPrice: actualPrice, customerAmount: Math.round(actualPrice * qty) }
+        : calcAtCustomerLine(actualPrice, qty, orderLbs, markupPct);
       return {
         ...item, customerUnitPrice, customerAmount, orderLbs,
         styleLabel: item.bookings?.style || "",
@@ -201,38 +211,38 @@ export default async function InvoicePrintCustomerPage({ params }: { params: Pro
 
       <table className="w-full text-sm border-collapse mb-2">
         <thead>
-          <tr className="border-b-2 border-gray-800">
-            <th className="text-left py-2">Sl</th>
-            <th className="text-left py-2">Style</th>
-            <th className="text-left py-2">Item Description</th>
-            <th className="text-left py-2">Measurement</th>
-            <th className="text-right py-2">Qty (Pcs)</th>
-            <th className="text-right py-2">Unit Price</th>
-            <th className="text-right py-2">Amount</th>
+          <tr className="bg-gray-50">
+            <th className="border border-gray-800 text-left px-2 py-2">Sl</th>
+            <th className="border border-gray-800 text-left px-2 py-2">Style</th>
+            <th className="border border-gray-800 text-left px-2 py-2">Item Description</th>
+            <th className="border border-gray-800 text-left px-2 py-2">Measurement</th>
+            <th className="border border-gray-800 text-right px-2 py-2">Qty (Pcs)</th>
+            <th className="border border-gray-800 text-right px-2 py-2">Unit Price</th>
+            <th className="border border-gray-800 text-right px-2 py-2">Amount</th>
           </tr>
         </thead>
         <tbody>
           {items.map((item: any, i: number) => {
             const styleRunSize = styleRunSizeByStart[i]; // undefined হলে এই row আগের Style-এর continuation
             return (
-              <tr key={i} className="border-b">
-                <td className="py-2 text-gray-600">{i + 1}</td>
+              <tr key={i}>
+                <td className="border border-gray-800 px-2 py-2 text-gray-600">{i + 1}</td>
                 {styleRunSize && (
-                  <td className="py-2 text-gray-600 text-center align-top" rowSpan={styleRunSize}>{item.styleLabel}</td>
+                  <td className="border border-gray-800 px-2 py-2 text-gray-600 text-center align-middle" rowSpan={styleRunSize}>{item.styleLabel}</td>
                 )}
-                <td className="py-2">{item.productLabel}</td>
-                <td className="py-2 text-gray-600 text-xs">{formatMeasurement(item.bookings)}</td>
-                <td className="text-right py-2">{item.quantity_pcs}</td>
-                <td className="text-right py-2">{fmt(item.customerUnitPrice)}</td>
-                <td className="text-right py-2">{fmt(item.customerAmount)}</td>
+                <td className="border border-gray-800 px-2 py-2">{item.productLabel}</td>
+                <td className="border border-gray-800 px-2 py-2 text-gray-600 text-xs">{formatMeasurement(item.bookings)}</td>
+                <td className="border border-gray-800 px-2 py-2 text-right">{item.quantity_pcs}</td>
+                <td className="border border-gray-800 px-2 py-2 text-right">{fmt(item.customerUnitPrice)}</td>
+                <td className="border border-gray-800 px-2 py-2 text-right">{fmt(item.customerAmount)}</td>
               </tr>
             );
           })}
         </tbody>
         <tfoot>
-          <tr className="border-t-2 border-gray-800 font-semibold">
-            <td colSpan={6} className="text-right py-2">Total</td>
-            <td className="text-right py-2">{fmt(total)}</td>
+          <tr className="font-semibold bg-gray-50">
+            <td colSpan={6} className="border border-gray-800 px-2 py-2 text-right">Total</td>
+            <td className="border border-gray-800 px-2 py-2 text-right">{fmt(total)}</td>
           </tr>
         </tfoot>
       </table>

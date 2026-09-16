@@ -24,7 +24,7 @@ export default async function CommissionReportPage({
     .from("sales_invoices")
     .select(`id, invoice_no, invoice_date, customer_id, commission_adjustment, commission_note,
       customers(name, code, commission_enabled, commission_percentage),
-      sales_invoice_items(quantity_pcs, unit_price, amount, bookings(required_lbs, buyer_id))`)
+      sales_invoice_items(quantity_pcs, unit_price, amount, bookings(required_lbs, buyer_id, measurement_type, measurement_unit, length_val, width_val, flap_val, gusset_val))`)
     .order("invoice_date", { ascending: false })
     .order("invoice_no", { ascending: false });
   if (from) q = q.gte("invoice_date", from);
@@ -36,10 +36,11 @@ export default async function CommissionReportPage({
     (invoices ?? []).flatMap((inv: any) => inv.sales_invoice_items ?? []).map((i: any) => i.bookings?.buyer_id).filter(Boolean)
   )) as string[];
   const { data: buyers } = buyerIds.length
-    ? await supabase.from("buyers").select("id, markup_percentage").in("id", buyerIds)
+    ? await supabase.from("buyers").select("id, name, markup_percentage").in("id", buyerIds)
     : { data: [] };
   const markupMap: Record<string, number> = {};
-  (buyers ?? []).forEach((b: any) => (markupMap[b.id] = b.markup_percentage ?? AT_DEFAULT_MARKUP_PERCENTAGE));
+  const buyerNameMap: Record<string, string> = {};
+  (buyers ?? []).forEach((b: any) => { markupMap[b.id] = b.markup_percentage ?? AT_DEFAULT_MARKUP_PERCENTAGE; buyerNameMap[b.id] = b.name; });
 
   const rows = (invoices ?? [])
     .map((inv: any) => {
@@ -49,6 +50,11 @@ export default async function CommissionReportPage({
         amount: it.amount || 0,
         order_lbs: it.bookings?.required_lbs || 0,
         markup_pct: it.bookings?.buyer_id ? (markupMap[it.bookings.buyer_id] ?? AT_DEFAULT_MARKUP_PERCENTAGE) : AT_DEFAULT_MARKUP_PERCENTAGE,
+        buyer_name: it.bookings?.buyer_id ? (buyerNameMap[it.bookings.buyer_id] ?? null) : null,
+        measurement: it.bookings ? {
+          type: it.bookings.measurement_type ?? null, length: it.bookings.length_val ?? null, width: it.bookings.width_val ?? null,
+          flap: it.bookings.flap_val ?? null, gusset: it.bookings.gusset_val ?? null, unit: it.bookings.measurement_unit ?? null,
+        } : null,
       }));
       const invoiceTotal = items.reduce((s: number, it: any) => s + it.amount, 0);
       const calc = calcInvoiceCommission(

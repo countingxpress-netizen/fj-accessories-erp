@@ -10,7 +10,7 @@ export default async function SalesInvoiceListPage() {
     .from("sales_invoices")
     .select(`*, customers(name, code, commission_enabled, commission_percentage), creator:app_users!sales_invoices_created_by_fkey(full_name),
       sales_invoice_items(quantity_pcs, unit_price, amount,
-        bookings(booking_no, required_lbs, buyer_id))`)
+        bookings(booking_no, required_lbs, buyer_id, measurement_type, measurement_unit, length_val, width_val, flap_val, gusset_val))`)
     .order("invoice_date", { ascending: false })
     .order("created_at", { ascending: false });
 
@@ -43,6 +43,15 @@ export default async function SalesInvoiceListPage() {
       amount: item.amount || 0,
       order_lbs: item.bookings?.required_lbs || 0,
       markup_pct: item.bookings?.buyer_id ? (markupMap[item.bookings.buyer_id] ?? AT_DEFAULT_MARKUP_PERCENTAGE) : AT_DEFAULT_MARKUP_PERCENTAGE,
+      buyer_name: item.bookings?.buyer_id ? (buyerNameMap[item.bookings.buyer_id] ?? null) : null,
+      measurement: item.bookings ? {
+        type: item.bookings.measurement_type ?? null,
+        length: item.bookings.length_val ?? null,
+        width: item.bookings.width_val ?? null,
+        flap: item.bookings.flap_val ?? null,
+        gusset: item.bookings.gusset_val ?? null,
+        unit: item.bookings.measurement_unit ?? null,
+      } : null,
     }));
     const calc = calcInvoiceCommission(
       inv.customers?.code ?? null,

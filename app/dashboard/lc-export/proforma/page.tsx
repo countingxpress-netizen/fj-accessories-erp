@@ -9,7 +9,7 @@ export default async function ProformaListPage() {
   const { data: pis } = await supabase
     .from("proforma_invoices")
     .select(`*, customers(name, price_per_lbs, code, commission_enabled, commission_percentage),
-      pi_items(qty_pcs, booking_id, bookings(garments_name, quantity_pcs, buyer_id, required_lbs)),
+      pi_items(qty_pcs, booking_id, bookings(garments_name, quantity_pcs, buyer_id, required_lbs, measurement_type, measurement_unit, length_val, width_val, flap_val, gusset_val)),
       creator:app_users!proforma_invoices_created_by_fkey(full_name)`)
     .order("pi_date", { ascending: false })
     .order("created_at", { ascending: false });
@@ -41,10 +41,11 @@ export default async function ProformaListPage() {
     )
   ) as string[];
   const { data: buyers } = buyerIds.length
-    ? await supabase.from("buyers").select("id, markup_percentage").in("id", buyerIds)
+    ? await supabase.from("buyers").select("id, name, markup_percentage").in("id", buyerIds)
     : { data: [] };
   const markupMap: Record<string, number> = {};
-  (buyers ?? []).forEach((b: any) => { markupMap[b.id] = b.markup_percentage ?? AT_DEFAULT_MARKUP_PERCENTAGE; });
+  const buyerNameMap: Record<string, string> = {};
+  (buyers ?? []).forEach((b: any) => { markupMap[b.id] = b.markup_percentage ?? AT_DEFAULT_MARKUP_PERCENTAGE; buyerNameMap[b.id] = b.name; });
 
   const rows = (pis ?? []).map((pi: any) => {
     // booking-লিংকড PI-তে sales_invoice_items থেকে অটো — Manual PI-তে ০,
@@ -63,6 +64,11 @@ export default async function ProformaListPage() {
         unit_price: line.unit_price, quantity_pcs: line.quantity_pcs, amount: line.amount,
         order_lbs: b?.required_lbs || 0,
         markup_pct: b?.buyer_id ? (markupMap[b.buyer_id] ?? AT_DEFAULT_MARKUP_PERCENTAGE) : AT_DEFAULT_MARKUP_PERCENTAGE,
+        buyer_name: b?.buyer_id ? (buyerNameMap[b.buyer_id] ?? null) : null,
+        measurement: b ? {
+          type: b.measurement_type ?? null, length: b.length_val ?? null, width: b.width_val ?? null,
+          flap: b.flap_val ?? null, gusset: b.gusset_val ?? null, unit: b.measurement_unit ?? null,
+        } : null,
       }));
     });
     const autoCommission = calcInvoiceCommission(

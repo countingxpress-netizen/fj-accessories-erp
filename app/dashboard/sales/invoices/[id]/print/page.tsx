@@ -208,50 +208,50 @@ export default async function InvoicePrintPage({ params }: { params: Promise<{ i
 
       <table className="w-full text-sm border-collapse mb-2">
         <thead>
-          <tr className="border-b-2 border-gray-800">
-            <th className="text-left py-2">Sl</th>
+          <tr className="bg-gray-50">
+            <th className="border border-gray-800 text-left px-2 py-2">Sl</th>
             {isOther ? (
-              <th className="text-left py-2">Description</th>
+              <th className="border border-gray-800 text-left px-2 py-2">Description</th>
             ) : (
               <>
-                <th className="text-left py-2">Style</th>
-                <th className="text-left py-2">Product</th>
-                <th className="text-left py-2">Measurement</th>
+                <th className="border border-gray-800 text-left px-2 py-2">Style</th>
+                <th className="border border-gray-800 text-left px-2 py-2">Product</th>
+                <th className="border border-gray-800 text-left px-2 py-2">Measurement</th>
               </>
             )}
-            <th className="text-right py-2">Qty</th>
-            <th className="text-right py-2">Unit Price</th>
-            <th className="text-right py-2">Amount</th>
+            <th className="border border-gray-800 text-right px-2 py-2">Qty</th>
+            <th className="border border-gray-800 text-right px-2 py-2">Unit Price</th>
+            <th className="border border-gray-800 text-right px-2 py-2">Amount</th>
           </tr>
         </thead>
         <tbody>
           {items.map((item: any, i: number) => {
             const styleRunSize = styleRunSizeByStart[i]; // undefined হলে এই row আগের Style-এর continuation
             return (
-              <tr key={i} className="border-b">
-                <td className="py-2 text-gray-600">{i + 1}</td>
+              <tr key={i}>
+                <td className="border border-gray-800 px-2 py-2 text-gray-600">{i + 1}</td>
                 {isOther ? (
-                  <td className="py-2">{item.line_label}</td>
+                  <td className="border border-gray-800 px-2 py-2">{item.line_label}</td>
                 ) : (
                   <>
                     {styleRunSize && (
-                      <td className="py-2 text-gray-600 text-center align-top" rowSpan={styleRunSize}>{item.styleLabel}</td>
+                      <td className="border border-gray-800 px-2 py-2 text-gray-600 text-center align-middle" rowSpan={styleRunSize}>{item.styleLabel}</td>
                     )}
-                    <td className="py-2">{item.productLabel}</td>
-                    <td className="py-2 text-gray-600 text-xs">{formatMeasurement(item.bookings)}</td>
+                    <td className="border border-gray-800 px-2 py-2">{item.productLabel}</td>
+                    <td className="border border-gray-800 px-2 py-2 text-gray-600 text-xs">{formatMeasurement(item.bookings)}</td>
                   </>
                 )}
-                <td className="text-right py-2">{item.quantity_pcs}</td>
-                <td className="text-right py-2">{fmt(item.unit_price)}</td>
-                <td className="text-right py-2">{fmt(item.amount)}</td>
+                <td className="border border-gray-800 px-2 py-2 text-right">{item.quantity_pcs}</td>
+                <td className="border border-gray-800 px-2 py-2 text-right">{fmt(item.unit_price)}</td>
+                <td className="border border-gray-800 px-2 py-2 text-right">{fmt(item.amount)}</td>
               </tr>
             );
           })}
         </tbody>
         <tfoot>
-          <tr className="border-t-2 border-gray-800 font-semibold">
-            <td colSpan={isOther ? 4 : 6} className="text-right py-2">Total</td>
-            <td className="text-right py-2">{fmt(total)}</td>
+          <tr className="font-semibold bg-gray-50">
+            <td colSpan={isOther ? 4 : 6} className="border border-gray-800 px-2 py-2 text-right">Total</td>
+            <td className="border border-gray-800 px-2 py-2 text-right">{fmt(total)}</td>
           </tr>
         </tfoot>
       </table>

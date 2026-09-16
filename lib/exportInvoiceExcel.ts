@@ -115,11 +115,15 @@ export function buildInvoiceWorkbook(params: InvoiceExcelParams): ExcelJS.Workbo
   const headerLabels = isOther
     ? ["Sl", "Description", "Qty", "Unit Price", "Amount"]
     : ["Sl", "Style", "Product", "Measurement", "Qty", "Unit Price", "Amount"];
+  const GRID = { style: "thin" as const, color: { argb: "FF1F2937" } };
+  const gridBox = { top: GRID, left: GRID, bottom: GRID, right: GRID };
+
   const headerRow = ws.addRow(headerLabels);
   headerRow.eachCell((cell, colNumber) => {
     cell.font = { bold: true, size: 10.5 };
     cell.alignment = { horizontal: colNumber >= (isOther ? 3 : 5) ? "right" : "left", vertical: "middle" };
-    cell.border = { bottom: { style: "medium" } };
+    cell.border = gridBox;
+    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF9FAFB" } };
   });
 
   const itemRowStart = headerRow.number + 1;
@@ -135,7 +139,7 @@ export function buildInvoiceWorkbook(params: InvoiceExcelParams): ExcelJS.Workbo
         vertical: "middle",
         wrapText: !isOther && (colNumber === 2 || colNumber === 3),
       };
-      cell.border = { bottom: { style: "thin", color: { argb: "FFD1D5DB" } } };
+      cell.border = gridBox;
     });
   });
 
@@ -166,7 +170,7 @@ export function buildInvoiceWorkbook(params: InvoiceExcelParams): ExcelJS.Workbo
   totalRow.eachCell((cell) => {
     cell.font = { bold: true, size: 10.5 };
     cell.alignment = { horizontal: "right", vertical: "middle" };
-    cell.border = { top: { style: "medium" } };
+    cell.border = gridBox;
   });
 
   ws.addRow([]);
