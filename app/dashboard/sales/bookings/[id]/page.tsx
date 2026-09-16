@@ -34,11 +34,11 @@ export default async function BookingViewPage({ params }: { params: Promise<{ id
 
   const { data: allChallanItems } = await supabase
     .from("delivery_challan_items")
-    .select("quantity_pcs, booking_id, delivery_challans(booking_id, challan_no, challan_date)");
+    .select("quantity_pcs, booking_id, delivery_challans(id, booking_id, challan_no, challan_date)");
 
   const deliveredMap: Record<string, number> = {};
   const challanNosByBooking: Record<string, Set<string>> = {};
-  const challanListForGroup: { challan_no: string; challan_date: string }[] = [];
+  const challanListForGroup: { challan_no: string; challan_date: string; id: string }[] = [];
 
   (allChallanItems ?? []).forEach((item: any) => {
     const dc = item.delivery_challans;
@@ -48,7 +48,7 @@ export default async function BookingViewPage({ params }: { params: Promise<{ id
     if (!challanNosByBooking[bId]) challanNosByBooking[bId] = new Set();
     if (!challanNosByBooking[bId].has(dc.challan_no)) {
       challanNosByBooking[bId].add(dc.challan_no);
-      challanListForGroup.push({ challan_no: dc.challan_no, challan_date: dc.challan_date });
+      challanListForGroup.push({ challan_no: dc.challan_no, challan_date: dc.challan_date, id: dc.id });
     }
   });
 
@@ -58,16 +58,18 @@ export default async function BookingViewPage({ params }: { params: Promise<{ id
   // Sales Invoice থেকে Price/Pcs, Total Amount ও Invoice No টেনে আনা
   const { data: invoiceItems } = await supabase
     .from("sales_invoice_items")
-    .select("booking_id, unit_price, quantity_pcs, sales_invoices(invoice_no, invoice_date)")
+    .select("booking_id, unit_price, quantity_pcs, sales_invoices(id, invoice_no, invoice_date, invoice_type)")
     .in("booking_id", bookingIds);
 
   const priceByBooking: Record<string, { unitPrice: number; totalAmount: number; latestDate: string }> = {};
-  const salesInvoiceNoSet = new Set<string>();
+  const salesInvoiceMap: Record<string, { id: string; invoice_type: string }> = {};
   (invoiceItems ?? []).forEach((item: any) => {
     if (!item.booking_id) return;
     const amount = Math.round((item.quantity_pcs || 0) * (item.unit_price || 0)); // Sales Invoice Amount = round
     const thisDate = item.sales_invoices?.invoice_date ?? "";
-    if (item.sales_invoices?.invoice_no) salesInvoiceNoSet.add(item.sales_invoices.invoice_no);
+    if (item.sales_invoices?.invoice_no) {
+      salesInvoiceMap[item.sales_invoices.invoice_no] = { id: item.sales_invoices.id, invoice_type: item.sales_invoices.invoice_type };
+    }
     const existing = priceByBooking[item.booking_id];
     if (!existing) {
       priceByBooking[item.booking_id] = { unitPrice: item.unit_price, totalAmount: amount, latestDate: thisDate };
@@ -79,19 +81,19 @@ export default async function BookingViewPage({ params }: { params: Promise<{ id
       }
     }
   });
-  const salesInvoiceNos = Array.from(salesInvoiceNoSet).sort();
+  const salesInvoiceNos = Object.keys(salesInvoiceMap).sort();
 
   // Proforma Invoice নম্বর টেনে আনা
   const { data: piItemRows } = await supabase
     .from("pi_items")
-    .select("booking_id, proforma_invoices(pi_no)")
+    .select("booking_id, proforma_invoices(id, pi_no)")
     .in("booking_id", bookingIds);
 
-  const piNoSet = new Set<string>();
+  const piMap: Record<string, { id: string }> = {};
   (piItemRows ?? []).forEach((item: any) => {
-    if (item.proforma_invoices?.pi_no) piNoSet.add(item.proforma_invoices.pi_no);
+    if (item.proforma_invoices?.pi_no) piMap[item.proforma_invoices.pi_no] = { id: item.proforma_invoices.id };
   });
-  const piNos = Array.from(piNoSet).sort();
+  const piNos = Object.keys(piMap).sort();
 
   // ── Wastage Register (Booking-এর বিপরীতে অতিরিক্ত ওয়েস্টেজ) ──────────────
   const poIds = bookings.flatMap((b: any) => (b.production_orders ?? []).map((p: any) => p.id)).filter(Boolean);
@@ -305,11 +307,15 @@ export default async function BookingViewPage({ params }: { params: Promise<{ id
             <p className="font-semibold mb-1">Sales Invoice No/Nos: -</p>
             {salesInvoiceNos.length > 0 ? (
               <ol className="list-decimal list-inside">
-                {salesInvoiceNos.map((no) => (
-                  <li key={no}>
-                    <Link href="/dashboard/sales/invoices" className="text-blue-700 hover:underline">{no}</Link>
-                  </li>
-                ))}
+                {salesInvoiceNos.map((no) => {
+                  const inv = salesInvoiceMap[no];
+                  const href = inv ? `/dashboard/sales/invoices/${inv.id}/${inv.invoice_type === "lbs" ? "print-lbs" : "print"}` : "/dashboard/sales/invoices";
+                  return (
+                    <li key={no}>
+                      <Link href={href} target="_blank" className="text-blue-700 hover:underline">{no}</Link>
+                    </li>
+                  );
+                })}
               </ol>
             ) : (
               <p className="text-gray-400 italic">এখনো কোনো Sales Invoice তৈরি হয়নি</p>
@@ -319,11 +325,15 @@ export default async function BookingViewPage({ params }: { params: Promise<{ id
             <p className="font-semibold mb-1">Proforma Invoice No/Nos: -</p>
             {piNos.length > 0 ? (
               <ol className="list-decimal list-inside">
-                {piNos.map((no) => (
-                  <li key={no}>
-                    <Link href="/dashboard/lc-export/proforma" className="text-blue-700 hover:underline">{no}</Link>
-                  </li>
-                ))}
+                {piNos.map((no) => {
+                  const pi = piMap[no];
+                  const href = pi ? `/dashboard/lc-export/proforma/${pi.id}` : "/dashboard/lc-export/proforma";
+                  return (
+                    <li key={no}>
+                      <Link href={href} className="text-blue-700 hover:underline">{no}</Link>
+                    </li>
+                  );
+                })}
               </ol>
             ) : (
               <p className="text-gray-400 italic">এখনো কোনো Proforma Invoice তৈরি হয়নি</p>
@@ -335,7 +345,7 @@ export default async function BookingViewPage({ params }: { params: Promise<{ id
               <ol className="list-decimal list-inside">
                 {uniqueChallans.map((c) => (
                   <li key={c.challan_no}>
-                    <Link href="/dashboard/sales/delivery-challan" className="text-blue-700 hover:underline">{c.challan_no}</Link> – DT-{formatDate(c.challan_date)}
+                    <Link href={`/dashboard/sales/delivery-challan/${c.id}/print`} target="_blank" className="text-blue-700 hover:underline">{c.challan_no}</Link> – DT-{formatDate(c.challan_date)}
                   </li>
                 ))}
               </ol>
