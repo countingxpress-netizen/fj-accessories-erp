@@ -25,6 +25,14 @@ export default function LCRow({ lc }: { lc: any }) {
     router.refresh();
   }
 
+  // নতুন এন্ট্রি lc_pi_items (একাধিক PI) ব্যবহার করে; পুরনো এন্ট্রিতে single linked_pi_id — দুটোই দেখানো হলো
+  const linkedPiNos = Array.from(
+    new Set([
+      ...(lc.lc_pi_items ?? []).map((it: any) => it.proforma_invoices?.pi_no).filter(Boolean),
+      ...(lc.linked_pi?.pi_no ? [lc.linked_pi.pi_no] : []),
+    ])
+  );
+
   return (
     <tr className="border-t">
       <td className="px-4 py-2">
@@ -34,7 +42,11 @@ export default function LCRow({ lc }: { lc: any }) {
       </td>
       <td className="px-4 py-2 font-medium">{lc.lc_no}</td>
       <td className="px-4 py-2 text-gray-500">{lc.banks?.bank_name ?? "-"}</td>
-      <td className="px-4 py-2">{lc.customers?.name ?? lc.suppliers?.name ?? "-"}</td>
+      <td className="px-4 py-2">
+        {lc.customers?.name ?? lc.suppliers?.name ?? "-"}
+        {lc.beneficiary_entity && <div className="text-[11px] text-gray-400">Ben: {lc.beneficiary_entity}</div>}
+      </td>
+      <td className="px-4 py-2 text-gray-500 text-xs">{linkedPiNos.length ? linkedPiNos.join(", ") : "-"}</td>
       <td className="px-4 py-2 text-gray-500">
         {formatDate(lc.lc_date)}
         {lc.creator?.full_name && <div className="text-[11px] text-gray-400">by {lc.creator.full_name}</div>}
