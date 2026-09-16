@@ -129,7 +129,7 @@ function activeGroupLabel(pathname: string): string | null {
   return best?.label ?? null;
 }
 
-export default function SidebarMenu() {
+export default function SidebarMenu({ restrictedToPi = false }: { restrictedToPi?: boolean }) {
   const pathname = usePathname() || "";
   const activeLabel = useMemo(() => activeGroupLabel(pathname), [pathname]);
   const [openGroup, setOpenGroup] = useState<string | null>(activeLabel);
@@ -138,6 +138,26 @@ export default function SidebarMenu() {
   useEffect(() => {
     setOpenGroup(activeLabel);
   }, [activeLabel]);
+
+  // role='customer_pi_only' — শুধু Proforma Invoice-এর লিংক, বাকি কোনো মেনু না
+  // (আসল নিরাপত্তা proxy.ts-এ, এটা শুধু UI)
+  if (restrictedToPi) {
+    return (
+      <nav className="space-y-0.5 flex-1 overflow-y-auto">
+        <Link
+          href="/dashboard/lc-export/proforma"
+          className={`flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors ${
+            isItemActive(pathname, "/dashboard/lc-export/proforma")
+              ? "bg-gray-800 text-white font-medium"
+              : "text-gray-300 hover:bg-gray-800 hover:text-white"
+          }`}
+        >
+          <NavIcon name="export" />
+          <span>Proforma Invoice</span>
+        </Link>
+      </nav>
+    );
+  }
 
   return (
     <nav className="space-y-0.5 flex-1 overflow-y-auto">

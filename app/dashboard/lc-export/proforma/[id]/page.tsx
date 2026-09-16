@@ -6,6 +6,7 @@ import { currencySymbol } from "@/lib/numberToWords";
 import NewRevisionButton from "./NewRevisionButton";
 import ProformaViewActions from "./ProformaViewActions";
 import { money } from "@/lib/format";
+import { getCurrentAppUser } from "@/lib/supabase/getCurrentAppUser";
 
 export default async function ProformaViewPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -17,6 +18,12 @@ export default async function ProformaViewPage({ params }: { params: Promise<{ i
     .eq("id", id).single();
 
   if (!pi) return notFound();
+
+  const appUser = await getCurrentAppUser();
+  const isPiOnly = appUser?.role === "customer_pi_only";
+  // role='customer_pi_only' — ID দিয়ে সরাসরি অন্য কাস্টমারের PI-তে ঢোকার চেষ্টা আটকানো
+  // (list-level filter শুধু UI, এটাই আসল guard)
+  if (isPiOnly && pi.customer_id !== appUser?.restricted_customer_id) return notFound();
 
   const { data: items } = await supabase
     .from("pi_items").select("*, bookings(booking_no)").eq("pi_id", id).order("sl_no");
@@ -30,7 +37,7 @@ export default async function ProformaViewPage({ params }: { params: Promise<{ i
         <h1 className="text-2xl font-semibold">{pi.pi_no} {pi.revision > 0 && `(Rev-${pi.revision})`}</h1>
         <div className="flex gap-2">
           <ProformaViewActions piId={id} piNo={pi.pi_no} />
-          <NewRevisionButton piId={id} />
+          {!isPiOnly && <NewRevisionButton piId={id} />}
         </div>
       </div>
 

@@ -15,7 +15,16 @@ export default async function DashboardLayout({ children }: { children: React.Re
   if (!user) redirect("/login");
 
   const appUser = await getCurrentAppUser();
+
+  // Inactive করা ইউজারের আগের সেশন থাকলেও অ্যাক্সেস বন্ধ — লগইন পেজেও এই একই চেক আছে,
+  // এটা শুধু আগে থেকে লগইন করা সেশনের জন্য fallback।
+  if (appUser && appUser.is_active === false) {
+    await supabase.auth.signOut();
+    redirect("/login");
+  }
+
   const isAdmin = appUser?.role === "admin";
+  const isPiOnly = appUser?.role === "customer_pi_only";
 
   return (
     <div className="min-h-screen">
@@ -37,7 +46,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
             )}
           </div>
         </div>
-        <SidebarMenu />
+        <SidebarMenu restrictedToPi={isPiOnly} />
         <div className="mt-3 border-t border-gray-800 pt-3 space-y-0.5">
           {isAdmin && (
             <>
@@ -59,7 +68,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
         </div>
       </aside>
       <main className="ml-64 min-h-screen bg-gray-50 p-6 print:ml-0 print:p-[10mm] print:bg-white">
-        <PermissionProvider isAdmin={isAdmin} userId={appUser?.id ?? ""}>
+        <PermissionProvider isAdmin={isAdmin || isPiOnly} userId={appUser?.id ?? ""}>
           {children}
         </PermissionProvider>
       </main>

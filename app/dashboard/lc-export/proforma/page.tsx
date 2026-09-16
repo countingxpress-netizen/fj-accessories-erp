@@ -3,16 +3,24 @@ import { createClient } from "@/lib/supabase/server";
 import ProformaTable from "./ProformaTable";
 import { AT_DEFAULT_MARKUP_PERCENTAGE } from "@/lib/atCommission";
 import { calcInvoiceCommission } from "@/lib/commission";
+import { getCurrentAppUser } from "@/lib/supabase/getCurrentAppUser";
 
 export default async function ProformaListPage() {
   const supabase = await createClient();
-  const { data: pis } = await supabase
+  const appUser = await getCurrentAppUser();
+  // role='customer_pi_only' — শুধু নিজের নির্ধারিত কাস্টমারের PI দেখবে (list-level filter);
+  // সরাসরি ID দিয়ে অন্য PI-তে ঢোকার চেষ্টা [id]/page.tsx ও edit/page.tsx-এ আটকানো হয়।
+  const restrictedCustomerId = appUser?.role === "customer_pi_only" ? appUser.restricted_customer_id : null;
+
+  let piQuery = supabase
     .from("proforma_invoices")
     .select(`*, customers(name, price_per_lbs, code, commission_enabled, commission_percentage),
       pi_items(qty_pcs, booking_id, bookings(garments_name, quantity_pcs, buyer_id, required_lbs, measurement_type, measurement_unit, length_val, width_val, flap_val, gusset_val)),
       creator:app_users!proforma_invoices_created_by_fkey(full_name)`)
     .order("pi_date", { ascending: false })
     .order("created_at", { ascending: false });
+  if (restrictedCustomerId) piQuery = piQuery.eq("customer_id", restrictedCustomerId);
+  const { data: pis } = await piQuery;
   // real_amount/commission_amount আগের কোনো সেশনে DB-তে বসলেও এখানে select("*") দিয়েই আসবে
 
   // প্রতিটা PI-এর সাথে যুক্ত booking_id গুলোর বিপরীতে sales_invoice_items থেকে মোট বিক্রয় বের করুন
@@ -85,7 +93,9 @@ export default async function ProformaListPage() {
     <div>
       <div className="flex items-center justify-between mb-4">
         <h1 className="text-2xl font-semibold">Proforma Invoices</h1>
-        <Link href="/dashboard/lc-export/proforma/new" className="rounded-lg bg-gray-900 px-4 py-2 text-sm text-white">+ নতুন PI</Link>
+        {!restrictedCustomerId && (
+          <Link href="/dashboard/lc-export/proforma/new" className="rounded-lg bg-gray-900 px-4 py-2 text-sm text-white">+ নতুন PI</Link>
+        )}
       </div>
       <ProformaTable rows={rows} />
     </div>

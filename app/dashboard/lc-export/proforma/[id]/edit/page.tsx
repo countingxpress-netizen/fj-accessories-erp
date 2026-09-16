@@ -1,12 +1,17 @@
 import { createClient } from "@/lib/supabase/server";
 import EditProformaForm from "./EditProformaForm";
 import { notFound } from "next/navigation";
+import { getCurrentAppUser } from "@/lib/supabase/getCurrentAppUser";
 
 export default async function EditProformaPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const supabase = await createClient();
   const { data: pi } = await supabase.from("proforma_invoices").select("*").eq("id", id).single();
   if (!pi) return notFound();
+
+  const appUser = await getCurrentAppUser();
+  // role='customer_pi_only' — ID দিয়ে সরাসরি অন্য কাস্টমারের PI এডিট করতে ঢোকার চেষ্টা আটকানো
+  if (appUser?.role === "customer_pi_only" && pi.customer_id !== appUser?.restricted_customer_id) return notFound();
   const { data: items } = await supabase.from("pi_items").select("*").eq("pi_id", id).order("sl_no");
 
   const { data: garments } = pi.customer_id

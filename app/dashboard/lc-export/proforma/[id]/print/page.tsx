@@ -5,6 +5,7 @@ import PrintButton from "@/app/dashboard/PrintButton";
 import { amountInWords, currencySymbol } from "@/lib/numberToWords";
 import { money } from "@/lib/format";
 import { buildPdfFilename } from "@/lib/saveAsPdf";
+import { getCurrentAppUser } from "@/lib/supabase/getCurrentAppUser";
 
 export default async function PIPrintPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -19,6 +20,10 @@ export default async function PIPrintPage({ params }: { params: Promise<{ id: st
   const { data: company } = await supabase.from("company_profile").select("*").single();
 
   if (!pi) return notFound();
+
+  const appUser = await getCurrentAppUser();
+  // role='customer_pi_only' — ID দিয়ে সরাসরি অন্য কাস্টমারের PI প্রিন্ট করার চেষ্টা আটকানো
+  if (appUser?.role === "customer_pi_only" && pi.customer_id !== appUser?.restricted_customer_id) return notFound();
 
   const sym = currencySymbol(pi.currency);
 

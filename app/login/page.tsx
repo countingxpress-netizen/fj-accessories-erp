@@ -18,12 +18,27 @@ export default function LoginPage() {
     setError("");
     setNote("");
     setLoading(true);
-    const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
-    setLoading(false);
+    const { data, error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
     if (error) {
+      setLoading(false);
       setError("লগইন ব্যর্থ হয়েছে। ইমেইল/পাসওয়ার্ড চেক করুন।");
       return;
     }
+
+    // Inactive করা ইউজার লগইন করতে পারবে না — password ঠিক থাকলেও।
+    const { data: appUser } = await supabase
+      .from("app_users")
+      .select("is_active")
+      .eq("id", data.user.id)
+      .maybeSingle();
+    if (appUser && appUser.is_active === false) {
+      await supabase.auth.signOut();
+      setLoading(false);
+      setError("এই অ্যাকাউন্টটি নিষ্ক্রিয় (Inactive) করা হয়েছে। অ্যাডমিনের সাথে যোগাযোগ করুন।");
+      return;
+    }
+
+    setLoading(false);
     router.push("/dashboard");
     router.refresh();
   }

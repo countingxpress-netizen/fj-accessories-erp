@@ -8,15 +8,18 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Admin অনুমতি নেই।" }, { status: 403 });
   }
 
-  const { email, password, full_name, designation, role } = await req.json();
+  const { email, password, full_name, designation, role, restricted_customer_id } = await req.json();
   if (!email?.trim() || !password || !full_name?.trim()) {
     return NextResponse.json({ error: "Email, Password, নাম আবশ্যক।" }, { status: 400 });
   }
   if (password.length < 6) {
     return NextResponse.json({ error: "Password অন্তত ৬ ক্যারেক্টার হতে হবে।" }, { status: 400 });
   }
-  if (role !== "admin" && role !== "full_no_edit") {
+  if (role !== "admin" && role !== "full_no_edit" && role !== "customer_pi_only") {
     return NextResponse.json({ error: "Role ভুল।" }, { status: 400 });
+  }
+  if (role === "customer_pi_only" && !restricted_customer_id) {
+    return NextResponse.json({ error: "এই Role-এর জন্য একটা Customer বাছতে হবে।" }, { status: 400 });
   }
 
   const admin = createAdminSupabaseClient();
@@ -36,6 +39,7 @@ export async function POST(req: Request) {
     designation: designation || null,
     role,
     is_active: true,
+    restricted_customer_id: role === "customer_pi_only" ? restricted_customer_id : null,
   });
   if (insertErr) {
     // auth user তৈরি হয়ে গেছে কিন্তু app_users row insert ব্যর্থ — rollback করে দিচ্ছি,

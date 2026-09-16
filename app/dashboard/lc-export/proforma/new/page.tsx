@@ -1,7 +1,13 @@
 import { createClient } from "@/lib/supabase/server";
+import { redirect } from "next/navigation";
 import ProformaForm from "./ProformaForm";
+import { getCurrentAppUser } from "@/lib/supabase/getCurrentAppUser";
 
 export default async function NewProformaPage() {
+  const appUser = await getCurrentAppUser();
+  // role='customer_pi_only' — নতুন PI তৈরির অনুমতি নেই (proxy.ts-এও ব্লক করা আছে, এটা defense-in-depth)
+  if (appUser?.role === "customer_pi_only") redirect("/dashboard/lc-export/proforma");
+
   const supabase = await createClient();
   const { data: customers } = await supabase.from("customers").select("id, name, code, price_per_lbs, default_print_rate").order("name");
 

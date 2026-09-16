@@ -10,14 +10,18 @@ type AppUser = {
   role: string;
   is_active: boolean | null;
   signature_url: string | null;
+  restricted_customer_id: string | null;
 };
+
+type CustomerOption = { id: string; name: string };
 
 const ROLES = [
   { value: "admin", label: "Admin" },
   { value: "full_no_edit", label: "Staff (Edit/Delete-এ Admin অনুমতি লাগবে)" },
+  { value: "customer_pi_only", label: "শুধু এক Customer-এর PI (দেখা + এডিট, নতুন PI না)" },
 ];
 
-const blank = { email: "", password: "", full_name: "", designation: "", role: "full_no_edit" };
+const blank = { email: "", password: "", full_name: "", designation: "", role: "full_no_edit", restricted_customer_id: "" };
 
 async function uploadSignature(id: string, file: File): Promise<{ ok: boolean; error?: string; signature_url?: string }> {
   const fd = new FormData();
@@ -115,7 +119,7 @@ function ResetPasswordAction({ userId }: { userId: string }) {
   );
 }
 
-export default function UserManager({ users, currentUserId }: { users: AppUser[]; currentUserId: string }) {
+export default function UserManager({ users, currentUserId, customers = [] }: { users: AppUser[]; currentUserId: string; customers?: CustomerOption[] }) {
   const [rows, setRows] = useState(users);
   const [form, setForm] = useState(blank);
   const [newSignatureFile, setNewSignatureFile] = useState<File | null>(null);
@@ -137,7 +141,10 @@ export default function UserManager({ users, currentUserId }: { users: AppUser[]
     setSavingId(u.id);
     const { error: err } = await supabase
       .from("app_users")
-      .update({ full_name: u.full_name.trim(), designation: u.designation || null, role: u.role, is_active: u.is_active })
+      .update({
+        full_name: u.full_name.trim(), designation: u.designation || null, role: u.role, is_active: u.is_active,
+        restricted_customer_id: u.role === "customer_pi_only" ? (u.restricted_customer_id || null) : null,
+      })
       .eq("id", u.id);
     setSavingId(null);
     if (err) { setError(err.message); return; }
@@ -165,6 +172,10 @@ export default function UserManager({ users, currentUserId }: { users: AppUser[]
     setAddError("");
     if (!form.email.trim() || !form.password || !form.full_name.trim()) {
       setAddError("Email, Password, নাম আবশ্যক।");
+      return;
+    }
+    if (form.role === "customer_pi_only" && !form.restricted_customer_id) {
+      setAddError("এই Role-এর জন্য একটা Customer বাছতে হবে।");
       return;
     }
     setAdding(true);
@@ -230,6 +241,17 @@ export default function UserManager({ users, currentUserId }: { users: AppUser[]
                   >
                     {ROLES.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
                   </select>
+                  {u.role === "customer_pi_only" && (
+                    <select
+                      value={u.restricted_customer_id ?? ""}
+                      disabled={u.id === currentUserId}
+                      onChange={(e) => updateRow(u.id, { restricted_customer_id: e.target.value || null })}
+                      className="mt-1 w-full rounded border px-2 py-1 text-xs disabled:bg-gray-100"
+                    >
+                      <option value="">-- Customer বাছুন --</option>
+                      {customers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                    </select>
+                  )}
                 </td>
                 <td className="px-4 py-2">
                   <input
@@ -280,9 +302,19 @@ export default function UserManager({ users, currentUserId }: { users: AppUser[]
         <input type="text" value={form.password} onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))} placeholder="Password (min ৬ ক্যারেক্টার)" className="rounded border px-2 py-1.5 text-sm" />
         <input value={form.full_name} onChange={(e) => setForm((f) => ({ ...f, full_name: e.target.value }))} placeholder="নাম" className="rounded border px-2 py-1.5 text-sm" />
         <input value={form.designation} onChange={(e) => setForm((f) => ({ ...f, designation: e.target.value }))} placeholder="Designation" className="rounded border px-2 py-1.5 text-sm" />
-        <select value={form.role} onChange={(e) => setForm((f) => ({ ...f, role: e.target.value }))} className="rounded border px-2 py-1.5 text-sm">
+        <select value={form.role} onChange={(e) => setForm((f) => ({ ...f, role: e.target.value, restricted_customer_id: "" }))} className="rounded border px-2 py-1.5 text-sm">
           {ROLES.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
         </select>
+        {form.role === "customer_pi_only" && (
+          <select
+            value={form.restricted_customer_id}
+            onChange={(e) => setForm((f) => ({ ...f, restricted_customer_id: e.target.value }))}
+            className="rounded border px-2 py-1.5 text-sm sm:col-span-2"
+          >
+            <option value="">-- Customer বাছুন --</option>
+            {customers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+        )}
         <div className="sm:col-span-3">
           <label className="block text-xs text-gray-500 mb-1">Signature (ঐচ্ছিক)</label>
           <input
