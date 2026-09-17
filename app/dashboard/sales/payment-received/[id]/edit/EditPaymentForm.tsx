@@ -23,6 +23,13 @@ export default function EditPaymentForm({
     Object.entries(currentAllocationMap).forEach(([id, amt]) => { init[id] = String(amt); });
     return init;
   });
+  // মূল payment.amount-এর যেটুকু কোনো Invoice-এ allocate করা নেই সেটাই আগের Advance অংশ —
+  // এডিট করার সময় এই অংশটাও দেখানো/বদলানো যাবে।
+  const initialAllocated = Object.values(currentAllocationMap).reduce((s, v) => s + v, 0);
+  const [advanceAmount, setAdvanceAmount] = useState(() => {
+    const adv = Number(payment.amount || 0) - initialAllocated;
+    return adv > 0.001 ? adv.toFixed(2) : "0";
+  });
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const router = useRouter();
@@ -35,15 +42,17 @@ export default function EditPaymentForm({
     setAllocations((prev) => ({ ...prev, [inv.id]: inv.due.toFixed(2) }));
   }
 
-  const totalAmount = Object.values(allocations).reduce((s, v) => s + (parseFloat(v) || 0), 0);
+  const allocatedAmount = Object.values(allocations).reduce((s, v) => s + (parseFloat(v) || 0), 0);
+  const totalAmount = allocatedAmount + (parseFloat(advanceAmount) || 0);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
 
     const validAllocations = Object.entries(allocations).filter(([, v]) => parseFloat(v) > 0);
-    if (!depositAccountId || validAllocations.length === 0) {
-      setError("Deposit To এবং অন্তত একটা Invoice-এ Payment থাকতে হবে।");
+    const advance = parseFloat(advanceAmount) || 0;
+    if (!depositAccountId || (validAllocations.length === 0 && advance <= 0)) {
+      setError("Deposit To এবং Invoice Payment বা Advance-এর মধ্যে অন্তত একটা দিতে হবে।");
       return;
     }
 
@@ -56,11 +65,13 @@ export default function EditPaymentForm({
     }).eq("id", payment.id);
 
     await supabase.from("payment_allocations").delete().eq("payment_id", payment.id);
-    await supabase.from("payment_allocations").insert(
-      validAllocations.map(([invoiceId, amount]) => ({
-        payment_id: payment.id, invoice_id: invoiceId === "opening" ? null : invoiceId, amount: parseFloat(amount),
-      }))
-    );
+    if (validAllocations.length > 0) {
+      await supabase.from("payment_allocations").insert(
+        validAllocations.map(([invoiceId, amount]) => ({
+          payment_id: payment.id, invoice_id: invoiceId === "opening" ? null : invoiceId, amount: parseFloat(amount),
+        }))
+      );
+    }
 
     if (payment.voucher_id) {
       // payment row টিকে থাকছে — voucher delete-এর আগে voucher_id null করতে হবে
@@ -107,6 +118,22 @@ export default function EditPaymentForm({
   return (
     <form onSubmit={handleSubmit} className="rounded-xl border bg-white p-6 shadow-sm space-y-4 max-w-2xl">
       <p className="text-sm text-gray-600">Total Amount: <strong>{money(totalAmount)}</strong></p>
+
+      <div>
+        <label className="block text-sm text-gray-600 mb-1">Advance (কোনো Invoice ছাড়া)</label>
+        <input
+          type="number" step="0.01" min="0"
+          value={advanceAmount}
+          onChange={(e) => setAdvanceAmount(e.target.value)}
+          className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm w-40"
+          placeholder="0.00"
+        />
+        {parseFloat(advanceAmount) > 0 && (
+          <p className="text-xs text-amber-700 mt-1">
+            ৳ {money(parseFloat(advanceAmount))} কোনো Invoice-এর সাথে যুক্ত না হয়ে Advance হিসেবে জমা থাকবে।
+          </p>
+        )}
+      </div>
 
       <div className="rounded-lg border overflow-x-auto">
         <div className="bg-gray-50 px-3 py-2 text-sm font-semibold text-gray-700">Invoice Allocations</div>

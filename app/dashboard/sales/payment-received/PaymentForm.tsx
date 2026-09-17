@@ -26,6 +26,15 @@ export default function PaymentForm({
   const [bankCharges, setBankCharges] = useState(initialState.bankCharges);
   const [note, setNote] = useState(initialState.note);
   const [allocations, setAllocations] = useState<Record<string, string>>({});
+  // Invoice-এর Due-এর চেয়ে বেশি টাকা দিলে (বা কোনো Due-ই না থাকলে) বাকি অংশ কোনো
+  // Invoice-এর সাথে যুক্ত না করে Advance হিসেবে রাখা হয় — customer_payments-এ যোগ হয়ে
+  // যায় (Customer Ledger/Outstanding-এর হিসাব customer_payments.amount থেকেই চলে,
+  // payment_allocations থেকে না), পরে নতুন Invoice হলে Running Due-তেই অটো এডজাস্ট হয়ে যাবে।
+  const [advanceAmount, setAdvanceAmount] = useState("0");
+  // "Amount Received"-এর নিজস্ব raw টাইপ-করা টেক্সট — allocations-এর যোগফল থেকে প্রতি
+  // রি-রেন্ডারে .toFixed(2) দিয়ে রিফরম্যাট করলে টাইপ করার সময় কার্সার শেষে চলে যেত,
+  // তাই এটা আলাদা স্টেট হিসেবে রাখা হয়েছে (শুধু ইউজার টাইপ করলে বা Full/Reset-এ বদলায়)।
+  const [amountReceivedInput, setAmountReceivedInput] = useState("");
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -34,8 +43,9 @@ export default function PaymentForm({
 
   const unpaidInvoices = useMemo(() => invoicesByCustomer[customerId] ?? [], [invoicesByCustomer, customerId]);
   const totalDue = unpaidInvoices.reduce((s, inv) => s + inv.due, 0);
-  const amountReceived = Object.values(allocations).reduce((s, v) => s + (parseFloat(v) || 0), 0);
-  const isFullReceived = totalDue > 0 && Math.abs(amountReceived - totalDue) < 0.01;
+  const allocatedAmount = Object.values(allocations).reduce((s, v) => s + (parseFloat(v) || 0), 0);
+  const amountReceived = allocatedAmount + (parseFloat(advanceAmount) || 0);
+  const isFullReceived = totalDue > 0 && Math.abs(allocatedAmount - totalDue) < 0.01;
 
   function autoAllocate(totalAmt: number) {
     let remaining = totalAmt;
@@ -47,28 +57,47 @@ export default function PaymentForm({
       remaining -= alloc;
     }
     setAllocations(next);
+    setAdvanceAmount(remaining > 0.001 ? remaining.toFixed(2) : "0");
   }
 
   function selectCustomer(id: string) {
     setCustomerId(id);
     setAllocations({});
+    setAdvanceAmount("0");
+    setAmountReceivedInput("");
   }
 
   function handleAmountReceivedChange(value: string) {
+    setAmountReceivedInput(value);
     autoAllocate(parseFloat(value) || 0);
   }
 
   function toggleReceivedFull(checked: boolean) {
-    if (checked) autoAllocate(totalDue);
-    else setAllocations({});
+    if (checked) { autoAllocate(totalDue); setAmountReceivedInput(totalDue.toFixed(2)); }
+    else { setAllocations({}); setAdvanceAmount("0"); setAmountReceivedInput(""); }
+  }
+
+  // per-invoice এডিট/Pay in Full করলেও "Amount Received" বক্সটা রানিং টোটাল দেখাবে (শুধু
+  // ওই বক্সে সরাসরি টাইপ করলেই cursor-jump সমস্যা এড়াতে raw state আলাদা রাখা হয়েছে)।
+  function syncAmountReceivedFrom(next: Record<string, string>) {
+    const sum = Object.values(next).reduce((s, v) => s + (parseFloat(v) || 0), 0) + (parseFloat(advanceAmount) || 0);
+    setAmountReceivedInput(sum > 0 ? sum.toFixed(2) : "");
   }
 
   function payInFull(invoiceId: string, due: number) {
-    setAllocations((prev) => ({ ...prev, [invoiceId]: due.toFixed(2) }));
+    setAllocations((prev) => {
+      const next = { ...prev, [invoiceId]: due.toFixed(2) };
+      syncAmountReceivedFrom(next);
+      return next;
+    });
   }
 
   function updateAllocation(invoiceId: string, value: string) {
-    setAllocations((prev) => ({ ...prev, [invoiceId]: value }));
+    setAllocations((prev) => {
+      const next = { ...prev, [invoiceId]: value };
+      syncAmountReceivedFrom(next);
+      return next;
+    });
   }
 
   function resetForm() {
@@ -79,6 +108,8 @@ export default function PaymentForm({
     setBankCharges(initialState.bankCharges);
     setNote(initialState.note);
     setAllocations({});
+    setAdvanceAmount("0");
+    setAmountReceivedInput("");
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -87,8 +118,9 @@ export default function PaymentForm({
     setSuccess(false);
 
     const validAllocations = Object.entries(allocations).filter(([, v]) => parseFloat(v) > 0);
-    if (!customerId || !depositAccountId || validAllocations.length === 0) {
-      setError("Customer, Deposit To এবং অন্তত একটা Invoice-এ Payment দিন।");
+    const advance = parseFloat(advanceAmount) || 0;
+    if (!customerId || !depositAccountId || (validAllocations.length === 0 && advance <= 0)) {
+      setError("Customer, Deposit To এবং Invoice Payment বা Advance-এর মধ্যে অন্তত একটা দিন।");
       return;
     }
 
@@ -159,11 +191,13 @@ export default function PaymentForm({
       return;
     }
 
-    await supabase.from("payment_allocations").insert(
-      validAllocations.map(([invoiceId, amount]) => ({
-        payment_id: payment.id, invoice_id: invoiceId === "opening" ? null : invoiceId, amount: parseFloat(amount),
-      }))
-    );
+    if (validAllocations.length > 0) {
+      await supabase.from("payment_allocations").insert(
+        validAllocations.map(([invoiceId, amount]) => ({
+          payment_id: payment.id, invoice_id: invoiceId === "opening" ? null : invoiceId, amount: parseFloat(amount),
+        }))
+      );
+    }
 
     setLoading(false);
     setSuccess(true);
@@ -188,17 +222,39 @@ export default function PaymentForm({
               <label className="block text-sm text-gray-600 mb-1">Amount Received</label>
               <input
                 type="number" step="0.01" min="0"
-                value={amountReceived > 0 ? amountReceived.toFixed(2) : ""}
+                value={amountReceivedInput}
                 onChange={(e) => handleAmountReceivedChange(e.target.value)}
                 className="rounded-lg border px-3 py-2 text-sm w-40"
                 placeholder="0.00"
               />
             </div>
-            <label className="flex items-center gap-2 text-sm bg-blue-50 border border-blue-200 rounded-lg px-3 py-2">
-              <input type="checkbox" checked={isFullReceived} onChange={(e) => toggleReceivedFull(e.target.checked)} />
-              Received Full Amount (BDT {money(totalDue)})
-            </label>
+            {totalDue > 0 && (
+              <label className="flex items-center gap-2 text-sm bg-blue-50 border border-blue-200 rounded-lg px-3 py-2">
+                <input type="checkbox" checked={isFullReceived} onChange={(e) => toggleReceivedFull(e.target.checked)} />
+                Received Full Amount (BDT {money(totalDue)})
+              </label>
+            )}
+            <div>
+              <label className="block text-sm text-gray-600 mb-1">Advance (কোনো Invoice ছাড়া)</label>
+              <input
+                type="number" step="0.01" min="0"
+                value={advanceAmount}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setAdvanceAmount(v);
+                  const sum = allocatedAmount + (parseFloat(v) || 0);
+                  setAmountReceivedInput(sum > 0 ? sum.toFixed(2) : "");
+                }}
+                className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm w-40"
+                placeholder="0.00"
+              />
+            </div>
           </div>
+          {parseFloat(advanceAmount) > 0 && (
+            <p className="text-xs text-amber-700">
+              ৳ {money(parseFloat(advanceAmount))} কোনো Invoice-এর সাথে যুক্ত না হয়ে এই Customer-এর Advance হিসেবে জমা থাকবে — পরে নতুন Invoice হলে Running Due-তে অটো এডজাস্ট হয়ে যাবে।
+            </p>
+          )}
 
           <div className="rounded-lg border overflow-x-auto">
             <div className="bg-gray-50 px-3 py-2 text-sm font-semibold text-gray-700">Unpaid Invoices</div>

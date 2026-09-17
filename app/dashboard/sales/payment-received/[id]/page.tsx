@@ -25,6 +25,12 @@ export default async function PaymentViewPage({ params }: { params: Promise<{ id
     .select("*, sales_invoices(invoice_no, invoice_date)")
     .eq("payment_id", id);
 
+  // Payment Amount-এর যেটুকু কোনো Invoice-এ apply করা নেই সেটাই Advance (কোনো Invoice-এর
+  // সাথে যুক্ত না) — Customer Ledger/Outstanding-এর হিসাব payment.amount থেকেই চলে,
+  // তাই এটা এমনিতেই Advance/Credit হিসেবে ধরা পড়ে, নতুন Invoice এলে অটো এডজাস্ট হবে।
+  const totalApplied = (allocations ?? []).reduce((s: number, a: any) => s + (a.amount || 0), 0);
+  const advancePortion = Number(payment.amount || 0) - totalApplied;
+
   return (
     <div>
       <Link href="/dashboard/sales/payment-received" className="text-sm text-gray-500 hover:underline">← সব Payment-এর তালিকায় ফিরুন</Link>
@@ -44,6 +50,9 @@ export default async function PaymentViewPage({ params }: { params: Promise<{ id
         {payment.bank_charges > 0 && <p><span className="text-gray-500">Bank Charges:</span> {money(payment.bank_charges)}</p>}
         <p><span className="text-gray-500">Note:</span> {payment.note || "-"}</p>
         <p className="text-base font-semibold"><span className="text-gray-500 font-normal">Total Amount:</span> {money(payment.amount)}</p>
+        {advancePortion > 0.01 && (
+          <p className="text-amber-700"><span className="text-gray-500">Advance (কোনো Invoice ছাড়া):</span> {money(advancePortion)}</p>
+        )}
       </div>
 
       <h2 className="text-sm font-semibold uppercase text-gray-500 mb-2">Applied To Invoices</h2>

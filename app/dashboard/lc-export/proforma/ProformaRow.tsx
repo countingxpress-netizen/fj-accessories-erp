@@ -105,7 +105,7 @@ export default function ProformaRow({ pi, autoSalesInvoiceValue, autoCommission,
       <td className="px-4 py-2 text-right">
         {!isAdmin ? (
           <span className="text-gray-500">{commissionLive !== 0 ? money(commissionLive) : "-"}</span>
-        ) : pi.commission_amount == null && autoCommission != null ? (
+        ) : pi.commission_amount == null && autoCommission != null && autoCommission > 0 ? (
           <span className="text-gray-500">{money(autoCommission)}</span>
         ) : (
           <input

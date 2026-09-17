@@ -26,7 +26,7 @@ type BuyerRateHistoryRow = { buyer_id: string; effective_from: string; rate: num
 // /new পেজের ProformaForm.tsx-এর একই প্যাটার্ন।
 type BreakdownPatch = Partial<{
   qty: string; thickness: string; tubeInch: string; cuttingInch: string;
-  pricePerLbs: string; adhesivePc: string; printPc: string;
+  pricePerLbs: string; pricePerLbsCurrency: "BDT" | "USD"; adhesivePc: string; printPc: string;
   percentage: string; extra: string; otherCharge: string;
 }>;
 
@@ -326,6 +326,8 @@ export default function EditProformaForm({
   const [bookingTubeInch, setBookingTubeInch] = useState<Record<string, string>>({});
   const [bookingCuttingInch, setBookingCuttingInch] = useState<Record<string, string>>({});
   const [bookingPricePerLbs, setBookingPricePerLbs] = useState<Record<string, string>>({});
+  // Price/Lbs BDT-তে না USD-তে টাইপ করা হচ্ছে — প্রতি বুকিং-লাইনে আলাদা (ডিফল্ট BDT)
+  const [bookingPricePerLbsCurrency, setBookingPricePerLbsCurrency] = useState<Record<string, "BDT" | "USD">>({});
   const [bookingAdhesivePc, setBookingAdhesivePc] = useState<Record<string, string>>({});
   const [bookingPrintPc, setBookingPrintPc] = useState<Record<string, string>>({});
   const [bookingPercentage, setBookingPercentage] = useState<Record<string, string>>({});
@@ -389,13 +391,22 @@ export default function EditProformaForm({
     if (!thickness || !tubeInch || !cuttingInch) return 0;
     return (newLineQty(b, patch) * tubeInch * cuttingInch * thickness) / 75000;
   }
-  function newResolvedLineInputs(b: Booking, patch?: BreakdownPatch, basisOverride?: "pcs" | "dzn") {
+  function newResolvedLineInputs(b: Booking, patch?: BreakdownPatch, basisOverride?: "pcs" | "dzn", rateOverride?: string) {
     const rule = getBuyerRule(b);
     const { tubeInch, cuttingInch } = newLineTubeCuttingInches(b, patch);
     const pricePerLbsRaw = patch?.pricePerLbs ?? bookingPricePerLbs[b.id];
-    const ratePerLbs = pricePerLbsRaw !== undefined && pricePerLbsRaw !== ""
-      ? parseFloat(pricePerLbsRaw) || 0
-      : resolveRate(buyerRateHistory.filter((h) => h.buyer_id === rule?.id), b.booking_date, rule?.rate_per_lbs_value || 0);
+    const pricePerLbsCurrency = patch?.pricePerLbsCurrency ?? bookingPricePerLbsCurrency[b.id] ?? "BDT";
+    // rateOverride (newComputeFinalPrice থেকে) না থাকলে লাইভ exchangeRate।
+    const defaultRateBdt = resolveRate(buyerRateHistory.filter((h) => h.buyer_id === rule?.id), b.booking_date, rule?.rate_per_lbs_value || 0);
+    const typedPricePerLbs = pricePerLbsRaw !== undefined && pricePerLbsRaw !== "" ? (parseFloat(pricePerLbsRaw) || 0) : null;
+    // ratePerLbsNative — Price/Lbs যেই কারেন্সিতে টাইপ করা হয়েছে ঠিক সেই কারেন্সিতেই (কোনো BDT
+    // কনভার্সন ছাড়া) — newLineBreakdown()-এ সরাসরি ব্যবহারের জন্য, যাতে USD-তে টাইপ করলে গোটা
+    // হিসাবই USD-এ থাকে, কোনো BDT round-trip (আর তার সাথে রেট mismatch হওয়ার ঝুঁকি) লাগে না।
+    const ratePerLbsNative = typedPricePerLbs !== null ? typedPricePerLbs : defaultRateBdt;
+    // ratePerLbs — সবসময় BDT-equivalent (সেভ/অন্যান্য ডিসপ্লে ব্যাকওয়ার্ড-কম্প্যাটিবিলিটির জন্য)।
+    const ratePerLbs = typedPricePerLbs !== null
+      ? typedPricePerLbs * (pricePerLbsCurrency === "USD" ? (parseFloat(rateOverride ?? exchangeRate) || 107) : 1)
+      : defaultRateBdt;
     const percentageRaw = patch?.percentage ?? bookingPercentage[b.id];
     const percentage = percentageRaw !== undefined && percentageRaw !== "" ? parseFloat(percentageRaw) || 0 : rule?.percentage_value || 0;
     const basis = basisOverride ?? bookingBasis[b.id] ?? "pcs";
@@ -410,10 +421,10 @@ export default function EditProformaForm({
     const printRaw = patch?.printPc ?? bookingPrintPc[b.id];
     const printOverride = printRaw !== undefined && printRaw !== "" ? parseFloat(printRaw) || 0 : null;
     const printRate = rule?.print_colors_default ?? customerDefaultPrintRate ?? 0.2;
-    return { rule, tubeInch, cuttingInch, ratePerLbs, percentage, extra, otherCharge, adhesiveOverride, printOverride, printRate };
+    return { rule, tubeInch, cuttingInch, ratePerLbs, ratePerLbsNative, pricePerLbsCurrency, percentage, extra, otherCharge, adhesiveOverride, printOverride, printRate };
   }
-  function newLineBreakdown(b: Booking, patch?: BreakdownPatch) {
-    const r = newResolvedLineInputs(b, patch);
+  function newLineBreakdown(b: Booking, patch?: BreakdownPatch, rateOverride?: string) {
+    const r = newResolvedLineInputs(b, patch, undefined, rateOverride);
     const hasAdhesive = hasAdhesiveCharge(b.measurement_type);
     const adhesiveCharge = r.adhesiveOverride != null ? r.adhesiveOverride : hasAdhesive ? r.cuttingInch * (r.rule?.adhesive_rate_per_inch || 0) : 0;
     const colors = b.has_print ? (b.print_colors || 1) : 0;
@@ -427,8 +438,8 @@ export default function EditProformaForm({
   function newComputeFinalPrice(b: Booking, patch?: BreakdownPatch, rateOverride?: string, basisOverride?: "pcs" | "dzn") {
     const rate = parseFloat(rateOverride ?? exchangeRate) || 107;
     const basis = basisOverride ?? bookingBasis[b.id] ?? "pcs";
-    const bd = newLineBreakdown(b, patch);
-    const r = newResolvedLineInputs(b, patch, basis);
+    const bd = newLineBreakdown(b, patch, rateOverride);
+    const r = newResolvedLineInputs(b, patch, basis, rateOverride);
     const priceInCurrency = convertBreakdownToPrice({
       withMarkupBdt: bd.withMarkup, extraUsd: r.extra, otherChargeBdt: r.otherCharge, basis, currency, exchangeRate: rate,
     });
@@ -444,6 +455,12 @@ export default function EditProformaForm({
   ) {
     setter((prev) => ({ ...prev, [b.id]: value }));
     newRecomputeBreakdownPrice(b, { [key]: value } as BreakdownPatch);
+  }
+
+  // Price/Lbs BDT/USD টগল বদলালে — টাইপ করা মান অক্ষুণ্ণ রেখে শুধু ইউনিট বদলায়
+  function setLbsCurrency(b: Booking, cur: "BDT" | "USD") {
+    setBookingPricePerLbsCurrency((prev) => ({ ...prev, [b.id]: cur }));
+    newRecomputeBreakdownPrice(b, { pricePerLbsCurrency: cur });
   }
 
   function getSuggestedPrice(b: Booking, thicknessOverride?: number): number {
@@ -627,8 +644,9 @@ export default function EditProformaForm({
             tube_inch: tubeInch || null, cutting_inch: cuttingInch || null,
             print_charge: currency === "USD" ? bd.printCharge / rate : bd.printCharge,
             adhesive_charge: currency === "USD" ? bd.adhesiveCharge / rate : bd.adhesiveCharge,
-            price_per_lbs: parseFloat(bookingPricePerLbs[li.booking.id] || "") ||
-              resolveRate(buyerRateHistory.filter((h) => h.buyer_id === getBuyerRule(li.booking)?.id), li.booking.booking_date, getBuyerRule(li.booking)?.rate_per_lbs_value || 0),
+            // price_per_lbs সবসময় BDT-তে সেভ হয় — newResolvedLineInputs() ইতিমধ্যে Price/Lbs
+            // USD-তে টাইপ করা থাকলে BDT-তে কনভার্ট করে দেয় (উপরের ratePerLbs, একই লজিক)
+            price_per_lbs: newResolvedLineInputs(li.booking).ratePerLbs,
             percentage_value: parseFloat(bookingPercentage[li.booking.id] || "") || getBuyerRule(li.booking)?.percentage_value || 0,
             extra_charge: parseFloat(bookingExtra[li.booking.id] || "") || getBuyerRule(li.booking)?.usd_surcharge_per_pc || 0,
             other_charge: parseFloat(bookingOtherCharge[li.booking.id] || "") || 0,
@@ -961,8 +979,29 @@ export default function EditProformaForm({
                                     {miniField("Cutting\"", bookingCuttingInch[b.id] ?? (r.cuttingInch ? r.cuttingInch.toFixed(3) : ""),
                                       (v) => newApplyBreakdownChange(b, "cuttingInch", setBookingCuttingInch, v))}
                                     {miniField("Thickness (mm)", bookingThickness[b.id] ?? "", (v) => changeThickness(b, v))}
-                                    {miniField("Price/Lbs (BDT)", bookingPricePerLbs[b.id] ?? (r.ratePerLbs ? r.ratePerLbs.toFixed(2) : ""),
-                                      (v) => newApplyBreakdownChange(b, "pricePerLbs", setBookingPricePerLbs, v))}
+                                    <div className="w-28">
+                                      <div className="flex items-center justify-between">
+                                        <label className="block text-[10px] text-gray-500">Price/Lbs</label>
+                                        <select
+                                          value={bookingPricePerLbsCurrency[b.id] ?? "BDT"}
+                                          onChange={(e) => setLbsCurrency(b, e.target.value as "BDT" | "USD")}
+                                          className="rounded border text-[9px] leading-tight"
+                                        >
+                                          <option value="BDT">BDT</option>
+                                          <option value="USD">USD</option>
+                                        </select>
+                                      </div>
+                                      <input
+                                        type="number" step="0.0001"
+                                        value={bookingPricePerLbs[b.id] ?? (
+                                          r.ratePerLbsNative
+                                            ? r.ratePerLbsNative.toFixed(r.pricePerLbsCurrency === "USD" ? 4 : 2)
+                                            : ""
+                                        )}
+                                        onChange={(e) => newApplyBreakdownChange(b, "pricePerLbs", setBookingPricePerLbs, e.target.value)}
+                                        className="w-full rounded border px-2 py-1 text-xs"
+                                      />
+                                    </div>
                                     {miniField("Adhesive/Pc (BDT)", bookingAdhesivePc[b.id] ?? (bd.adhesiveCharge ? bd.adhesiveCharge.toFixed(4) : "0"),
                                       (v) => newApplyBreakdownChange(b, "adhesivePc", setBookingAdhesivePc, v))}
                                     {miniField("Print/Pc (BDT)", bookingPrintPc[b.id] ?? (bd.printCharge ? bd.printCharge.toFixed(4) : "0"),
