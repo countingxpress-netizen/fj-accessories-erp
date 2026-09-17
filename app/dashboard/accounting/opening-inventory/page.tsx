@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { fetchAllRows } from "@/lib/fetchAll";
 import OpeningInventoryForm from "./OpeningInventoryForm";
 
 export default async function OpeningInventoryPage() {
@@ -12,7 +13,7 @@ export default async function OpeningInventoryPage() {
     { data: fgStock },
     { data: openOrders },
     { data: accounts },
-    { data: jeLines },
+    jeLines,
     { data: existingOpeningJv },
   ] = await Promise.all([
     supabase.from("raw_materials").select("id, material_name, avg_cost_per_lbs, inventory_account_code").order("material_name"),
@@ -24,7 +25,9 @@ export default async function OpeningInventoryPage() {
       .select("id, wip_cost, required_lbs, stage, bookings(booking_no), material_consumption(quantity_lbs, raw_materials(material_name, avg_cost_per_lbs))")
       .neq("stage", "finished"),
     supabase.from("chart_of_accounts").select("id, account_code, account_name, account_type").eq("is_active", true).order("account_code"),
-    supabase.from("journal_entry_lines").select("account_id, debit, credit"),
+    // journal_entry_lines হাজার-খানেক রো ছাড়িয়ে গেছে — Supabase-এর ডিফল্ট 1000-রো
+    // ক্যাপে আটকে যাতে সাইলেন্টলি বাকি লাইন বাদ না পড়ে, .range() দিয়ে পেজিং করে সবটা আনা।
+    fetchAllRows<{ account_id: string; debit: number; credit: number }>(supabase, "journal_entry_lines", "account_id, debit, credit"),
     supabase.from("journal_vouchers").select("id").ilike("narration", "%Opening inventory reconciliation%").limit(1),
   ]);
 

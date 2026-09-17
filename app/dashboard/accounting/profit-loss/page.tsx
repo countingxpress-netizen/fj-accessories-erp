@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { fetchAllRows } from "@/lib/fetchAll";
 import { money } from "@/lib/format";
 
 export default async function ProfitLossPage({
@@ -16,13 +17,15 @@ export default async function ProfitLossPage({
     .in("account_type", ["income", "expense"])
     .order("account_code");
 
-  let query = supabase
-    .from("journal_entry_lines")
-    .select("account_id, debit, credit, journal_vouchers(voucher_date)");
+  // journal_entry_lines হাজার-খানেক রো ছাড়িয়ে গেছে — Supabase-এর ডিফল্ট 1000-রো
+  // ক্যাপে আটকে যাতে সাইলেন্টলি বাকি লাইন বাদ না পড়ে, .range() দিয়ে পেজিং করে সবটা আনা।
+  const allLines = await fetchAllRows<any>(
+    supabase,
+    "journal_entry_lines",
+    "account_id, debit, credit, journal_vouchers(voucher_date)",
+  );
 
-  const { data: allLines } = await query;
-
-  let lines = allLines ?? [];
+  let lines = allLines;
   if (from) lines = lines.filter((l: any) => (l.journal_vouchers?.voucher_date ?? "") >= from);
   if (to) lines = lines.filter((l: any) => (l.journal_vouchers?.voucher_date ?? "") <= to);
 

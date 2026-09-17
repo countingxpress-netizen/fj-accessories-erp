@@ -1,6 +1,7 @@
 import React from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { fetchAllRows } from "@/lib/fetchAll";
 import { money } from "@/lib/format";
 
 const typeLabels: Record<string, string> = {
@@ -20,13 +21,17 @@ export default async function TrialBalancePage() {
     .select("*")
     .order("account_code");
 
-  const { data: lines } = await supabase
-    .from("journal_entry_lines")
-    .select("account_id, debit, credit");
+  // journal_entry_lines হাজার-খানেক রো ছাড়িয়ে গেছে — Supabase-এর ডিফল্ট 1000-রো
+  // ক্যাপে আটকে যাতে সাইলেন্টলি বাকি লাইন বাদ না পড়ে, .range() দিয়ে পেজিং করে সবটা আনা।
+  const lines = await fetchAllRows<{ account_id: string; debit: number; credit: number }>(
+    supabase,
+    "journal_entry_lines",
+    "account_id, debit, credit",
+  );
 
   // প্রতিটা account-এর মোট debit/credit যোগ করুন
   const totals: Record<string, { debit: number; credit: number }> = {};
-  (lines ?? []).forEach((l) => {
+  lines.forEach((l) => {
     if (!totals[l.account_id]) totals[l.account_id] = { debit: 0, credit: 0 };
     totals[l.account_id].debit += l.debit || 0;
     totals[l.account_id].credit += l.credit || 0;
