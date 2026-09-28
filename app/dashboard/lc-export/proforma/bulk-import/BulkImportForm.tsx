@@ -2,10 +2,9 @@
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { generatePiNo } from "@/lib/docNumber";
 import { getCurrentUserId } from "@/lib/currentUser";
 import { money } from "@/lib/format";
-import { downloadPiImportTemplate, parsePiImportFile, type ParsedPiGroup } from "@/lib/piBulkImport";
+import { downloadPiImportTemplate, parsePiImportFile, insertPiGroup, type ParsedPiGroup } from "@/lib/piBulkImport";
 
 type ImportResult = { group: string; ok: boolean; message: string };
 
@@ -50,47 +49,10 @@ export default function BulkImportForm({
 
     for (const g of validGroups) {
       const customer = customers.find((c) => c.id === g.customerId);
-      const piNo = await generatePiNo(supabase, customer ?? null, g.piDate);
-      const totalWeightKg = g.totalWeightKgOverride ?? (g.autoWeightKg > 0 ? Math.round(g.autoWeightKg) : null);
-
-      const { data: pi, error: piError } = await supabase
-        .from("proforma_invoices")
-        .insert({
-          pi_no: piNo, created_by: createdBy, customer_id: g.customerId,
-          pi_date: g.piDate, valid_till: g.validTill || null,
-          buyer_name: g.buyerName || null, merchant_name: g.merchantName || null,
-          garments_id: g.garmentsId, garments_name: g.garmentsName || null, garments_address: g.garmentsAddress || null,
-          item_description: g.itemDescription || null,
-          currency: g.currency, exchange_rate_to_bdt: g.exchangeRate,
-          discount_type: g.discountType, discount_value: g.discountValue,
-          adjustment_amount: g.adjustmentAmount,
-          hs_code: g.hsCode, bin_no: g.binNo,
-          total_weight_kg: totalWeightKg,
-          real_amount: g.realAmount, commission_amount: g.commissionAmount, amount_notes: g.amountNotes || null,
-          total_amount: g.totalAmount, is_manual: true, status: "draft",
-        })
-        .select("id").single();
-
-      if (piError || !pi) {
-        out.push({ group: g.group, ok: false, message: `PI তৈরি ব্যর্থ: ${piError?.message ?? "unknown"}` });
-        continue;
-      }
-
-      const { error: itemsError } = await supabase.from("pi_items").insert(
-        g.items.map((it, i) => ({
-          pi_id: pi.id, booking_id: null, sl_no: i + 1,
-          description: it.description, measurement: it.measurement || null,
-          qty_pcs: it.qtyPcs, price_unit: it.priceUnit, price_basis: it.priceBasis,
-          tube_inch: it.tubeInch, cutting_inch: it.cuttingInch,
-          pi_thickness_mm: it.thicknessMm, weight_kg: it.weightKg || null,
-        })),
-      );
-
-      if (itemsError) {
-        out.push({ group: g.group, ok: false, message: `PI ${piNo} তৈরি হয়েছে কিন্তু আইটেম সেভ ব্যর্থ: ${itemsError.message}` });
-      } else {
-        out.push({ group: g.group, ok: true, message: `PI নম্বর: ${piNo}` });
-      }
+      const result = await insertPiGroup(supabase, g, customer ?? null, createdBy);
+      out.push(result.ok
+        ? { group: g.group, ok: true, message: `PI নম্বর: ${result.piNo}` }
+        : { group: g.group, ok: false, message: result.error });
       setResults([...out]);
     }
 

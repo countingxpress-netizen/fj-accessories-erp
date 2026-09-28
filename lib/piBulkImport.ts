@@ -1,4 +1,6 @@
 import ExcelJS from "exceljs";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { generatePiNo } from "./docNumber";
 
 // Excel Bulk Import for Manual Proforma Invoice — একই effect যা আগে script দিয়ে হতো
 // (AT Accessories / Irish Garments historical PI entry), এখন UI থেকে। একটা row = একটা
@@ -213,4 +215,59 @@ export async function parsePiImportFile(
   });
 
   return { groups, fileError: null };
+}
+
+export type PiInsertResult = { ok: true; piNo: string } | { ok: false; error: string };
+
+// একটা ParsedPiGroup (bulk-import বা smart-parse, দুই জায়গা থেকেই) ডেটাবেজে সেভ করে — ঠিক
+// ProformaForm.tsx-এর manual-mode insert (is_manual=true, booking_id=null)-এর মতোই শেপ।
+// pi_no MAX-based per-customer বলে caller-কে অবশ্যই একটার পর একটা (await) কল করতে হবে,
+// parallel না — নাহলে দুটো PI একই নম্বর পেতে পারে।
+export async function insertPiGroup(
+  supabase: SupabaseClient,
+  g: ParsedPiGroup,
+  customer: { id: string; name?: string | null; code?: string | null } | null,
+  createdBy: string | null,
+  advisingBank?: { name?: string; branch?: string; address?: string; swift?: string },
+  piNoOverride?: string,
+): Promise<PiInsertResult> {
+  // caller (UploadPiForm) রিভিউ ফর্মে PI No আগেই দেখিয়ে এডিটযোগ্য রাখে — সেই ফাইনাল মানই
+  // এখানে ব্যবহার হয়; না দিলে (bulk-import path) আগের মতোই এখানেই জেনারেট হয়।
+  const piNo = piNoOverride || await generatePiNo(supabase, customer ?? null, g.piDate);
+  const totalWeightKg = g.totalWeightKgOverride ?? (g.autoWeightKg > 0 ? Math.round(g.autoWeightKg * 100) / 100 : null);
+
+  const { data: pi, error: piError } = await supabase
+    .from("proforma_invoices")
+    .insert({
+      pi_no: piNo, created_by: createdBy, customer_id: g.customerId,
+      pi_date: g.piDate, valid_till: g.validTill || null,
+      buyer_name: g.buyerName || null, merchant_name: g.merchantName || null,
+      garments_id: g.garmentsId, garments_name: g.garmentsName || null, garments_address: g.garmentsAddress || null,
+      item_description: g.itemDescription || null,
+      currency: g.currency, exchange_rate_to_bdt: g.exchangeRate,
+      discount_type: g.discountType, discount_value: g.discountValue,
+      adjustment_amount: g.adjustmentAmount,
+      hs_code: g.hsCode, bin_no: g.binNo,
+      total_weight_kg: totalWeightKg,
+      advising_bank_name: advisingBank?.name || null, advising_bank_branch: advisingBank?.branch || null,
+      advising_bank_address: advisingBank?.address || null, advising_bank_swift: advisingBank?.swift || null,
+      real_amount: g.realAmount, commission_amount: g.commissionAmount, amount_notes: g.amountNotes || null,
+      total_amount: g.totalAmount, is_manual: true, status: "draft",
+    })
+    .select("id").single();
+
+  if (piError || !pi) return { ok: false, error: `PI তৈরি ব্যর্থ: ${piError?.message ?? "unknown"}` };
+
+  const { error: itemsError } = await supabase.from("pi_items").insert(
+    g.items.map((it, i) => ({
+      pi_id: pi.id, booking_id: null, sl_no: i + 1,
+      description: it.description, measurement: it.measurement || null,
+      qty_pcs: it.qtyPcs, price_unit: it.priceUnit, price_basis: it.priceBasis,
+      tube_inch: it.tubeInch, cutting_inch: it.cuttingInch,
+      pi_thickness_mm: it.thicknessMm, weight_kg: it.weightKg || null,
+    })),
+  );
+  if (itemsError) return { ok: false, error: `PI ${piNo} তৈরি হয়েছে কিন্তু আইটেম সেভ ব্যর্থ: ${itemsError.message}` };
+
+  return { ok: true, piNo };
 }

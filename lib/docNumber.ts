@@ -102,6 +102,29 @@ export async function generatePiNo(
   return generateCustomerCodedDocNo(supabase, "proforma_invoices", "pi_no", "PI", "pi_date", customer, piDate);
 }
 
+// generatePiNo()-এর আউটপুটকে এডিটযোগ্য অংশে ভাঙে — coded ফরম্যাটে (PI/FNJ-{serial}-{code}/
+// {year}) serial আর code দুটোই এডিটেবল, বাকিটা (PI/FNJ-, /year) fixed; code না থাকা plain
+// ফরম্যাটে (PI-{year}-{serial}) শুধু serial এডিটেবল। composePiNoFromParts() দিয়ে আবার জোড়া
+// লাগে — এভাবে UI-তে PI No দেখানো/এডিট করা গেলেও সিস্টেমের numbering ফরম্যাটের বাইরে কিছু
+// টাইপ করা সম্ভব না (নাহলে ভবিষ্যতের auto-numbering গুলিয়ে যাবে)।
+export type PiNoParts =
+  | { style: "coded"; prefix: string; serial: string; code: string; year: string }
+  | { style: "plain"; prefix: string; year: string; serial: string };
+
+export function splitPiNoForEdit(piNo: string): PiNoParts | null {
+  let m = piNo.match(/^(PI\/FNJ-)(\d+)-([A-Za-z0-9]+)\/(\d{4})$/);
+  if (m) return { style: "coded", prefix: m[1], serial: m[2], code: m[3], year: m[4] };
+  m = piNo.match(/^(PI-)(\d{4})-(\d+)$/);
+  if (m) return { style: "plain", prefix: m[1], year: m[2], serial: m[3] };
+  return null;
+}
+
+export function composePiNoFromParts(parts: PiNoParts): string {
+  return parts.style === "coded"
+    ? `${parts.prefix}${parts.serial}-${parts.code}/${parts.year}`
+    : `${parts.prefix}${parts.year}-${parts.serial}`;
+}
+
 // Delivery Challan নম্বর — prefix/customer-code/year ছাড়া শুধু প্লেইন সিরিয়াল (কাগজের
 // চালান বইয়ের নম্বরের মতো, যেমন শুধু "20399")। প্রতিটা কাস্টমারের নিজের বই/সিরিজ, তাই
 // এই কাস্টমারের বিদ্যমান delivery_challans-এর challan_no-গুলোর মধ্যে সবচেয়ে বড় সংখ্যা +1

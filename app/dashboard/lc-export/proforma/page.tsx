@@ -95,6 +95,7 @@ export default async function ProformaListPage() {
         <h1 className="text-2xl font-semibold">Proforma Invoices</h1>
         {!restrictedCustomerId && (
           <div className="flex gap-2">
+            <Link href="/dashboard/lc-export/proforma/upload-pi" className="rounded-lg border px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">📄 PI Upload (Excel)</Link>
             <Link href="/dashboard/lc-export/proforma/bulk-import" className="rounded-lg border px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">📊 Excel Bulk Import</Link>
             <Link href="/dashboard/lc-export/proforma/new" className="rounded-lg bg-gray-900 px-4 py-2 text-sm text-white">+ নতুন PI</Link>
           </div>

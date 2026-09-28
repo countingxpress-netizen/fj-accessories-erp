@@ -6,6 +6,7 @@ import { amountInWords, currencySymbol } from "@/lib/numberToWords";
 import { money } from "@/lib/format";
 import { calcPiUnitPrice, calcPiUnitPriceWithMarkup, calcPiWeightLbs, calcTubeCutting, toInches, calcPiBreakdownCore, convertBreakdownToPrice, hasAdhesiveCharge } from "@/lib/calcTubeCutting";
 import { resolveRate } from "@/lib/rateHistory";
+import { splitPiNoForEdit, composePiNoFromParts, type PiNoParts } from "@/lib/docNumber";
 
 type Garment = { id: string; customer_id: string; name: string; address: string | null };
 type AdvisingBank = { id: string; name: string; branch: string | null; address: string | null; swift: string | null };
@@ -90,6 +91,11 @@ export default function EditProformaForm({
   lastUnitPriceByBooking?: Record<string, number>; customerDefaultPrintRate?: number | null;
   isAtAccessories?: boolean;
 }) {
+  // PI No — নতুন Upload ফর্মের মতোই সিরিয়াল+কোড এডিটেবল (lib/docNumber.ts)। সেভ করা নম্বর
+  // চেনা ফরম্যাটে না থাকলে (পুরনো/ব্যতিক্রমী ডেটা) সরাসরি ফ্রি-টেক্সট এডিট করা যায়।
+  const [piNoParts, setPiNoParts] = useState<PiNoParts | null>(() => splitPiNoForEdit(pi.pi_no));
+  const [piNoFreeText, setPiNoFreeText] = useState(() => (splitPiNoForEdit(pi.pi_no) ? "" : pi.pi_no));
+
   const [piDate, setPiDate] = useState(pi.pi_date);
   const [currency, setCurrency] = useState(pi.currency);
   const [discountType, setDiscountType] = useState(pi.discount_type);
@@ -661,7 +667,10 @@ export default function EditProformaForm({
       }
     }
 
+    const finalPiNo = (piNoParts ? composePiNoFromParts(piNoParts) : piNoFreeText.trim()) || pi.pi_no;
+
     const { error: updateError } = await supabase.from("proforma_invoices").update({
+      pi_no: finalPiNo,
       pi_date: piDate, currency, discount_type: discountType, discount_value: parseFloat(discountValue) || 0,
       price_decimals: Math.max(0, Math.min(8, parseInt(priceDecimals) || 4)),
       status, terms_conditions: termsConditions, total_amount: totalAmount,
@@ -704,6 +713,40 @@ export default function EditProformaForm({
   return (
     <form onSubmit={handleSubmit} className="rounded-xl border bg-white p-6 shadow-sm space-y-4 max-w-6xl">
       <div className="flex flex-wrap gap-4">
+        <div>
+          <label className="block text-sm text-gray-600 mb-1">PI No</label>
+          {piNoParts?.style === "coded" ? (
+            <div className="flex items-center gap-1 rounded-lg border bg-white px-3 py-2 text-sm">
+              <span className="text-gray-500 whitespace-nowrap">{piNoParts.prefix}</span>
+              <input
+                value={piNoParts.serial}
+                onChange={(e) => setPiNoParts((p) => (p ? { ...p, serial: e.target.value.replace(/[^0-9]/g, "") } : p))}
+                className="w-12 border-b border-gray-300 text-center outline-none"
+              />
+              <span className="text-gray-500">-</span>
+              <input
+                value={piNoParts.code}
+                onChange={(e) => setPiNoParts((p) => (p && p.style === "coded" ? { ...p, code: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "") } : p))}
+                className="w-16 border-b border-gray-300 text-center outline-none"
+              />
+              <span className="text-gray-500 whitespace-nowrap">/{piNoParts.year}</span>
+            </div>
+          ) : piNoParts?.style === "plain" ? (
+            <div className="flex items-center gap-1 rounded-lg border bg-white px-3 py-2 text-sm">
+              <span className="text-gray-500 whitespace-nowrap">{piNoParts.prefix}{piNoParts.year}-</span>
+              <input
+                value={piNoParts.serial}
+                onChange={(e) => setPiNoParts((p) => (p ? { ...p, serial: e.target.value.replace(/[^0-9]/g, "") } : p))}
+                className="w-16 border-b border-gray-300 text-center outline-none"
+              />
+            </div>
+          ) : (
+            <div>
+              <input value={piNoFreeText} onChange={(e) => setPiNoFreeText(e.target.value)} className="rounded-lg border px-3 py-2 text-sm w-48" />
+              <p className="text-[11px] text-amber-600 mt-1">চেনা ফরম্যাটে (PI/FNJ-...-CODE/year) নেই — সরাসরি টেক্সট এডিট</p>
+            </div>
+          )}
+        </div>
         <div>
           <label className="block text-sm text-gray-600 mb-1">PI Date</label>
           <input type="date" value={piDate} onChange={(e) => setPiDate(e.target.value)} className="rounded-lg border px-3 py-2 text-sm" />
