@@ -265,9 +265,14 @@ export default function EditProformaForm({
     }
   }
 
+  // প্রতি লাইন আগে ২ দশমিকে রাউন্ড হয়ে তারপর যোগ হয় — ঠিক Excel-এর ROUND(D*F,2)-এর মতোই,
+  // আর PI তৈরির সময় calcLineAmount()-ও একই নিয়ম মানে। আগে এখানে রাউন্ড হতো না — সেভ করার
+  // সময় (এমনকি শুধু status/date বদলালেও) total_amount ১-৩ সেন্ট ভুল হয়ে যেত (২০২৬-০৯-২৮,
+  // PI/FNJ-1803-AT/2026-এ ধরা পড়ে, একই সাথে আরও ~২০টা PI-তে fix করা হয়েছে)।
   function calcAmount(qtyPcs: string, priceUnit: string, basis: string) {
     const q = parseFloat(qtyPcs) || 0, p = parseFloat(priceUnit) || 0;
-    return basis === "dzn" ? (q / 12) * p : q * p;
+    const raw = basis === "dzn" ? (q / 12) * p : q * p;
+    return Math.round(raw * 100) / 100;
   }
 
   const existingSubtotal = lines.reduce((s, l) => s + calcAmount(l.qtyPcs, l.priceUnit, l.priceBasis), 0);
