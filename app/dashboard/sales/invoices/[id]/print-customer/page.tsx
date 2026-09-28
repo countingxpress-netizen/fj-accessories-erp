@@ -82,6 +82,7 @@ export default async function InvoicePrintCustomerPage({ params }: { params: Pro
 
   const total = items.reduce((s: number, i: any) => s + i.customerAmount, 0);
   const totalOrderLbs = items.reduce((s: number, i: any) => s + i.orderLbs, 0);
+  const totalQty = items.reduce((s: number, i: any) => s + (Number(i.quantity_pcs) || 0), 0);
 
   // পরপর একই Style একাধিক লাইনে থাকলে Style কলাম merge & center হবে
   const styleRunSizeByStart: Record<number, number> = {};
@@ -158,7 +159,7 @@ export default async function InvoicePrintCustomerPage({ params }: { params: Pro
     ...items.map((item: any, i: number) => [
       i + 1, item.styleLabel, item.productLabel, formatMeasurement(item.bookings), item.quantity_pcs, Number(item.customerUnitPrice.toFixed(2)), Number(item.customerAmount.toFixed(2)),
     ]),
-    ["Total", "", "", "", "", "", Number(total.toFixed(2))],
+    ["Total", "", "", "", totalQty, "", Number(total.toFixed(2))],
     [],
     [`Total Order Lbs = ${fmt(totalOrderLbs)} Lbs`],
     [],
@@ -241,7 +242,9 @@ export default async function InvoicePrintCustomerPage({ params }: { params: Pro
         </tbody>
         <tfoot>
           <tr className="font-semibold bg-gray-50">
-            <td colSpan={6} className="border border-gray-800 px-2 py-2 text-right">Total</td>
+            <td colSpan={4} className="border border-gray-800 px-2 py-2 text-right">Total</td>
+            <td className="border border-gray-800 px-2 py-2 text-right">{totalQty}</td>
+            <td className="border border-gray-800 px-2 py-2"></td>
             <td className="border border-gray-800 px-2 py-2 text-right">{fmt(total)}</td>
           </tr>
         </tfoot>

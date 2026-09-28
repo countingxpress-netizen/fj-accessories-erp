@@ -56,6 +56,7 @@ export default async function InvoicePrintPage({ params }: { params: Promise<{ i
       productLabel: item.bookings?.product_details || "",
     }));
   const total = items.reduce((s: number, i: any) => s + (i.amount || 0), 0);
+  const totalQty = items.reduce((s: number, i: any) => s + (Number(i.quantity_pcs) || 0), 0);
 
   // পরপর একই Style একাধিক লাইনে থাকলে Style কলাম merge & center হবে (Booking View-এর মতোই)
   const styleRunSizeByStart: Record<number, number> = {};
@@ -250,7 +251,9 @@ export default async function InvoicePrintPage({ params }: { params: Promise<{ i
         </tbody>
         <tfoot>
           <tr className="font-semibold bg-gray-50">
-            <td colSpan={isOther ? 4 : 6} className="border border-gray-800 px-2 py-2 text-right">Total</td>
+            <td colSpan={isOther ? 2 : 4} className="border border-gray-800 px-2 py-2 text-right">Total</td>
+            <td className="border border-gray-800 px-2 py-2 text-right">{totalQty}</td>
+            <td className="border border-gray-800 px-2 py-2"></td>
             <td className="border border-gray-800 px-2 py-2 text-right">{fmt(total)}</td>
           </tr>
         </tfoot>

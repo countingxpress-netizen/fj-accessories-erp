@@ -161,12 +161,14 @@ export function buildInvoiceWorkbook(params: InvoiceExcelParams): ExcelJS.Workbo
     }
   }
 
+  const totalQty = items.reduce((s, i) => s + (Number(i.quantity_pcs) || 0), 0);
+  const qtyCol = isOther ? 3 : 5;
   const totalRow = ws.addRow(
     isOther
-      ? ["Total", "", "", "", fmtMoney(total)]
-      : ["Total", "", "", "", "", "", fmtMoney(total)],
+      ? ["Total", "", totalQty, "", fmtMoney(total)]
+      : ["Total", "", "", "", totalQty, "", fmtMoney(total)],
   );
-  ws.mergeCells(totalRow.number, 1, totalRow.number, totalCols - 1);
+  ws.mergeCells(totalRow.number, 1, totalRow.number, qtyCol - 1);
   totalRow.eachCell((cell) => {
     cell.font = { bold: true, size: 10.5 };
     cell.alignment = { horizontal: "right", vertical: "middle" };

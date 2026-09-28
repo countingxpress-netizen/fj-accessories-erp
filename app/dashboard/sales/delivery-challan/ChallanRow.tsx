@@ -1,9 +1,13 @@
 "use client";
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { createClient } from "@/lib/supabase/client";
 import { formatDate } from "@/lib/formatDate";
 import { formatMeasurement } from "@/lib/formatMeasurement";
 import { cleanProductLabel } from "@/lib/cleanProductLabel";
+import { deleteChallanCascade } from "@/lib/challanDelete";
+import GuardedAction from "@/app/dashboard/GuardedAction";
 import DeliveryStatusBadge from "./DeliveryStatusBadge";
 
 const nf = new Intl.NumberFormat("en-US");
@@ -12,6 +16,8 @@ export default function ChallanRow({
   challan, piNo, isLatest, bkById = {},
 }: { challan: any; piNo?: string; isLatest?: boolean; bkById?: Record<string, any> }) {
   const [open, setOpen] = useState(false);
+  const router = useRouter();
+  const supabase = createClient();
 
   const items: any[] = challan.delivery_challan_items ?? [];
   const totalQty = items.reduce((s: number, i: any) => s + Number(i.quantity_pcs || 0), 0);
@@ -24,6 +30,20 @@ export default function ChallanRow({
   function measurementFor(item: any) {
     const b = bkById[item.booking_id];
     return b ? formatMeasurement(b) : "-";
+  }
+
+  async function handleDelete() {
+    const receivedWarning = challan.delivery_status === "challan_received"
+      ? " এই চালান ইতিমধ্যে Received হয়ে গেছে — তবুও মুছবেন?"
+      : "";
+    if (!window.confirm(`Challan "${challan.challan_no}" মুছে ফেলতে চান? এর সাথে যুক্ত Production/FG Receive/Stock/JV সব undo হয়ে যাবে।${receivedWarning}`)) return;
+
+    const result = await deleteChallanCascade(supabase, challan.id, challan.booking_id);
+    if (!result.ok) {
+      alert(result.error);
+      return;
+    }
+    router.refresh();
   }
 
   return (
@@ -63,10 +83,17 @@ export default function ChallanRow({
           <Link
             href={`/dashboard/sales/delivery-challan/${challan.id}/print`}
             target="_blank"
-            className="text-blue-700 hover:underline text-xs"
+            className="text-blue-700 hover:underline text-xs mr-3"
           >
             Print
           </Link>
+          <GuardedAction
+            table="delivery_challans" recordId={challan.id} recordLabel={challan.challan_no} action="delete"
+            onAllowed={handleDelete}
+            className="rounded bg-red-50 px-2 py-1 text-xs text-red-700 hover:bg-red-100"
+          >
+            Delete
+          </GuardedAction>
         </td>
       </tr>
 
