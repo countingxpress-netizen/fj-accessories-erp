@@ -41,7 +41,7 @@ export default function LCRow({ lc }: { lc: any }) {
         </span>
       </td>
       <td className="px-4 py-2 font-medium">{lc.lc_no}</td>
-      <td className="px-4 py-2 text-gray-500">{lc.banks?.bank_name ?? "-"}</td>
+      <td className="px-4 py-2 text-gray-500">{(lc.lc_type === "export" ? lc.lc_opening_banks?.bank_name : lc.banks?.bank_name) ?? "-"}</td>
       <td className="px-4 py-2">
         {lc.customers?.name ?? lc.suppliers?.name ?? "-"}
         {lc.beneficiary_entity && <div className="text-[11px] text-gray-400">Ben: {lc.beneficiary_entity}</div>}

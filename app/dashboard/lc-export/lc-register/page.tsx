@@ -6,7 +6,7 @@ export default async function LCRegisterPage() {
   const supabase = await createClient();
   const { data: lcs } = await supabase
     .from("lc_register")
-    .select(`*, banks(bank_name), customers(name), suppliers(name),
+    .select(`*, banks(bank_name), lc_opening_banks(bank_name), customers(name), suppliers(name),
       creator:app_users!lc_register_created_by_fkey(full_name),
       lc_pi_items(pi_id, proforma_invoices(pi_no)),
       linked_pi:proforma_invoices!lc_register_linked_pi_id_fkey(pi_no)`)
