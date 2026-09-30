@@ -8,11 +8,17 @@ import { loadGroupMap, displayEntity } from "@/lib/customerGroups";
 import CommissionRow from "./CommissionRow";
 import PrintButton from "@/app/dashboard/PrintButton";
 import { fetchAllRows } from "@/lib/fetchAll";
+import { resolveDatePreset } from "@/lib/datePresets";
+import DateRangeFields from "@/components/DateRangeFields";
 
 export default async function CommissionReportPage({
   searchParams,
-}: { searchParams: Promise<{ from?: string; to?: string; customer?: string }> }) {
-  const { from, to, customer } = await searchParams;
+}: { searchParams: Promise<{ range?: string; from?: string; to?: string; customer?: string }> }) {
+  const { customer, range, from: rawFrom, to: rawTo } = await searchParams;
+  // তারিখ-ফিল্টার preset (Today … Previous Year / Date Range / All Time) — ডিফল্ট All Time (আগের মতো)
+  const period = resolveDatePreset(range, rawFrom, rawTo, "all");
+  const from = period.from || undefined;
+  const to = period.to || undefined;
   const supabase = await createClient();
 
   const { data: customers } = await supabase
@@ -119,14 +125,7 @@ export default async function CommissionReportPage({
       <PrintButton excelFilename="Commission-Report" excelSheets={[{ name: "Commission", rows: excelRows }]} />
 
       <form className="print:hidden mb-6 flex flex-wrap items-end gap-3">
-        <div>
-          <label className="block text-xs text-gray-500 mb-1">From</label>
-          <input type="date" name="from" defaultValue={from} className="rounded-lg border px-3 py-2 text-sm" />
-        </div>
-        <div>
-          <label className="block text-xs text-gray-500 mb-1">To</label>
-          <input type="date" name="to" defaultValue={to} className="rounded-lg border px-3 py-2 text-sm" />
-        </div>
+        <DateRangeFields preset={period.preset} from={period.from} to={period.to} includeAll />
         <div>
           <label className="block text-xs text-gray-500 mb-1">Customer</label>
           <select name="customer" defaultValue={customer ?? ""} className="rounded-lg border px-3 py-2 text-sm">

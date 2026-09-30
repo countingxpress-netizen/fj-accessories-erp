@@ -2,13 +2,23 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllRows } from "@/lib/fetchAll";
 import { money } from "@/lib/format";
+import { resolveDatePreset, dhakaToday } from "@/lib/datePresets";
+import DateRangeFields from "@/components/DateRangeFields";
+import { formatLongDate } from "@/lib/datePresets";
 
 export default async function BalanceSheetPage({
   searchParams,
 }: {
-  searchParams: Promise<{ asOf?: string }>;
+  searchParams: Promise<{ range?: string; from?: string; to?: string; asOf?: string }>;
 }) {
-  const { asOf } = await searchParams;
+  // Balance Sheet = নির্দিষ্ট তারিখ পর্যন্ত — বাছাই করা সময়কালের শেষ দিন (to) পর্যন্ত সব এন্ট্রি।
+  // ডিফল্ট All Time (আজ পর্যন্ত, আগের মতো); পুরনো ?asOf= লিংকও কাজ করে।
+  const sp = await searchParams;
+  const period = resolveDatePreset(sp.range, sp.from, sp.to ?? sp.asOf, "all");
+  const t = dhakaToday();
+  const todayStr = `${t.y}-${String(t.m).padStart(2, "0")}-${String(t.d).padStart(2, "0")}`;
+  // ভবিষ্যতের তারিখ (যেমন This Month-এর শেষ দিন) হলেও আজ পর্যন্ত যা আছে তাই দেখায়
+  const asOf = period.to ? (period.to > todayStr ? todayStr : period.to) : undefined;
   const supabase = await createClient();
 
   const { data: accounts } = await supabase
@@ -99,14 +109,11 @@ export default async function BalanceSheetPage({
         </Link>
       </div>
       <p className="text-sm text-gray-500 mb-4">
-        {asOf ? `${asOf} তারিখ পর্যন্ত` : "আজ পর্যন্ত (সব এন্ট্রি)"}
+        {asOf ? `${formatLongDate(asOf)} তারিখ পর্যন্ত` : "আজ পর্যন্ত (সব এন্ট্রি)"}
       </p>
 
-      <form className="mb-6 flex items-end gap-3">
-        <div>
-          <label className="block text-xs text-gray-500 mb-1">As of Date</label>
-          <input type="date" name="asOf" defaultValue={asOf} className="rounded-lg border px-3 py-2 text-sm" />
-        </div>
+      <form className="mb-6 flex flex-wrap items-end gap-3">
+        <DateRangeFields preset={period.preset} from={period.from} to={period.to} includeAll hideFrom toLabel="As of Date" />
         <button type="submit" className="rounded-lg bg-gray-900 px-4 py-2 text-sm text-white">
           দেখুন
         </button>

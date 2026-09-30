@@ -10,6 +10,7 @@
 //   গ্রুপভুক্ত কাস্টমার এক পার্টি হিসেবে যোগ হয় (Outstanding / Commission রিপোর্টের মতো)।
 
 import { type GroupMap, displayEntity } from "@/lib/customerGroups";
+import { DATE_PRESET_OPTIONS, ALL_TIME_OPTION, resolveDatePreset } from "@/lib/datePresets";
 
 export type SalesByCustomerRow = {
   key: string;
@@ -99,19 +100,8 @@ export function salesEntityOptions(
 }
 
 // ── Date range presets ─────────────────────────────────────────────────────
-export const SALES_RANGE_OPTIONS: { value: string; label: string }[] = [
-  { value: "today", label: "আজ (Today)" },
-  { value: "this_month", label: "চলতি মাস (This Month)" },
-  { value: "previous_month", label: "গত মাস (Previous Month)" },
-  { value: "this_year", label: "চলতি বছর (This Year)" },
-  { value: "previous_year", label: "গত বছর (Previous Year)" },
-  { value: "all", label: "সব সময় (All Time)" },
-  { value: "custom", label: "নির্দিষ্ট তারিখ (Custom)" },
-];
-
-const pad = (n: number) => String(n).padStart(2, "0");
-const iso = (y: number, m: number, d: number) => `${y}-${pad(m)}-${pad(d)}`;
-const daysInMonth = (y: number, m: number) => new Date(y, m, 0).getDate();
+// সব রিপোর্টের মতো একই তালিকা (lib/datePresets.ts) + All Time।
+export const SALES_RANGE_OPTIONS: { value: string; label: string }[] = [...DATE_PRESET_OPTIONS, ALL_TIME_OPTION];
 
 /** Asia/Dhaka টাইমজোনে আজকের তারিখ (YYYY-MM-DD) — Vercel UTC হলেও ঠিক থাকে। */
 export function todayDhaka(): string {
@@ -123,25 +113,7 @@ export function resolveSalesRange(
   customFrom?: string,
   customTo?: string,
 ): { from?: string; to?: string } {
-  const [y, m] = todayDhaka().split("-").map(Number);
-  const today = todayDhaka();
-  switch (range) {
-    case "today":
-      return { from: today, to: today };
-    case "this_month":
-      return { from: iso(y, m, 1), to: iso(y, m, daysInMonth(y, m)) };
-    case "previous_month": {
-      const py = m === 1 ? y - 1 : y;
-      const pm = m === 1 ? 12 : m - 1;
-      return { from: iso(py, pm, 1), to: iso(py, pm, daysInMonth(py, pm)) };
-    }
-    case "this_year":
-      return { from: `${y}-01-01`, to: `${y}-12-31` };
-    case "previous_year":
-      return { from: `${y - 1}-01-01`, to: `${y - 1}-12-31` };
-    case "custom":
-      return { from: customFrom || undefined, to: customTo || undefined };
-    default:
-      return {};
-  }
+  // range না থাকলে All Time (আগের আচরণ); কলার-রা সাধারণত "this_month" ডিফল্ট পাঠায়
+  const r = resolveDatePreset(range ?? "all", customFrom, customTo);
+  return { from: r.from || undefined, to: r.to || undefined };
 }

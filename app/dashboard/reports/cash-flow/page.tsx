@@ -4,11 +4,17 @@ import { formatDate } from "@/lib/formatDate";
 import { money } from "@/lib/format";
 import PrintButton from "@/app/dashboard/PrintButton";
 import { fetchAllRows } from "@/lib/fetchAll";
+import { resolveDatePreset } from "@/lib/datePresets";
+import DateRangeFields from "@/components/DateRangeFields";
 
 export default async function CashFlowPage({
   searchParams,
-}: { searchParams: Promise<{ from?: string; to?: string }> }) {
-  const { from, to } = await searchParams;
+}: { searchParams: Promise<{ range?: string; from?: string; to?: string }> }) {
+  const { range, from: rawFrom, to: rawTo } = await searchParams;
+  // তারিখ-ফিল্টার preset (Today … Previous Year / Date Range / All Time) — ডিফল্ট All Time (আগের মতো)
+  const period = resolveDatePreset(range, rawFrom, rawTo, "all");
+  const from = period.from || undefined;
+  const to = period.to || undefined;
   const supabase = await createClient();
 
   const { data: cashBankAccounts } = await supabase
@@ -54,15 +60,8 @@ export default async function CashFlowPage({
         <Link href="/dashboard/reports" className="text-sm text-gray-500 hover:underline">← Reports-এ ফিরুন</Link>
       </div>
 
-      <form className="print:hidden mb-4 flex items-end gap-3">
-        <div>
-          <label className="block text-xs text-gray-500 mb-1">From</label>
-          <input type="date" name="from" defaultValue={from} className="rounded-lg border px-3 py-2 text-sm" />
-        </div>
-        <div>
-          <label className="block text-xs text-gray-500 mb-1">To</label>
-          <input type="date" name="to" defaultValue={to} className="rounded-lg border px-3 py-2 text-sm" />
-        </div>
+      <form className="print:hidden mb-4 flex flex-wrap items-end gap-3">
+        <DateRangeFields preset={period.preset} from={period.from} to={period.to} includeAll />
         <button type="submit" className="rounded-lg bg-gray-900 px-4 py-2 text-sm text-white">ফিল্টার করুন</button>
       </form>
 

@@ -9,9 +9,10 @@ import {
   salesEntityOptions,
   resolveSalesRange,
   todayDhaka,
-  SALES_RANGE_OPTIONS,
 } from "@/lib/salesByCustomer";
 import { fetchAllRows } from "@/lib/fetchAll";
+import DateRangeFields from "@/components/DateRangeFields";
+import type { DatePreset } from "@/lib/datePresets";
 
 export default async function SalesByCustomerReportPage({
   searchParams,
@@ -77,24 +78,7 @@ export default async function SalesByCustomerReportPage({
         </div>
 
         <form className="mb-4 flex flex-wrap items-end gap-3">
-          <div>
-            <label className="block text-xs text-gray-500 mb-1">Date Range</label>
-            <select name="range" defaultValue={effectiveRange} className="rounded-lg border px-3 py-2 text-sm">
-              {SALES_RANGE_OPTIONS.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-xs text-gray-500 mb-1">From (Custom)</label>
-            <input type="date" name="from" defaultValue={customFrom} className="rounded-lg border px-3 py-2 text-sm" />
-          </div>
-          <div>
-            <label className="block text-xs text-gray-500 mb-1">To (Custom)</label>
-            <input type="date" name="to" defaultValue={customTo} className="rounded-lg border px-3 py-2 text-sm" />
-          </div>
+          <DateRangeFields preset={effectiveRange as DatePreset} from={customFrom ?? ""} to={customTo ?? ""} includeAll />
           <div>
             <label className="block text-xs text-gray-500 mb-1">Customer</label>
             <select name="customer" defaultValue={customer ?? ""} className="rounded-lg border px-3 py-2 text-sm max-w-[220px]">

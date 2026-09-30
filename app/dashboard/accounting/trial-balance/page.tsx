@@ -3,6 +3,8 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllRows } from "@/lib/fetchAll";
 import { money } from "@/lib/format";
+import { resolveDatePreset, dhakaToday, formatLongDate } from "@/lib/datePresets";
+import DateRangeFields from "@/components/DateRangeFields";
 
 const typeLabels: Record<string, string> = {
   asset: "Assets",
@@ -13,7 +15,16 @@ const typeLabels: Record<string, string> = {
 };
 const typeOrder = ["asset", "liability", "equity", "income", "expense"];
 
-export default async function TrialBalancePage() {
+export default async function TrialBalancePage({
+  searchParams,
+}: { searchParams: Promise<{ range?: string; from?: string; to?: string }> }) {
+  // Trial Balance = নির্দিষ্ট তারিখ পর্যন্ত — সময়কালের শেষ দিন (to) পর্যন্ত সব এন্ট্রি (ক্রমপুঞ্জিত)।
+  // ডিফল্ট All Time (আজ পর্যন্ত, আগের মতো)।
+  const sp = await searchParams;
+  const period = resolveDatePreset(sp.range, sp.from, sp.to, "all");
+  const t = dhakaToday();
+  const todayStr = `${t.y}-${String(t.m).padStart(2, "0")}-${String(t.d).padStart(2, "0")}`;
+  const asOf = period.to ? (period.to > todayStr ? todayStr : period.to) : undefined;
   const supabase = await createClient();
 
   const { data: accounts } = await supabase
@@ -23,11 +34,12 @@ export default async function TrialBalancePage() {
 
   // journal_entry_lines হাজার-খানেক রো ছাড়িয়ে গেছে — Supabase-এর ডিফল্ট 1000-রো
   // ক্যাপে আটকে যাতে সাইলেন্টলি বাকি লাইন বাদ না পড়ে, .range() দিয়ে পেজিং করে সবটা আনা।
-  const lines = await fetchAllRows<{ account_id: string; debit: number; credit: number }>(
+  const allLines = await fetchAllRows<{ account_id: string; debit: number; credit: number; journal_vouchers: { voucher_date: string } | null }>(
     supabase,
     "journal_entry_lines",
-    "account_id, debit, credit",
+    "account_id, debit, credit, journal_vouchers(voucher_date)",
   );
+  const lines = asOf ? allLines.filter((l) => (l.journal_vouchers?.voucher_date ?? "") <= asOf) : allLines;
 
   // প্রতিটা account-এর মোট debit/credit যোগ করুন
   const totals: Record<string, { debit: number; credit: number }> = {};
@@ -68,9 +80,15 @@ export default async function TrialBalancePage() {
           ← Accounting-এ ফিরুন
         </Link>
       </div>
-      <p className="text-sm text-gray-500 mb-6">
-        সকল Journal Voucher-এর ভিত্তিতে অটোমেটিক তৈরি — সরাসরি এন্ট্রি করার প্রয়োজন নেই।
+      <p className="text-sm text-gray-500 mb-4">
+        সকল Journal Voucher-এর ভিত্তিতে অটোমেটিক তৈরি — সরাসরি এন্ট্রি করার প্রয়োজন নেই।{" "}
+        {asOf ? `${formatLongDate(asOf)} তারিখ পর্যন্ত।` : "আজ পর্যন্ত (সব এন্ট্রি)।"}
       </p>
+
+      <form className="mb-6 flex flex-wrap items-end gap-3">
+        <DateRangeFields preset={period.preset} from={period.from} to={period.to} includeAll hideFrom toLabel="As of Date" />
+        <button type="submit" className="rounded-lg bg-gray-900 px-4 py-2 text-sm text-white">দেখুন</button>
+      </form>
 
       <div className="overflow-x-auto rounded-xl border bg-white shadow-sm">
         <table className="w-full text-sm">

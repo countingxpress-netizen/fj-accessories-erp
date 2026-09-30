@@ -4,29 +4,8 @@ import { formatDate } from "@/lib/formatDate";
 import { notFound } from "next/navigation";
 import { money } from "@/lib/format";
 import { fetchAllRows } from "@/lib/fetchAll";
-
-function getRangeDates(range: string | undefined, customFrom?: string, customTo?: string) {
-  const now = new Date();
-  const pad = (n: number) => String(n).padStart(2, "0");
-  const fmt = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-
-  if (range === "this_month") {
-    return { from: fmt(new Date(now.getFullYear(), now.getMonth(), 1)), to: fmt(new Date(now.getFullYear(), now.getMonth() + 1, 0)) };
-  }
-  if (range === "previous_month") {
-    return { from: fmt(new Date(now.getFullYear(), now.getMonth() - 1, 1)), to: fmt(new Date(now.getFullYear(), now.getMonth(), 0)) };
-  }
-  if (range === "this_year") {
-    return { from: `${now.getFullYear()}-01-01`, to: `${now.getFullYear()}-12-31` };
-  }
-  if (range === "previous_year") {
-    return { from: `${now.getFullYear() - 1}-01-01`, to: `${now.getFullYear() - 1}-12-31` };
-  }
-  if (range === "custom") {
-    return { from: customFrom || undefined, to: customTo || undefined };
-  }
-  return { from: undefined, to: undefined };
-}
+import { resolveDatePreset } from "@/lib/datePresets";
+import DateRangeFields from "@/components/DateRangeFields";
 
 export default async function CustomerLedgerDetailPage({
   params, searchParams,
@@ -122,7 +101,10 @@ export default async function CustomerLedgerDetailPage({
     return { ...r, balance: runningBalance };
   });
 
-  const { from: rangeFrom, to: rangeTo } = getRangeDates(range, customFrom, customTo);
+  // তারিখ-ফিল্টার preset (lib/datePresets.ts, Asia/Dhaka) — ডিফল্ট All Time (আগের মতো)
+  const period = resolveDatePreset(range, customFrom, customTo, "all");
+  const rangeFrom = period.from || undefined;
+  const rangeTo = period.to || undefined;
 
   let displayRows = allRowsWithBalance;
   let carryForward = 0;
@@ -149,25 +131,7 @@ export default async function CustomerLedgerDetailPage({
       <p className="text-sm text-gray-500 mb-4">{customer.address} {customer.phone && `· ${customer.phone}`}</p>
 
       <form className="mb-4 flex flex-wrap items-end gap-3">
-        <div>
-          <label className="block text-xs text-gray-500 mb-1">Date Range</label>
-          <select name="range" defaultValue={range ?? ""} className="rounded-lg border px-3 py-2 text-sm">
-            <option value="">সব (All Time)</option>
-            <option value="this_month">This Month</option>
-            <option value="previous_month">Previous Month</option>
-            <option value="this_year">This Year</option>
-            <option value="previous_year">Previous Year</option>
-            <option value="custom">Custom Date Range</option>
-          </select>
-        </div>
-        <div>
-          <label className="block text-xs text-gray-500 mb-1">From (Custom-এর জন্য)</label>
-          <input type="date" name="from" defaultValue={customFrom} className="rounded-lg border px-3 py-2 text-sm" />
-        </div>
-        <div>
-          <label className="block text-xs text-gray-500 mb-1">To (Custom-এর জন্য)</label>
-          <input type="date" name="to" defaultValue={customTo} className="rounded-lg border px-3 py-2 text-sm" />
-        </div>
+        <DateRangeFields preset={period.preset} from={period.from} to={period.to} includeAll />
         <button type="submit" className="rounded-lg bg-gray-900 px-4 py-2 text-sm text-white">দেখুন</button>
         {range && (
           <Link href={`/dashboard/sales/customer-ledger/${id}`} className="text-sm text-gray-500 hover:underline">রিসেট করুন</Link>

@@ -3,6 +3,8 @@ import { createClient } from "@/lib/supabase/server";
 import { formatDate } from "@/lib/formatDate";
 import { money } from "@/lib/format";
 import { fetchAllRows, fetchAllRowsIn } from "@/lib/fetchAll";
+import { resolveDatePreset } from "@/lib/datePresets";
+import DateRangeFields from "@/components/DateRangeFields";
 
 const referenceLabels: Record<string, string> = {
   manual_adjustment: "Manual Adjustment",
@@ -18,9 +20,13 @@ const referenceLabels: Record<string, string> = {
 export default async function StockLedgerPage({
   searchParams,
 }: {
-  searchParams: Promise<{ itemType?: string; from?: string; to?: string }>;
+  searchParams: Promise<{ range?: string; itemType?: string; from?: string; to?: string }>;
 }) {
-  const { itemType, from, to } = await searchParams;
+  const { itemType, range, from: rawFrom, to: rawTo } = await searchParams;
+  // তারিখ-ফিল্টার preset (Today … Previous Year / Date Range / All Time) — ডিফল্ট All Time (আগের মতো)
+  const period = resolveDatePreset(range, rawFrom, rawTo, "all");
+  const from = period.from || undefined;
+  const to = period.to || undefined;
   const supabase = await createClient();
 
   // stock_ledger 1000+ রো — পেজ করে সব আনা (নাহলে পুরনো এন্ট্রি চুপচাপ বাদ পড়ে)
@@ -69,14 +75,7 @@ export default async function StockLedgerPage({
             <option value="finished_goods">Finished Goods</option>
           </select>
         </div>
-        <div>
-          <label className="block text-xs text-gray-500 mb-1">From</label>
-          <input type="date" name="from" defaultValue={from} className="rounded-lg border px-3 py-2 text-sm" />
-        </div>
-        <div>
-          <label className="block text-xs text-gray-500 mb-1">To</label>
-          <input type="date" name="to" defaultValue={to} className="rounded-lg border px-3 py-2 text-sm" />
-        </div>
+        <DateRangeFields preset={period.preset} from={period.from} to={period.to} includeAll />
         <button type="submit" className="rounded-lg bg-gray-900 px-4 py-2 text-sm text-white">
           ফিল্টার করুন
         </button>

@@ -1,13 +1,19 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import TransferRow from "./TransferRow";
+import { resolveDatePreset } from "@/lib/datePresets";
+import DateRangeFields from "@/components/DateRangeFields";
 
 export default async function WarehouseTransferPage({
   searchParams,
 }: {
-  searchParams: Promise<{ type?: string; from?: string; to?: string }>;
+  searchParams: Promise<{ range?: string; type?: string; from?: string; to?: string }>;
 }) {
-  const { type, from, to } = await searchParams;
+  const { type, range, from: rawFrom, to: rawTo } = await searchParams;
+  // তারিখ-ফিল্টার preset (Today … Previous Year / Date Range / All Time) — ডিফল্ট All Time (আগের মতো)
+  const period = resolveDatePreset(range, rawFrom, rawTo, "all");
+  const from = period.from || undefined;
+  const to = period.to || undefined;
   const supabase = await createClient();
 
   let query = supabase
@@ -44,14 +50,7 @@ export default async function WarehouseTransferPage({
             <option value="wastage">Wastage Transfer</option>
           </select>
         </div>
-        <div>
-          <label className="block text-xs text-gray-500 mb-1">From</label>
-          <input type="date" name="from" defaultValue={from} className="rounded-lg border px-3 py-2 text-sm" />
-        </div>
-        <div>
-          <label className="block text-xs text-gray-500 mb-1">To</label>
-          <input type="date" name="to" defaultValue={to} className="rounded-lg border px-3 py-2 text-sm" />
-        </div>
+        <DateRangeFields preset={period.preset} from={period.from} to={period.to} includeAll />
         <button type="submit" className="rounded-lg bg-gray-900 px-4 py-2 text-sm text-white">
           ফিল্টার করুন
         </button>

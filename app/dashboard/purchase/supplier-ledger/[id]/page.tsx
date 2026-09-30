@@ -3,9 +3,18 @@ import { createClient } from "@/lib/supabase/server";
 import { formatDate } from "@/lib/formatDate";
 import { notFound } from "next/navigation";
 import { money } from "@/lib/format";
+import { resolveDatePreset, datePresetLabel } from "@/lib/datePresets";
+import DateRangeFields from "@/components/DateRangeFields";
 
-export default async function SupplierLedgerDetailPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function SupplierLedgerDetailPage({
+  params, searchParams,
+}: { params: Promise<{ id: string }>; searchParams: Promise<{ range?: string; from?: string; to?: string }> }) {
   const { id } = await params;
+  // তারিখ-ফিল্টার preset — ডিফল্ট All Time (আগের মতো); সময়ের আগের বাকি "Opening Balance" সারিতে
+  const sp = await searchParams;
+  const period = resolveDatePreset(sp.range, sp.from, sp.to, "all");
+  const from = period.from || undefined;
+  const to = period.to || undefined;
   const supabase = await createClient();
 
   const { data: supplier } = await supabase.from("suppliers").select("*").eq("id", id).single();
@@ -36,20 +45,28 @@ export default async function SupplierLedgerDetailPage({ params }: { params: Pro
 
   rows.sort((a, b) => a.date.localeCompare(b.date));
 
-  let runningBalance = 0;
-  const finalRows = rows.map((r) => {
+  const openingBalance = from ? rows.filter((r) => r.date < from).reduce((s, r) => s + r.credit - r.debit, 0) : 0;
+  const inRange = rows.filter((r) => (!from || r.date >= from) && (!to || r.date <= to));
+
+  let runningBalance = openingBalance;
+  const finalRows = inRange.map((r) => {
     runningBalance += r.credit - r.debit;
     return { ...r, balance: runningBalance };
   });
 
-  const totalPurchase = rows.reduce((s, r) => s + r.credit, 0);
-  const totalPayments = rows.reduce((s, r) => s + r.debit, 0);
+  const totalPurchase = inRange.reduce((s, r) => s + r.credit, 0);
+  const totalPayments = inRange.reduce((s, r) => s + r.debit, 0);
 
   return (
     <div>
       <Link href="/dashboard/purchase/supplier-ledger" className="text-sm text-gray-500 hover:underline">← সব Supplier-এর তালিকায় ফিরুন</Link>
       <h1 className="text-2xl font-semibold mt-2 mb-1">{supplier.name}</h1>
-      <p className="text-sm text-gray-500 mb-4">{supplier.address} {supplier.phone && `· ${supplier.phone}`}</p>
+      <p className="text-sm text-gray-500 mb-4">{supplier.address} {supplier.phone && `· ${supplier.phone}`} · {datePresetLabel(period)}</p>
+
+      <form className="mb-4 flex flex-wrap items-end gap-3">
+        <DateRangeFields preset={period.preset} from={period.from} to={period.to} includeAll />
+        <button type="submit" className="rounded-lg bg-gray-900 px-4 py-2 text-sm text-white">দেখুন</button>
+      </form>
 
       <div className="overflow-x-auto rounded-xl border bg-white shadow-sm">
         <table className="w-full text-sm">
@@ -65,6 +82,12 @@ export default async function SupplierLedgerDetailPage({ params }: { params: Pro
             </tr>
           </thead>
           <tbody>
+            {from && (
+              <tr className="border-t bg-gray-50/60">
+                <td colSpan={6} className="px-4 py-2 font-medium text-gray-600">Opening Balance (এই সময়ের আগ পর্যন্ত)</td>
+                <td className="px-4 py-2 text-right font-medium">{money(openingBalance)}</td>
+              </tr>
+            )}
             {finalRows.map((r, i) => (
               <tr key={i} className="border-t">
                 <td className="px-4 py-2 text-gray-500">{formatDate(r.date)}</td>

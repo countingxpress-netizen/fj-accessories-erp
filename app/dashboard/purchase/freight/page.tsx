@@ -4,11 +4,17 @@ import { money } from "@/lib/format";
 import { loadPaidViaAccounts } from "@/lib/paidViaAccounts";
 import FreightForm from "./FreightForm";
 import FreightTable from "./FreightTable";
+import { resolveDatePreset } from "@/lib/datePresets";
+import DateRangeFields from "@/components/DateRangeFields";
 
 export default async function PurchaseFreightPage({
   searchParams,
-}: { searchParams: Promise<{ from?: string; to?: string }> }) {
-  const { from, to } = await searchParams;
+}: { searchParams: Promise<{ range?: string; from?: string; to?: string }> }) {
+  const { range, from: rawFrom, to: rawTo } = await searchParams;
+  // তারিখ-ফিল্টার preset (Today … Previous Year / Date Range / All Time) — ডিফল্ট All Time (আগের মতো)
+  const period = resolveDatePreset(range, rawFrom, rawTo, "all");
+  const from = period.from || undefined;
+  const to = period.to || undefined;
   const supabase = await createClient();
 
   const [{ data: entries }, paidViaAccounts] = await Promise.all([
@@ -60,15 +66,8 @@ export default async function PurchaseFreightPage({
 
       <FreightForm entries={entryOptions} paidViaAccounts={paidViaAccounts} />
 
-      <form className="mt-6 mb-4 flex items-end gap-3">
-        <div>
-          <label className="block text-xs text-gray-500 mb-1">From</label>
-          <input type="date" name="from" defaultValue={from} className="rounded-lg border px-3 py-2 text-sm" />
-        </div>
-        <div>
-          <label className="block text-xs text-gray-500 mb-1">To</label>
-          <input type="date" name="to" defaultValue={to} className="rounded-lg border px-3 py-2 text-sm" />
-        </div>
+      <form className="mt-6 mb-4 flex flex-wrap items-end gap-3">
+        <DateRangeFields preset={period.preset} from={period.from} to={period.to} includeAll />
         <button type="submit" className="rounded-lg bg-gray-900 px-4 py-2 text-sm text-white">ফিল্টার করুন</button>
       </form>
 

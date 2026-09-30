@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { todayDhaka } from "@/lib/salesByCustomer";
+import { resolveDatePreset } from "@/lib/datePresets";
+import DateRangeFields from "@/components/DateRangeFields";
 import PrintButton from "@/app/dashboard/PrintButton";
 import { buildDayBook, type DbRow } from "@/lib/daybook";
 import type { ExcelSheet } from "@/lib/exportExcel";
@@ -75,11 +77,13 @@ function LedgerColumn({ title, rows, total, totalLabel }: { title: string; rows:
 export default async function DayBookPage({
   searchParams,
 }: {
-  searchParams: Promise<{ from?: string; to?: string }>;
+  searchParams: Promise<{ range?: string; from?: string; to?: string }>;
 }) {
   const sp = await searchParams;
-  const from = sp.from || todayDhaka();
-  const to = sp.to || from;
+  // তারিখ-ফিল্টার preset — ডিফল্ট Today (দৈনিক খাতা); পুরনো লিংকে শুধু from থাকলে সেই এক দিন
+  const period = resolveDatePreset(sp.range, sp.from, sp.to, "today");
+  const from = period.from || todayDhaka();
+  const to = period.to || from;
 
   const supabase = await createClient();
   const [{ data: company }, data] = await Promise.all([
@@ -132,16 +136,9 @@ export default async function DayBookPage({
           </Link>
         </div>
         <form className="mb-4 flex flex-wrap items-end gap-3">
-          <div>
-            <label className="block text-xs text-gray-500 mb-1">তারিখ (From)</label>
-            <input type="date" name="from" defaultValue={from} className="rounded-lg border px-3 py-2 text-sm" />
-          </div>
-          <div>
-            <label className="block text-xs text-gray-500 mb-1">To (একাধিক দিন হলে)</label>
-            <input type="date" name="to" defaultValue={sp.to || ""} className="rounded-lg border px-3 py-2 text-sm" />
-          </div>
+          <DateRangeFields preset={period.preset} from={from} to={to} fromLabel="তারিখ (From)" toLabel="To" />
           <button type="submit" className="rounded-lg bg-gray-900 px-4 py-2 text-sm text-white">দেখুন</button>
-          {(sp.from || sp.to) && (
+          {(sp.range || sp.from || sp.to) && (
             <Link href="/dashboard/reports/daybook" className="text-sm text-gray-500 hover:underline">রিসেট</Link>
           )}
         </form>
