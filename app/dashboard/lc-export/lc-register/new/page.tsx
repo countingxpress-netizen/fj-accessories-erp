@@ -16,6 +16,13 @@ export default async function NewLCPage() {
     .select("id, pi_no, pi_date, customer_id, total_amount, customers(name)")
     .order("pi_date", { ascending: false });
 
+  // সব Export LC মিলিয়ে একটাই সিরিয়াল ক্রম — নতুন LC-তে সর্বোচ্চ + 1 (ফর্মে এডিটযোগ্য)
+  const { data: lastSerial } = await supabase
+    .from("lc_register").select("serial_no")
+    .eq("lc_type", "export").not("serial_no", "is", null)
+    .order("serial_no", { ascending: false }).limit(1).maybeSingle();
+  const nextSerialNo = (lastSerial?.serial_no ?? 0) + 1;
+
   return (
     <div>
       <h1 className="text-2xl font-semibold mb-4">নতুন LC</h1>
@@ -23,6 +30,7 @@ export default async function NewLCPage() {
         banks={banks ?? []} lcOpeningBanks={lcOpeningBanks ?? []}
         customers={customers ?? []} suppliers={suppliers ?? []} garments={garments ?? []}
         pis={(pis ?? []) as any}
+        nextSerialNo={nextSerialNo}
       />
     </div>
   );

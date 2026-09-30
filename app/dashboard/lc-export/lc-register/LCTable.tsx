@@ -16,7 +16,7 @@ export default function LCTable({ lcs }: { lcs: any[] }) {
       if (dateTo && lc.lc_date > dateTo) return false;
       if (q) {
         const party = lc.customers?.name ?? lc.suppliers?.name ?? "";
-        const hay = `${lc.lc_no ?? ""} ${party} ${lc.banks?.bank_name ?? ""}`.toLowerCase();
+        const hay = `${lc.serial_no ?? ""} ${lc.lc_no ?? ""} ${party} ${lc.banks?.bank_name ?? ""} ${lc.lc_opening_banks?.bank_name ?? ""}`.toLowerCase();
         if (!hay.includes(q)) return false;
       }
       return true;
@@ -34,7 +34,7 @@ export default function LCTable({ lcs }: { lcs: any[] }) {
           <label className="block text-[11px] text-gray-500 mb-1">সার্চ</label>
           <input
             value={search} onChange={(e) => setSearch(e.target.value)}
-            placeholder="LC No / Party / Bank..."
+            placeholder="Serial / LC No / Party / Bank..."
             className="w-48 rounded-lg border px-3 py-1.5 text-sm"
           />
         </div>
@@ -62,6 +62,7 @@ export default function LCTable({ lcs }: { lcs: any[] }) {
           <thead className="bg-gray-50 text-left text-gray-600">
             <tr>
               <th className="px-4 py-2">Type</th>
+              <th className="px-4 py-2">Serial</th>
               <th className="px-4 py-2">LC No</th>
               <th className="px-4 py-2">Bank</th>
               <th className="px-4 py-2">Party</th>
@@ -76,7 +77,7 @@ export default function LCTable({ lcs }: { lcs: any[] }) {
           <tbody>
             {filtered.map((lc) => <LCRow key={lc.id} lc={lc} />)}
             {filtered.length === 0 && (
-              <tr><td colSpan={10} className="px-4 py-3 text-gray-400 italic">এই ফিল্টারে কোনো LC নেই</td></tr>
+              <tr><td colSpan={11} className="px-4 py-3 text-gray-400 italic">এই ফিল্টারে কোনো LC নেই</td></tr>
             )}
           </tbody>
         </table>

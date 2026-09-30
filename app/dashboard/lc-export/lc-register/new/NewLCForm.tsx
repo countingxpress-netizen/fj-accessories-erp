@@ -4,6 +4,13 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { getCurrentUserId } from "@/lib/currentUser";
 import { formatDate } from "@/lib/formatDate";
+import { money } from "@/lib/format";
+import { REQUIRED_DOCUMENT_OPTIONS, lcRefText } from "@/lib/lcDocuments";
+import {
+  SOURCE_PI_SELECT, buildMasterHeader, mergeLines, masterTotals, saveMasterPi,
+  type MasterPiHeader, type MasterPiLine, type SourcePi,
+} from "@/lib/lcMasterPi";
+import MasterPiEditor from "../MasterPiEditor";
 
 type Bank = { id: string; bank_name: string };
 type LcOpeningBank = {
@@ -16,20 +23,6 @@ type Supplier = { id: string; name: string };
 type Garment = { id: string; customer_id: string; name: string; address: string | null };
 type PI = { id: string; pi_no: string; pi_date: string | null; customer_id: string | null; total_amount: number | null; customers: { name: string } | null };
 
-// F&J-এর নিজস্ব "Export LC form.xlsx" নির্দেশনা + E:\Customer আর্কাইভের real LC Doc
-// ফাইল (AT/Loopdot, Irish Garments) মিলিয়ে চূড়ান্ত — Excel-এর ঠিক এই ১০টা আইটেম, এই ক্রমে।
-const REQUIRED_DOCUMENT_OPTIONS = [
-  "Bill Of Exchange 1",
-  "Bill Of Exchange 2",
-  "Commercial Invoice",
-  "Delivery Challan",
-  "Truck Challan",
-  "Packing List",
-  "BENEFICIARY'S CERTIFICATE",
-  "Certificate of Origin",
-  "Inspection Certificate",
-  "APPLICANT'S CERTIFICATE",
-];
 
 const DRAFTS_AT_OPTIONS: { value: string; label: string }[] = [
   { value: "at_sight", label: "At Sight" },
@@ -42,11 +35,12 @@ const BENEFICIARY_OPTIONS = ["F&J Accessories", "MK Accessories"];
 const NEW_BANK_VALUE = "__new__";
 
 export default function NewLCForm({
-  banks, lcOpeningBanks, customers, suppliers, garments, pis,
+  banks, lcOpeningBanks, customers, suppliers, garments, pis, nextSerialNo,
 }: {
   banks: Bank[]; lcOpeningBanks: LcOpeningBank[]; customers: Customer[]; suppliers: Supplier[];
-  garments: Garment[]; pis: PI[];
+  garments: Garment[]; pis: PI[]; nextSerialNo: number;
 }) {
+  const [serialNo, setSerialNo] = useState(String(nextSerialNo));
   const [lcType, setLcType] = useState<"import" | "export">("export");
   const [customerId, setCustomerId] = useState("");
   const [supplierId, setSupplierId] = useState("");
@@ -98,6 +92,14 @@ export default function NewLCForm({
   const router = useRouter();
   const supabase = createClient();
 
+  // Master PI — বাছাই করা PI-গুলোর লাইন একসাথে (আলাদা কপি; LC সেভের সময় সেভ হয়)
+  const [sourcePis, setSourcePis] = useState<Record<string, SourcePi>>({});
+  const [masterHeader, setMasterHeader] = useState<MasterPiHeader | null>(null);
+  const [masterHeaderTouched, setMasterHeaderTouched] = useState(false);
+  const [masterLines, setMasterLines] = useState<MasterPiLine[]>([]);
+  const [showMaster, setShowMaster] = useState(false);
+  const [masterLoading, setMasterLoading] = useState(false);
+
   const availableGarments = garments.filter((g) => g.customer_id === customerId);
 
   function handleCustomerChange(id: string) {
@@ -139,6 +141,52 @@ export default function NewLCForm({
     () => pis.filter((p) => selectedPiIds[p.id]).reduce((s, p) => s + (Number(p.total_amount) || 0), 0),
     [pis, selectedPiIds],
   );
+
+  // PI বাছাই বদলালে নতুন PI-গুলোর লাইন লোড করে Master PI আপডেট — আগে এডিট করা লাইন অক্ষুণ্ণ থাকে
+  const selectedIdsKey = Object.entries(selectedPiIds).filter(([, v]) => v).map(([id]) => id).sort().join(",");
+  useEffect(() => {
+    if (lcType !== "export") return;
+    const ids = selectedIdsKey ? selectedIdsKey.split(",") : [];
+    let cancelled = false;
+    (async () => {
+      const missing = ids.filter((id) => !sourcePis[id]);
+      let cache = sourcePis;
+      if (missing.length) {
+        setMasterLoading(true);
+        const { data, error } = await supabase.from("proforma_invoices").select(SOURCE_PI_SELECT).in("id", missing);
+        setMasterLoading(false);
+        if (cancelled) return;
+        if (error) { setError("PI লাইন লোড করা যায়নি: " + error.message); return; }
+        cache = { ...sourcePis };
+        for (const p of (data ?? []) as any[]) cache[p.id] = p as SourcePi;
+        setSourcePis(cache);
+      }
+      const selected = ids.map((id) => cache[id]).filter(Boolean);
+      setMasterLines((prev) => mergeLines(prev, selected));
+      if (!masterHeaderTouched) setMasterHeader(selected.length ? buildMasterHeader(selected, applicant) : null);
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedIdsKey, lcType]);
+
+  // Applicant বদলালে (হেডার হাতে বদলানো না হলে) Master PI-র Buyer-ও বদলায়
+  useEffect(() => {
+    if (masterHeaderTouched) return;
+    const selected = selectedIdsKey.split(",").map((id) => sourcePis[id]).filter(Boolean);
+    if (selected.length) setMasterHeader(buildMasterHeader(selected, applicant));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [applicant]);
+
+  const masterSummary = masterHeader ? masterTotals(masterHeader, masterLines) : null;
+  const piNoById = useMemo(() => Object.fromEntries(pis.map((p) => [p.id, p.pi_no])), [pis]);
+
+  function resetMasterPi() {
+    if (!window.confirm("Master PI-র সব এডিট বাদ দিয়ে বাছাই করা PI থেকে নতুন করে তৈরি করবেন?")) return;
+    const selected = selectedIdsKey.split(",").map((id) => sourcePis[id]).filter(Boolean);
+    setMasterHeaderTouched(false);
+    setMasterHeader(selected.length ? buildMasterHeader(selected, applicant) : null);
+    setMasterLines(mergeLines([], selected));
+  }
 
   // PI বাছাই বদলালে LC Amount অটো বসে — ইউজার হাতে বদলে থাকলে (amountTouched) সেটা অক্ষুণ্ণ থাকে
   useEffect(() => {
@@ -202,6 +250,7 @@ export default function NewLCForm({
       .from("lc_register")
       .insert({
         lc_type: "export", lc_no: lcNo, lc_opening_bank_id: finalLcOpeningBankId,
+        serial_no: serialNo.trim() ? parseInt(serialNo, 10) : null,
         customer_id: customerId || null,
         lc_date: lcDate, expiry_date: expiryDate || null,
         amendment_no: amendmentNo || null, amendment_date: amendmentDate || null,
@@ -225,8 +274,17 @@ export default function NewLCForm({
       await supabase.from("proforma_invoices").update({ status: "lc_opened" }).in("id", piIds);
     }
 
+    if (masterHeader && masterLines.length) {
+      const masterErr = await saveMasterPi(supabase, inserted.id, masterHeader, masterLines);
+      if (masterErr) {
+        setLoading(false);
+        setError(`LC সেভ হয়েছে, কিন্তু Master PI সেভ হয়নি: ${masterErr} — LC View পেজ থেকে আবার তৈরি করুন।`);
+        return;
+      }
+    }
+
     setLoading(false);
-    router.push("/dashboard/lc-export/lc-register");
+    router.push(`/dashboard/lc-export/lc-register/${inserted.id}`);
   }
 
   return (
@@ -296,6 +354,11 @@ export default function NewLCForm({
       ) : (
         <>
           <div className="flex flex-wrap gap-4">
+            <div>
+              <label className="block text-sm text-gray-600 mb-1">Serial No</label>
+              <input type="number" value={serialNo} onChange={(e) => setSerialNo(e.target.value)} className="rounded-lg border px-3 py-2 text-sm w-24" />
+              <p className="text-[11px] text-gray-400 mt-1">ডকুমেন্টে {lcRefText(serialNo.trim() ? parseInt(serialNo, 10) : null, lcDate, beneficiaryEntity) || "Ref নেই"}</p>
+            </div>
             <div>
               <label className="block text-sm text-gray-600 mb-1">LC Number</label>
               <input value={lcNo} onChange={(e) => setLcNo(e.target.value)} className="rounded-lg border px-3 py-2 text-sm" required />
@@ -473,6 +536,51 @@ export default function NewLCForm({
               {filteredPis.length === 0 && <p className="px-3 py-2 text-gray-400 italic text-sm">কোনো PI পাওয়া যায়নি</p>}
             </div>
           </div>
+
+          {(masterHeader || masterLoading) && (
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3">
+              <div className="text-sm">
+                <p className="font-semibold text-blue-900">Master PI</p>
+                {masterLoading ? (
+                  <p className="text-xs text-blue-700">PI লাইন লোড হচ্ছে...</p>
+                ) : masterSummary && (
+                  <p className="text-xs text-blue-700">
+                    {selectedPiCount} টা PI · {masterLines.length} লাইন · {masterSummary.totalPcs.toLocaleString("en-IN")} Pcs ·
+                    Total ${money(masterSummary.total)}
+                    {masterHeaderTouched && <span className="ml-1 text-blue-500">(এডিট করা)</span>}
+                  </p>
+                )}
+              </div>
+              <button type="button" onClick={() => setShowMaster(true)} disabled={masterLoading || !masterHeader}
+                className="rounded-lg bg-blue-700 px-4 py-2 text-sm text-white disabled:opacity-40">
+                View &amp; Edit
+              </button>
+            </div>
+          )}
+
+          {showMaster && masterHeader && (
+            <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4">
+              <div className="w-full max-w-6xl rounded-xl bg-white p-5 shadow-xl">
+                <div className="mb-4 flex items-center justify-between">
+                  <h2 className="text-lg font-semibold">Master PI — View &amp; Edit</h2>
+                  <div className="flex gap-2">
+                    <button type="button" onClick={resetMasterPi} className="rounded-lg border px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-50">↺ PI থেকে নতুন করে</button>
+                    <button type="button" onClick={() => setShowMaster(false)} className="rounded-lg bg-gray-900 px-4 py-1.5 text-sm text-white">ঠিক আছে</button>
+                  </div>
+                </div>
+                <p className="mb-3 text-xs text-gray-500">
+                  এখানের এডিট শুধু এই LC-র Master PI-তে — আসল PI অপরিবর্তিত থাকে। LC সেভ করলে Master PI-ও সেভ হবে।
+                </p>
+                <MasterPiEditor
+                  header={masterHeader}
+                  lines={masterLines}
+                  onHeaderChange={(h) => { setMasterHeader(h); setMasterHeaderTouched(true); }}
+                  onLinesChange={setMasterLines}
+                  piNoById={piNoById}
+                />
+              </div>
+            </div>
+          )}
         </>
       )}
 

@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { formatDate } from "@/lib/formatDate";
 import GuardedAction from "@/app/dashboard/GuardedAction";
@@ -40,7 +41,10 @@ export default function LCRow({ lc }: { lc: any }) {
           {lc.lc_type === "export" ? "Export" : "Import"}
         </span>
       </td>
-      <td className="px-4 py-2 font-medium">{lc.lc_no}</td>
+      <td className="px-4 py-2 font-semibold">{lc.lc_type === "export" ? (lc.serial_no ?? <span className="text-gray-300">-</span>) : ""}</td>
+      <td className="px-4 py-2 font-medium">
+        <Link href={`/dashboard/lc-export/lc-register/${lc.id}`} className="hover:underline">{lc.lc_no}</Link>
+      </td>
       <td className="px-4 py-2 text-gray-500">{(lc.lc_type === "export" ? lc.lc_opening_banks?.bank_name : lc.banks?.bank_name) ?? "-"}</td>
       <td className="px-4 py-2">
         {lc.customers?.name ?? lc.suppliers?.name ?? "-"}
@@ -60,7 +64,8 @@ export default function LCRow({ lc }: { lc: any }) {
           <option value="cancelled">Cancelled</option>
         </select>
       </td>
-      <td className="px-4 py-2 text-right">
+      <td className="px-4 py-2 text-right whitespace-nowrap">
+        <Link href={`/dashboard/lc-export/lc-register/${lc.id}`} className="mr-2 rounded bg-blue-50 px-2 py-1 text-xs text-blue-700 hover:bg-blue-100">View</Link>
         <GuardedAction table="lc_register" recordId={lc.id} recordLabel={lc.lc_no} action="delete"
           onAllowed={handleDelete}
           className="rounded bg-red-50 px-2 py-1 text-xs text-red-700 hover:bg-red-100">Delete</GuardedAction>
