@@ -2,6 +2,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { money } from "@/lib/format";
 import PrintButton from "@/app/dashboard/PrintButton";
+import { fetchAllRows } from "@/lib/fetchAll";
 
 export default async function ExpenseReportPage({
   searchParams,
@@ -12,9 +13,7 @@ export default async function ExpenseReportPage({
   const { data: expenseAccounts } = await supabase
     .from("chart_of_accounts").select("id, account_code, account_name").eq("account_type", "expense").order("account_code");
 
-  const { data: allLines } = await supabase
-    .from("journal_entry_lines")
-    .select("account_id, debit, credit, journal_vouchers(voucher_date)");
+  const allLines = await fetchAllRows<any>(supabase, "journal_entry_lines", "account_id, debit, credit, journal_vouchers(voucher_date)");
 
   let lines = allLines ?? [];
   if (from) lines = lines.filter((l: any) => (l.journal_vouchers?.voucher_date ?? "") >= from);

@@ -7,6 +7,7 @@ import { amountInWords } from "@/lib/numberToWords";
 import { buildPdfFilename } from "@/lib/saveAsPdf";
 import InvoiceSummary from "../InvoiceSummary";
 import InvoiceExcelButton from "../../InvoiceExcelButton";
+import { fetchAllRows } from "@/lib/fetchAll";
 
 function fmt(n: number) {
   return n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -72,10 +73,10 @@ export default async function InvoicePrintPage({ params }: { params: Promise<{ i
   }
 
   // --- Previous Bill / This Bill / Running Due হিসাব ---
-  const { data: allInvoices } = await supabase
-    .from("sales_invoices")
-    .select("id, invoice_no, invoice_date, sales_invoice_items(amount)")
-    .eq("customer_id", invoice.customer_id);
+  const allInvoices = await fetchAllRows<any>(
+    supabase, "sales_invoices", "id, invoice_no, invoice_date, sales_invoice_items(amount)",
+    (q) => q.eq("customer_id", invoice.customer_id)
+  );
 
   const { data: payments } = await supabase
     .from("customer_payments")

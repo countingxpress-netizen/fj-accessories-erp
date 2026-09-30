@@ -1,4 +1,17 @@
 import { SupabaseClient } from "@supabase/supabase-js";
+import { fetchAllRows } from "./fetchAll";
+
+// Supabase/PostgREST এক query-তে সর্বোচ্চ 1000 row দেয় — MAX খুঁজতে সব row লাগবে, নাহলে
+// 1000-এর বেশি ডকুমেন্ট হলে পুরনো নম্বর আবার দেবে (duplicate key)। তাই fetchAllRows দিয়ে পেজ করে সব আনি।
+async function fetchColumnValues(
+  supabase: SupabaseClient,
+  table: string,
+  column: string,
+  applyFilter: (q: any) => any
+): Promise<string[]> {
+  const rows = await fetchAllRows<any>(supabase, table, column, applyFilter);
+  return rows.map((r) => r[column] as string);
+}
 
 export async function generateNextDocNo(
   supabase: SupabaseClient,
@@ -9,16 +22,13 @@ export async function generateNextDocNo(
   dateValue: string
 ): Promise<string> {
   const year = new Date(dateValue).getFullYear();
-  const { data } = await supabase
-    .from(table)
-    .select(column)
-    .gte(dateColumn, `${year}-01-01`)
-    .lte(dateColumn, `${year}-12-31`)
-    .ilike(column, `${prefix}-${year}-%`);
+  // তারিখ-ফিল্টার ইচ্ছা করে নেই — নম্বরের year আর তারিখের year না মিললেও (তারিখ এডিট ইত্যাদি)
+  // UNIQUE constraint পুরো টেবিলে, তাই MAX-ও পুরো টেবিলের prefix-year সিরিজ থেকে নিতে হবে।
+  void dateColumn;
+  const values = await fetchColumnValues(supabase, table, column, (q) => q.ilike(column, `${prefix}-${year}-%`));
 
   let maxNum = 0;
-  (data ?? []).forEach((row: any) => {
-    const val = row[column] as string;
+  values.forEach((val) => {
     const match = val?.match(new RegExp(`${prefix}-${year}-(\\d+)$`));
     if (match) {
       const n = parseInt(match[1], 10);
@@ -76,15 +86,12 @@ async function generateCustomerCodedDocNo(
     return generateNextDocNo(supabase, table, column, docPrefix, dateColumn, docDate);
   }
 
-  const { data } = await supabase
-    .from(table)
-    .select(column)
-    .ilike(column, `${docPrefix}/FNJ-%-${code}/%`);
+  const values = await fetchColumnValues(supabase, table, column, (q) => q.ilike(column, `${docPrefix}/FNJ-%-${code}/%`));
 
   const re = new RegExp(`^${docPrefix}/FNJ-(\\d+)-${code}/`, "i");
   let maxNum = hintNext && hintNext > 0 ? hintNext - 1 : 0;
-  (data ?? []).forEach((row: any) => {
-    const m = (row[column] as string)?.match(re);
+  values.forEach((val) => {
+    const m = val?.match(re);
     if (m) {
       const n = parseInt(m[1], 10);
       if (n > maxNum) maxNum = n;
@@ -137,15 +144,12 @@ export async function generateChallanNo(
 ): Promise<string> {
   if (!customer?.id) return "1";
 
-  const { data } = await supabase
-    .from("delivery_challans")
-    .select("challan_no")
-    .eq("customer_id", customer.id);
+  const values = await fetchColumnValues(supabase, "delivery_challans", "challan_no", (q) => q.eq("customer_id", customer.id));
 
   let maxNum = customer.challan_next_serial_hint && customer.challan_next_serial_hint > 0
     ? customer.challan_next_serial_hint - 1 : 0;
-  (data ?? []).forEach((row: any) => {
-    const n = parseInt(row.challan_no, 10);
+  values.forEach((val) => {
+    const n = parseInt(val, 10);
     if (Number.isFinite(n) && n > maxNum) maxNum = n;
   });
 

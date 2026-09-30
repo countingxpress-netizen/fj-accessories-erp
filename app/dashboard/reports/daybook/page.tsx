@@ -90,6 +90,11 @@ export default async function DayBookPage({
   const dateText = data.singleDay ? dot(from) : `${dot(from)} - ${dot(to)}`;
   const subtotal = data.priorCash + data.jamaTotal + data.bikriAmount;
   const sealTotal = data.sideSealPcs + data.bottomSealPcs;
+  // নগদ ব্যালেন্স পজিটিভ (বা 0) হলে "ক্যাশ জমা", নেগেটিভ হলে "ক্যাশ দেনা" — অঙ্কটা চিহ্ন ছাড়া দেখানো হয়,
+  // লেবেলই বলে দেয় জমা না দেনা।
+  const cashLabel = (n: number) => (n < 0 ? "ক্যাশ দেনা" : "ক্যাশ জমা");
+  const priorCashLabel = `সাবেক ${cashLabel(data.priorCash)}`;
+  const cashPositionLabel = cashLabel(data.cashPosition);
 
   const excelRows: ExcelSheet["rows"] = [
     ["DayBook", dateText],
@@ -106,8 +111,8 @@ export default async function DayBookPage({
     ...data.bikri.map((b) => [b.name, `PE- ${Math.round(b.lbs)}`, b.amount]),
     ["মোট বিক্রি", `PE- ${Math.round(data.bikriLbs)}`, data.bikriAmount],
     [],
-    ["মোট জমা", data.jamaTotal], ["বিক্রি", data.bikriAmount], ["সাবেক ক্যাশ দেনা", data.priorCash],
-    ["উপমোট", subtotal], ["(-) খরচ", data.khorochTotal], ["ক্যাশ দেনা", data.cashPosition],
+    ["মোট জমা", data.jamaTotal], ["বিক্রি", data.bikriAmount], [priorCashLabel, Math.abs(data.priorCash)],
+    ["উপমোট", subtotal], ["(-) খরচ", data.khorochTotal], [cashPositionLabel, Math.abs(data.cashPosition)],
     [],
     ["স্টক ছিলো", data.stockOpening], ["ক্রয়", data.stockPurchaseLbs], ["খরচ", data.stockSoldLbs], ["স্টক আছে", data.stockClosing],
     [],
@@ -143,7 +148,7 @@ export default async function DayBookPage({
         <PrintButton excelFilename={`DayBook-${from}${to !== from ? `_to_${to}` : ""}`} excelSheets={[{ name: "DayBook", rows: excelRows }]} />
         <p className="mb-4 text-xs text-gray-400">
           নগদ (Cash in Hand) বই। Bank, আবু জাফর (3000) ও রিপন থিনার (1500) দিয়ে করা লেনদেন pass-through
-          দেখানো — "ক্যাশ দেনা" = নগদ অ্যাকাউন্টের ঐ দিন শেষের ব্যালেন্স। বিক্রি = ঐ দিনের সব বিক্রি (নগদ + বাকি);
+          দেখানো — নগদ অ্যাকাউন্টের ঐ দিন শেষের ব্যালেন্স পজিটিভ হলে "ক্যাশ জমা", নেগেটিভ হলে "ক্যাশ দেনা"। বিক্রি = ঐ দিনের সব বিক্রি (নগদ + বাকি);
           নগদ বিক্রি আলাদাভাবে জমা/খরচে আসে না, সরাসরি এখানের হিসাবেই ধরা হয়।
         </p>
       </div>
@@ -218,12 +223,12 @@ export default async function DayBookPage({
               <tbody>
                 <tr><C>মোট জমা =</C><C className="text-right whitespace-nowrap">{fmt(data.jamaTotal)}</C></tr>
                 <tr><C>বিক্রি =</C><C className="text-right whitespace-nowrap">{fmt(data.bikriAmount)}</C></tr>
-                <tr><C>সাবেক ক্যাশ দেনা =</C><C className="text-right whitespace-nowrap">{fmt(data.priorCash)}</C></tr>
+                <tr><C>{priorCashLabel} =</C><C className="text-right whitespace-nowrap">{fmt(Math.abs(data.priorCash))}</C></tr>
                 <tr className="font-medium"><C /><C className="text-right whitespace-nowrap">{fmt(subtotal)}</C></tr>
                 <tr><C>(-) খরচ =</C><C className="text-right whitespace-nowrap">{fmt(data.khorochTotal)}</C></tr>
                 <tr className="font-bold bg-yellow-50">
-                  <C>ক্যাশ দেনা =</C>
-                  <C className="text-right whitespace-nowrap">{fmt(data.cashPosition)}</C>
+                  <C>{cashPositionLabel} =</C>
+                  <C className="text-right whitespace-nowrap">{fmt(Math.abs(data.cashPosition))}</C>
                 </tr>
               </tbody>
             </table>

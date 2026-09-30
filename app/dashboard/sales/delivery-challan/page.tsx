@@ -1,19 +1,17 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import ChallanTable from "./ChallanTable";
+import { fetchAllRows, fetchAllRowsIn } from "@/lib/fetchAll";
 
 export default async function DeliveryChallanListPage() {
   const supabase = await createClient();
 
-  const { data: challans, error } = await supabase
-    .from("delivery_challans")
-    .select("*, customers(name), bookings(booking_no), delivery_challan_items(id, booking_id, quantity_pcs, packets, print_label, finished_goods(product_name)), creator:app_users!delivery_challans_created_by_fkey(full_name)")
-    .order("challan_date", { ascending: false })
-    .order("created_at", { ascending: false });
-
-  if (error) {
-    console.error("Delivery Challan Fetch Error:", error);
-  }
+  // ঐতিহাসিক চালান এন্ট্রি হলে হাজার ছাড়াবে — পেজ করে সব আনা
+  const challans = await fetchAllRows<any>(
+    supabase, "delivery_challans",
+    "*, customers(name), bookings(booking_no), delivery_challan_items(id, booking_id, quantity_pcs, packets, print_label, finished_goods(product_name)), creator:app_users!delivery_challans_created_by_fkey(full_name)",
+    (q) => q.order("challan_date", { ascending: false }).order("created_at", { ascending: false })
+  );
 
   const challanList = challans ?? [];
   // প্রতি কাস্টমারের সবচেয়ে সাম্প্রতিক চালান — challan_no এখন কাস্টমার-ভিত্তিক প্লেইন
@@ -38,10 +36,7 @@ export default async function DeliveryChallanListPage() {
 
   const piNosByBooking: Record<string, string[]> = {};
   if (allBookingIds.length) {
-    const { data: piRows } = await supabase
-      .from("pi_items")
-      .select("booking_id, proforma_invoices(pi_no)")
-      .in("booking_id", allBookingIds);
+    const piRows = await fetchAllRowsIn<any>(supabase, "pi_items", "booking_id, proforma_invoices(pi_no)", "booking_id", allBookingIds as string[]);
     (piRows ?? []).forEach((r: any) => {
       const piNo = r.proforma_invoices?.pi_no;
       if (!r.booking_id || !piNo) return;
@@ -63,10 +58,10 @@ export default async function DeliveryChallanListPage() {
   // প্রতিটা লাইনের Measurement দেখাতে — booking_id → measurement fields
   const bkById: Record<string, any> = {};
   if (allBookingIds.length) {
-    const { data: bks } = await supabase
-      .from("bookings")
-      .select("id, booking_no, measurement_type, measurement_unit, length_val, width_val, flap_val, gusset_val, pillow_val")
-      .in("id", allBookingIds);
+    const bks = await fetchAllRowsIn<any>(
+      supabase, "bookings", "id, booking_no, measurement_type, measurement_unit, length_val, width_val, flap_val, gusset_val, pillow_val",
+      "id", allBookingIds as string[]
+    );
     (bks ?? []).forEach((b: any) => { bkById[b.id] = b; });
   }
 

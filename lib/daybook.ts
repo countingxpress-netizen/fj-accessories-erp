@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { fetchAllRows, fetchAllRowsIn } from "@/lib/fetchAll";
 
 // ── DayBook (দৈনিক জমা খরচের হিসাব) ────────────────────────────────────────────
 //
@@ -101,10 +102,11 @@ export async function buildDayBook(
   const poolIds = new Set<string>([cashId, ...sourceIds].filter(Boolean));
 
   // ── Journal lines (pool অ্যাকাউন্টে) — prior balance + in-range ──
-  const { data: poolLinesRaw } = await supabase
-    .from("journal_entry_lines")
-    .select("voucher_id, account_id, debit, credit, memo, journal_vouchers(voucher_no, voucher_date, narration)")
-    .in("account_id", poolIds.size ? [...poolIds] : ["00000000-0000-0000-0000-000000000000"]);
+  const poolLinesRaw = await fetchAllRows<any>(
+    supabase, "journal_entry_lines",
+    "voucher_id, account_id, debit, credit, memo, journal_vouchers(voucher_no, voucher_date, narration)",
+    (q) => q.in("account_id", poolIds.size ? [...poolIds] : ["00000000-0000-0000-0000-000000000000"])
+  );
 
   const poolLines = (poolLinesRaw ?? []) as any[];
 
@@ -139,7 +141,7 @@ export async function buildDayBook(
   //   নগদ বিক্রির JV (Dr 1000 / Cr 4000) পুল-লাইন ছোঁয় বলে অন্যথায় জমা কলামে
   //   "Sales Revenue" হিসেবে দেখাতো — অথচ বিক্রি ব্লক (নিচে, explicit) থেকেই ওটার
   //   টাকা রিকনসিলিয়েশনে যোগ হয়। তাই বিক্রি কখনো জমা/খরচ কলামে সরাসরি আসবে না।
-  const { data: salesInvVoucherRaw } = await supabase.from("sales_invoices").select("voucher_id").not("voucher_id", "is", null);
+  const salesInvVoucherRaw = await fetchAllRows<any>(supabase, "sales_invoices", "voucher_id", (q) => q.not("voucher_id", "is", null));
   const salesInvoiceVoucherIds = new Set<string>((salesInvVoucherRaw ?? []).map((r: any) => r.voucher_id).filter(Boolean));
 
   // prior cash (1000) balance — from-তারিখের আগের সব 1000 লাইন + যেকোনো তারিখের
@@ -170,12 +172,12 @@ export async function buildDayBook(
   }
 
   // ঐ vouchers-এর সব লাইন (contra খুঁজতে)
-  const { data: allLinesRaw } = voucherIds.size
-    ? await supabase
-        .from("journal_entry_lines")
-        .select("voucher_id, account_id, debit, credit, memo, journal_vouchers(voucher_no, voucher_date, narration)")
-        .in("voucher_id", [...voucherIds])
-    : { data: [] };
+  // একাধিক দিনের রেঞ্জে voucher অনেক হতে পারে — chunk করে আনা (URL দৈর্ঘ্য + 1000-রো ক্যাপ)
+  const allLinesRaw = await fetchAllRowsIn<any>(
+    supabase, "journal_entry_lines",
+    "voucher_id, account_id, debit, credit, memo, journal_vouchers(voucher_no, voucher_date, narration)",
+    "voucher_id", [...voucherIds]
+  );
   const linesByVoucher = new Map<string, any[]>();
   for (const l of (allLinesRaw ?? []) as any[]) {
     if (!linesByVoucher.has(l.voucher_id)) linesByVoucher.set(l.voucher_id, []);
@@ -309,11 +311,11 @@ export async function buildDayBook(
   for (const a of khorochAgg.values()) khoroch.push({ name: a.name, note: partsNote(a.parts), amount: a.amount });
 
   // ── Sales invoices (বিক্রি ব্লক + "বিল" + AR + sold Lbs) ──
-  const { data: invoicesRaw } = await supabase
-    .from("sales_invoices")
-    .select("customer_id, invoice_date, payment_type, customers(name), sales_invoice_items(amount, required_lbs, bookings(required_lbs))")
-    .lte("invoice_date", to);
-  const invoices = (invoicesRaw ?? []) as any[];
+  const invoices = await fetchAllRows<any>(
+    supabase, "sales_invoices",
+    "customer_id, invoice_date, payment_type, customers(name), sales_invoice_items(amount, required_lbs, bookings(required_lbs))",
+    (q) => q.lte("invoice_date", to)
+  );
 
   const invAmt = (inv: any) => (inv.sales_invoice_items ?? []).reduce((s: number, i: any) => s + num(i.amount), 0);
   const invLbs = (inv: any) =>
@@ -442,11 +444,10 @@ export async function buildDayBook(
   }
 
   // opening anchor = ERP opening-inventory (stock_ledger manual_adjustment net)
-  const { data: ledgerRaw } = await supabase
-    .from("stock_ledger")
-    .select("txn_type, quantity, reference_type")
-    .eq("item_type", "raw_material")
-    .eq("reference_type", "manual_adjustment");
+  const ledgerRaw = await fetchAllRows<any>(
+    supabase, "stock_ledger", "txn_type, quantity, reference_type",
+    (q) => q.eq("item_type", "raw_material").eq("reference_type", "manual_adjustment")
+  );
   const stockAnchor = (ledgerRaw ?? []).reduce(
     (s: number, e: any) => s + (e.txn_type === "in" ? num(e.quantity) : -num(e.quantity)),
     0,

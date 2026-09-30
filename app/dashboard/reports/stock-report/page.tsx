@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import PrintButton from "@/app/dashboard/PrintButton";
+import { fetchAllRows } from "@/lib/fetchAll";
 
 const LBS_PER_BAG = 55;
 const money = (n: number) => n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -18,10 +19,10 @@ export default async function StockReportPage() {
   ] = await Promise.all([
     supabase.from("raw_materials").select("id, material_name, unit, avg_cost_per_lbs, inventory_account_code").order("material_name"),
     supabase.from("raw_material_stock").select("material_id, quantity_lbs"),
-    supabase.from("finished_goods").select("id, product_name, avg_cost_per_pc").order("product_name"),
+    fetchAllRows<any>(supabase, "finished_goods", "id, product_name, avg_cost_per_pc", (q) => q.order("product_name")).then((data) => ({ data })),
     supabase.from("finished_goods_stock").select("product_id, quantity_pcs"),
     supabase.from("chart_of_accounts").select("id, account_code"),
-    supabase.from("journal_entry_lines").select("account_id, debit, credit"),
+    fetchAllRows<any>(supabase, "journal_entry_lines", "account_id, debit, credit").then((data) => ({ data })),
   ]);
 
   const rawTotals: Record<string, number> = {};

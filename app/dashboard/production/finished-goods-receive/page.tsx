@@ -1,16 +1,16 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import ReceiveForm from "./ReceiveForm";
+import { fetchAllRows } from "@/lib/fetchAll";
 
 export default async function FinishedGoodsReceivePage() {
   const supabase = await createClient();
 
   // যেসব production order এখনো "finished" হয়নি
-  const { data: orders } = await supabase
-    .from("production_orders")
-    .select("id, production_no, quantity_pcs, bookings(customers(name), finished_goods(id, product_name))")
-    .neq("stage", "finished")
-    .order("order_date", { ascending: false });
+  const orders = await fetchAllRows<any>(
+    supabase, "production_orders", "id, production_no, quantity_pcs, bookings(customers(name), finished_goods(id, product_name))",
+    (q) => q.neq("stage", "finished").order("order_date", { ascending: false })
+  );
 
   const { data: warehouses } = await supabase.from("warehouses").select("id, name").order("name");
 

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { formatDate } from "@/lib/formatDate";
 import { money } from "@/lib/format";
+import { fetchAllRows, fetchAllRowsIn } from "@/lib/fetchAll";
 
 const referenceLabels: Record<string, string> = {
   manual_adjustment: "Manual Adjustment",
@@ -22,16 +23,14 @@ export default async function StockLedgerPage({
   const { itemType, from, to } = await searchParams;
   const supabase = await createClient();
 
-  let query = supabase
-    .from("stock_ledger")
-    .select("*, warehouses(name)")
-    .order("txn_date", { ascending: false });
-
-  if (itemType) query = query.eq("item_type", itemType);
-  if (from) query = query.gte("txn_date", from);
-  if (to) query = query.lte("txn_date", to);
-
-  const { data: entries } = await query;
+  // stock_ledger 1000+ রো — পেজ করে সব আনা (নাহলে পুরনো এন্ট্রি চুপচাপ বাদ পড়ে)
+  const entries = await fetchAllRows<any>(supabase, "stock_ledger", "*, warehouses(name)", (q) => {
+    q = q.order("txn_date", { ascending: false });
+    if (itemType) q = q.eq("item_type", itemType);
+    if (from) q = q.gte("txn_date", from);
+    if (to) q = q.lte("txn_date", to);
+    return q;
+  });
 
   // item_id দিয়ে raw_materials বা finished_goods থেকে নাম বের করতে হবে
   const rawMaterialIds = (entries ?? [])
@@ -42,10 +41,10 @@ export default async function StockLedgerPage({
     .map((e) => e.item_id);
 
   const { data: materials } = rawMaterialIds.length
-    ? await supabase.from("raw_materials").select("id, material_name").in("id", rawMaterialIds)
+    ? { data: await fetchAllRowsIn<any>(supabase, "raw_materials", "id, material_name", "id", rawMaterialIds) }
     : { data: [] };
   const { data: products } = finishedGoodsIds.length
-    ? await supabase.from("finished_goods").select("id, product_name").in("id", finishedGoodsIds)
+    ? { data: await fetchAllRowsIn<any>(supabase, "finished_goods", "id, product_name", "id", finishedGoodsIds) }
     : { data: [] };
 
   const nameMap: Record<string, string> = {};

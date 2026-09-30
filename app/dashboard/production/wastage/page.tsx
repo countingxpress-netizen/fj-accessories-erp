@@ -4,16 +4,17 @@ import { formatDate } from "@/lib/formatDate";
 import WastageForm from "./WastageForm";
 import WastageRow from "./WastageRow";
 import { money } from "@/lib/format";
+import { fetchAllRows } from "@/lib/fetchAll";
 
 const stageLabels: Record<string, string> = { blowing: "Blowing", printing: "Printing", cutting: "Cutting" };
 
 export default async function WastagePage() {
   const supabase = await createClient();
 
-  const { data: orders } = await supabase
-    .from("production_orders")
-    .select("id, production_no, stage, bookings(booking_no, required_lbs, customers(name))")
-    .order("order_date", { ascending: false });
+  const orders = await fetchAllRows<any>(
+    supabase, "production_orders", "id, production_no, stage, bookings(booking_no, required_lbs, customers(name))",
+    (q) => q.order("order_date", { ascending: false })
+  );
 
   const { data: warehouses } = await supabase.from("warehouses").select("id, name").order("name");
 

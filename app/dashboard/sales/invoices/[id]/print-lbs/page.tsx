@@ -5,6 +5,7 @@ import PrintButton from "@/app/dashboard/PrintButton";
 import { amountInWords } from "@/lib/numberToWords";
 import { lbsFormatMeasurement } from "@/lib/lbsInvoice";
 import { buildPdfFilename } from "@/lib/saveAsPdf";
+import { fetchAllRows } from "@/lib/fetchAll";
 
 function fmt(n: number) {
   return n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -49,10 +50,10 @@ export default async function LbsInvoicePrintPage({ params }: { params: Promise<
   const total = items.reduce((s: number, i: any) => s + (Number(i.amount) || 0), 0);
 
   // ── Previous Bill / This Bill / Running Due (স্ট্যান্ডার্ড print page-এর মতোই) ──
-  const { data: allInvoices } = await supabase
-    .from("sales_invoices")
-    .select("id, invoice_no, invoice_date, sales_invoice_items(amount)")
-    .eq("customer_id", invoice.customer_id);
+  const allInvoices = await fetchAllRows<any>(
+    supabase, "sales_invoices", "id, invoice_no, invoice_date, sales_invoice_items(amount)",
+    (q) => q.eq("customer_id", invoice.customer_id)
+  );
   const { data: payments } = await supabase
     .from("customer_payments")
     .select("amount, payment_date")

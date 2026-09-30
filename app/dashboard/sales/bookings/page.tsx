@@ -1,22 +1,23 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import BookingsTable from "./BookingsTable";
+import { fetchAllRows } from "@/lib/fetchAll";
 
 export default async function BookingsListPage() {
   const supabase = await createClient();
-  const { data: bookings } = await supabase
-    .from("bookings")
-    .select("*, customers(name), buyers(name), finished_goods(product_name), production_orders(id, stage, blowing_completed_at, printing_completed_at, cutting_completed_at), creator:app_users!bookings_created_by_fkey(full_name)")
-    .order("created_at", { ascending: false });
+  // bookings / pi_items / challan items সব টেবিলই 1000-রো ক্যাপ ছুঁয়েছে বা ছোঁবে — পেজ করে সব আনা
+  const bookings = await fetchAllRows<any>(
+    supabase, "bookings",
+    "*, customers(name), buyers(name), finished_goods(product_name), production_orders(id, stage, blowing_completed_at, printing_completed_at, cutting_completed_at), creator:app_users!bookings_created_by_fkey(full_name)",
+    (q) => q.order("created_at", { ascending: false })
+  );
 
-  const { data: allChallanItems } = await supabase
-    .from("delivery_challan_items")
-    .select("quantity_pcs, booking_id, delivery_challans(booking_id, challan_no)");
+  const allChallanItems = await fetchAllRows<any>(
+    supabase, "delivery_challan_items", "quantity_pcs, booking_id, delivery_challans(booking_id, challan_no)"
+  );
 
   // PI No — pi_items দিয়ে (pi_bookings টেবিল কোথাও populate হয় না, তাই সেটা ব্যবহার করা যাবে না)
-  const { data: piItemRows } = await supabase
-    .from("pi_items")
-    .select("booking_id, proforma_invoices(pi_no)");
+  const piItemRows = await fetchAllRows<any>(supabase, "pi_items", "booking_id, proforma_invoices(pi_no)");
 
   const piNoByBooking: Record<string, string> = {};
   (piItemRows ?? []).forEach((item: any) => {

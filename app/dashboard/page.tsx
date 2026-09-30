@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { todayLocal, monthRange } from "@/lib/payroll";
 import { loadGroupMap, foldNumbers } from "@/lib/customerGroups";
 import SalesByCustomer from "./SalesByCustomer";
+import { fetchAllRows } from "@/lib/fetchAll";
 
 function fmt(n: number) {
   return n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -42,7 +43,7 @@ export default async function DashboardPage() {
   ] = await Promise.all([
     supabase.from("chart_of_accounts").select("id").eq("account_type", "asset").or("account_name.ilike.%cash%,account_name.ilike.%bank%"),
     supabase.from("customers").select("id, name, opening_balance"),
-    supabase.from("sales_invoices").select("customer_id, invoice_date, sales_invoice_items(amount)"),
+    fetchAllRows<any>(supabase, "sales_invoices", "customer_id, invoice_date, sales_invoice_items(amount)").then((data) => ({ data })),
     supabase.from("customer_payments").select("customer_id, amount"),
     loadGroupMap(supabase),
     supabase.from("suppliers").select("id"),
@@ -52,8 +53,8 @@ export default async function DashboardPage() {
     supabase.from("company_profile").select("*").limit(1).maybeSingle(),
     supabase.from("raw_materials").select("id, avg_cost_per_lbs"),
     supabase.from("raw_material_stock").select("material_id, quantity_lbs"),
-    supabase.from("material_consumption").select("material_id, quantity_lbs, consumption_date").gte("consumption_date", monthStart).lte("consumption_date", monthEnd),
-    supabase.from("bookings").select("status"),
+    fetchAllRows<any>(supabase, "material_consumption", "material_id, quantity_lbs, consumption_date", (q) => q.gte("consumption_date", monthStart).lte("consumption_date", monthEnd)).then((data) => ({ data })),
+    fetchAllRows<any>(supabase, "bookings", "status").then((data) => ({ data })),
   ]);
 
   const cashBankIds = (cashBankAccounts ?? []).map((a: any) => a.id);
@@ -72,13 +73,13 @@ export default async function DashboardPage() {
     { data: selLines },
   ] = await Promise.all([
     cashBankIds.length
-      ? supabase.from("journal_entry_lines").select("debit, credit").in("account_id", cashBankIds)
+      ? fetchAllRows<any>(supabase, "journal_entry_lines", "debit, credit", (q) => q.in("account_id", cashBankIds)).then((data) => ({ data }))
       : Promise.resolve({ data: [] as any[] }),
     ieIds.length
-      ? supabase.from("journal_entry_lines").select("account_id, debit, credit, journal_vouchers(voucher_date)").in("account_id", ieIds)
+      ? fetchAllRows<any>(supabase, "journal_entry_lines", "account_id, debit, credit, journal_vouchers(voucher_date)", (q) => q.in("account_id", ieIds)).then((data) => ({ data }))
       : Promise.resolve({ data: [] as any[] }),
     wantSelLines
-      ? supabase.from("journal_entry_lines").select("debit, credit").eq("account_id", selId as string)
+      ? fetchAllRows<any>(supabase, "journal_entry_lines", "debit, credit", (q) => q.eq("account_id", selId as string)).then((data) => ({ data }))
       : Promise.resolve({ data: [] as any[] }),
   ]);
 

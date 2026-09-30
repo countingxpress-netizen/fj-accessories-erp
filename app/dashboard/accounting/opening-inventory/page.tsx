@@ -18,12 +18,13 @@ export default async function OpeningInventoryPage() {
   ] = await Promise.all([
     supabase.from("raw_materials").select("id, material_name, avg_cost_per_lbs, inventory_account_code").order("material_name"),
     supabase.from("raw_material_stock").select("material_id, quantity_lbs"),
-    supabase.from("finished_goods").select("id, product_name, avg_cost_per_pc").order("product_name"),
+    fetchAllRows<any>(supabase, "finished_goods", "id, product_name, avg_cost_per_pc", (q) => q.order("product_name")).then((data) => ({ data })),
     supabase.from("finished_goods_stock").select("product_id, quantity_pcs"),
-    supabase
-      .from("production_orders")
-      .select("id, wip_cost, required_lbs, stage, bookings(booking_no), material_consumption(quantity_lbs, raw_materials(material_name, avg_cost_per_lbs))")
-      .neq("stage", "finished"),
+    fetchAllRows<any>(
+      supabase, "production_orders",
+      "id, wip_cost, required_lbs, stage, bookings(booking_no), material_consumption(quantity_lbs, raw_materials(material_name, avg_cost_per_lbs))",
+      (q) => q.neq("stage", "finished")
+    ).then((data) => ({ data })),
     supabase.from("chart_of_accounts").select("id, account_code, account_name, account_type").eq("is_active", true).order("account_code"),
     // journal_entry_lines হাজার-খানেক রো ছাড়িয়ে গেছে — Supabase-এর ডিফল্ট 1000-রো
     // ক্যাপে আটকে যাতে সাইলেন্টলি বাকি লাইন বাদ না পড়ে, .range() দিয়ে পেজিং করে সবটা আনা।

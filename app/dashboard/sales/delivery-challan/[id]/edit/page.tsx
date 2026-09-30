@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import DeliveryChallanForm, { type EditChallanContext } from "../../new/DeliveryChallanForm";
+import { fetchAllRows } from "@/lib/fetchAll";
 
 export default async function EditChallanPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -43,11 +44,10 @@ export default async function EditChallanPage({ params }: { params: Promise<{ id
   const [{ data: customers }, { data: bookings }, { data: warehouses }, { data: allItems }, { data: fgStock }, { data: dcLedger }] =
     await Promise.all([
       supabase.from("customers").select("id, name, code").order("name"),
-      supabase.from("bookings")
-        .select("id, booking_no, quantity_pcs, product_id, customer_id, warehouse_id, style, garments_name, buyers(name), merchants(name), delivery_point, customer_booking_ref, finished_goods(product_name)")
-        .neq("status", "cancelled").order("booking_date", { ascending: false }).order("created_at", { ascending: true }),
+      fetchAllRows<any>(supabase, "bookings", "id, booking_no, quantity_pcs, product_id, customer_id, warehouse_id, style, garments_name, buyers(name), merchants(name), delivery_point, customer_booking_ref, finished_goods(product_name)",
+        (q) => q.neq("status", "cancelled").order("booking_date", { ascending: false }).order("created_at", { ascending: true })).then((data) => ({ data })),
       supabase.from("warehouses").select("id, name").order("name"),
-      supabase.from("delivery_challan_items").select("quantity_pcs, booking_id, challan_id"),
+      fetchAllRows<any>(supabase, "delivery_challan_items", "quantity_pcs, booking_id, challan_id").then((data) => ({ data })),
       supabase.from("finished_goods_stock").select("product_id, warehouse_id, quantity_pcs"),
       supabase.from("stock_ledger").select("item_id, warehouse_id").eq("reference_type", "delivery").eq("reference_id", id),
     ]);

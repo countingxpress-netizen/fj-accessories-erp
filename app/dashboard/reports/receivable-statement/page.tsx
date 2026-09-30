@@ -4,14 +4,15 @@ import { formatDate } from "@/lib/formatDate";
 import { money } from "@/lib/format";
 import { loadGroupMap, displayEntity, ledgerHref } from "@/lib/customerGroups";
 import PrintButton from "@/app/dashboard/PrintButton";
+import { fetchAllRows } from "@/lib/fetchAll";
 
 export default async function ReceivableStatementPage() {
   const supabase = await createClient();
 
   const { data: customers } = await supabase.from("customers").select("id, name, opening_balance").order("name");
-  const { data: invoices } = await supabase
-    .from("sales_invoices")
-    .select("customer_id, invoice_no, invoice_date, payment_type, sales_invoice_items(amount)");
+  const invoices = await fetchAllRows<any>(
+    supabase, "sales_invoices", "customer_id, invoice_no, invoice_date, payment_type, sales_invoice_items(amount)"
+  );
   const { data: payments } = await supabase.from("customer_payments").select("customer_id, amount, payment_date");
   const { data: wastageSales } = await supabase
     .from("wastage_sales").select("customer_id, amount, sale_date, payment_received").not("customer_id", "is", null);

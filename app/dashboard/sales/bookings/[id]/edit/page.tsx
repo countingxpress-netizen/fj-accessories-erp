@@ -4,6 +4,7 @@ import EditBookingForm from "./EditBookingForm";
 import { notFound } from "next/navigation";
 import { resolveRate } from "@/lib/rateHistory";
 import { calcQuotedUnitPrice } from "@/lib/calcTubeCutting";
+import { fetchAllRows } from "@/lib/fetchAll";
 
 export default async function EditBookingPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -122,7 +123,7 @@ export default async function EditBookingPage({ params }: { params: Promise<{ id
     supabase.from("merchants").select("id, name").order("name"),
     supabase.from("rate_history").select("customer_id, effective_from, rate, material_type").not("customer_id", "is", null),
     supabase.from("sales_invoices").select("payment_received").eq("source_booking_group_id", groupId).eq("auto_generated", true).maybeSingle(),
-    supabase.from("bookings").select("customer_id, merchant_id").not("merchant_id", "is", null),
+    fetchAllRows<any>(supabase, "bookings", "customer_id, merchant_id", (q) => q.not("merchant_id", "is", null)).then((data) => ({ data })),
   ]);
 
   const warehouseName: Record<string, string> = {};

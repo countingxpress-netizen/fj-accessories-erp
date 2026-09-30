@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { notFound } from "next/navigation";
 import { formatDate } from "@/lib/formatDate";
 import { money } from "@/lib/format";
+import { fetchAllRows } from "@/lib/fetchAll";
 
 // Debit-normal accounts (asset, expense): debit বাড়ায়, credit কমায়
 // Credit-normal accounts (liability, equity, income): credit বাড়ায়, debit কমায়
@@ -24,10 +25,10 @@ export default async function AccountLedgerPage({
 
   if (!account) return notFound();
 
-  const { data: lines } = await supabase
-    .from("journal_entry_lines")
-    .select("*, journal_vouchers(voucher_no, voucher_date, narration)")
-    .eq("account_id", id);
+  const lines = await fetchAllRows<any>(
+    supabase, "journal_entry_lines", "*, journal_vouchers(voucher_no, voucher_date, narration)",
+    (q) => q.eq("account_id", id)
+  );
 
   const isDebitNormal = debitNormalTypes.includes(account.account_type);
 

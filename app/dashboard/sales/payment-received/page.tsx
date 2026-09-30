@@ -2,6 +2,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import PaymentForm from "./PaymentForm";
 import PaymentReceivedTable from "./PaymentReceivedTable";
+import { fetchAllRows } from "@/lib/fetchAll";
 
 export default async function PaymentReceivedPage() {
   const supabase = await createClient();
@@ -19,9 +20,9 @@ export default async function PaymentReceivedPage() {
     .eq("account_code", "3000").maybeSingle();
   const depositAccounts = mdJaforAccount ? [...(cashBankAccounts ?? []), mdJaforAccount] : (cashBankAccounts ?? []);
 
-  const { data: allInvoices } = await supabase
-    .from("sales_invoices")
-    .select("id, invoice_no, invoice_date, customer_id, sales_invoice_items(amount)");
+  const allInvoices = await fetchAllRows<any>(
+    supabase, "sales_invoices", "id, invoice_no, invoice_date, customer_id, sales_invoice_items(amount)"
+  );
 
   // invoice_id NULL হলে সেই allocation Opening Balance-এর বিপরীতে — customer_payments জয়েন করে
   // কোন কাস্টমারের Opening Balance কত পরিশোধ হয়েছে সেটা বের করা হচ্ছে।

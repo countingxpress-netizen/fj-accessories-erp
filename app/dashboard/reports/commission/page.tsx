@@ -7,6 +7,7 @@ import { calcInvoiceCommission } from "@/lib/commission";
 import { loadGroupMap, displayEntity } from "@/lib/customerGroups";
 import CommissionRow from "./CommissionRow";
 import PrintButton from "@/app/dashboard/PrintButton";
+import { fetchAllRows } from "@/lib/fetchAll";
 
 export default async function CommissionReportPage({
   searchParams,
@@ -20,17 +21,19 @@ export default async function CommissionReportPage({
   // গ্রুপভুক্ত কাস্টমারের নাম রিপোর্টে গ্রুপ নামে দেখাবে।
   const gm = await loadGroupMap(supabase);
 
-  let q = supabase
-    .from("sales_invoices")
-    .select(`id, invoice_no, invoice_date, customer_id, commission_adjustment, commission_note,
+  const invoices = await fetchAllRows<any>(
+    supabase, "sales_invoices",
+    `id, invoice_no, invoice_date, customer_id, commission_adjustment, commission_note,
       customers(name, code, commission_enabled, commission_percentage),
-      sales_invoice_items(quantity_pcs, unit_price, amount, bookings(required_lbs, buyer_id, measurement_type, measurement_unit, length_val, width_val, flap_val, gusset_val))`)
-    .order("invoice_date", { ascending: false })
-    .order("invoice_no", { ascending: false });
-  if (from) q = q.gte("invoice_date", from);
-  if (to) q = q.lte("invoice_date", to);
-  if (customer) q = q.eq("customer_id", customer);
-  const { data: invoices } = await q;
+      sales_invoice_items(quantity_pcs, unit_price, amount, bookings(required_lbs, buyer_id, measurement_type, measurement_unit, length_val, width_val, flap_val, gusset_val))`,
+    (q) => {
+      q = q.order("invoice_date", { ascending: false }).order("invoice_no", { ascending: false });
+      if (from) q = q.gte("invoice_date", from);
+      if (to) q = q.lte("invoice_date", to);
+      if (customer) q = q.eq("customer_id", customer);
+      return q;
+    }
+  );
 
   const buyerIds = Array.from(new Set(
     (invoices ?? []).flatMap((inv: any) => inv.sales_invoice_items ?? []).map((i: any) => i.bookings?.buyer_id).filter(Boolean)

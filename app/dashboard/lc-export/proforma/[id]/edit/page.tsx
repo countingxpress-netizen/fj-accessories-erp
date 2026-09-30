@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import EditProformaForm from "./EditProformaForm";
 import { notFound } from "next/navigation";
 import { getCurrentAppUser } from "@/lib/supabase/getCurrentAppUser";
+import { fetchAllRows, fetchAllRowsIn } from "@/lib/fetchAll";
 
 export default async function EditProformaPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -29,21 +30,19 @@ export default async function EditProformaPage({ params }: { params: Promise<{ i
   let measurementPrices: any[] = [];
 
   if (pi.customer_id) {
-    const { data: allBookings } = await supabase
-      .from("bookings")
-      .select("id, booking_no, booking_date, quantity_pcs, product_id, customer_id, style, customer_booking_ref, garments_name, buyer_id, buyers(name), merchants(name), measurement_type, measurement_unit, length_val, width_val, flap_val, gusset_val, pillow_val, pi_thickness_mm, material_type, has_print, print_colors, rate_per_color, plain_cm_conversion, finished_goods(product_name, length_cm, width_cm, thickness)")
-      .eq("customer_id", pi.customer_id)
-      .order("booking_date", { ascending: false })
-      .order("created_at", { ascending: true });
+    const allBookings = await fetchAllRows<any>(
+      supabase, "bookings",
+      "id, booking_no, booking_date, quantity_pcs, product_id, customer_id, style, customer_booking_ref, garments_name, buyer_id, buyers(name), merchants(name), measurement_type, measurement_unit, length_val, width_val, flap_val, gusset_val, pillow_val, pi_thickness_mm, material_type, has_print, print_colors, rate_per_color, plain_cm_conversion, finished_goods(product_name, length_cm, width_cm, thickness)",
+      (q) => q.eq("customer_id", pi.customer_id).order("booking_date", { ascending: false }).order("created_at", { ascending: true })
+    );
 
-    const { data: usedItems } = await supabase.from("pi_items").select("booking_id").not("booking_id", "is", null);
+    // pi_items 1000+ রো — পেজ করে সব আনা, নাহলে "অন্য PI-তে ব্যবহৃত" বুকিং ঠিকমতো বাদ পড়ে না
+    const usedItems = await fetchAllRows<any>(supabase, "pi_items", "booking_id", (q) => q.not("booking_id", "is", null));
     const usedIds = new Set((usedItems ?? []).map((it: any) => it.booking_id));
     bookings = (allBookings ?? []).filter((b: any) => !usedIds.has(b.id));
 
     const bookingIds = bookings.map((b: any) => b.id);
-    const { data: pastInvoiceItems } = bookingIds.length
-      ? await supabase.from("sales_invoice_items").select("booking_id, unit_price").in("booking_id", bookingIds)
-      : { data: [] };
+    const pastInvoiceItems = await fetchAllRowsIn<any>(supabase, "sales_invoice_items", "booking_id, unit_price", "booking_id", bookingIds);
     (pastInvoiceItems ?? []).forEach((it: any) => { lastUnitPriceByBooking[it.booking_id] = it.unit_price; });
 
     const { data: bm } = await supabase.from("buyers").select("*").eq("customer_id", pi.customer_id);

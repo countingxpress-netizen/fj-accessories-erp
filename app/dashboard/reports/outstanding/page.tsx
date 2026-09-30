@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { money } from "@/lib/format";
 import { loadGroupMap, foldNumbers, ledgerHref } from "@/lib/customerGroups";
 import PrintButton from "@/app/dashboard/PrintButton";
+import { fetchAllRows } from "@/lib/fetchAll";
 
 export default async function OutstandingReportPage() {
   const supabase = await createClient();
@@ -19,7 +20,7 @@ export default async function OutstandingReportPage() {
     { data: supplierPayments },
   ] = await Promise.all([
     supabase.from("customers").select("id, name, opening_balance"),
-    supabase.from("sales_invoices").select("customer_id, payment_type, sales_invoice_items(amount)"),
+    fetchAllRows<any>(supabase, "sales_invoices", "customer_id, payment_type, sales_invoice_items(amount)").then((data) => ({ data })),
     supabase.from("customer_payments").select("customer_id, amount"),
     supabase.from("wastage_sales").select("customer_id, amount, payment_received").not("customer_id", "is", null),
     supabase.from("raw_material_sales").select("customer_id, amount, payment_received").not("customer_id", "is", null),

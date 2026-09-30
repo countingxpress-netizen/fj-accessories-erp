@@ -2,6 +2,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { notFound } from "next/navigation";
 import { money } from "@/lib/format";
+import { fetchAllRows } from "@/lib/fetchAll";
 
 const LBS_PER_BAG = 55;
 
@@ -24,11 +25,10 @@ export default async function MaterialStatementPage({
   const isCarton = material.unit === "carton";
   const unitLabel = isCarton ? "Carton" : "Lbs";
 
-  const { data: entries } = await supabase
-    .from("stock_ledger")
-    .select("*, warehouses(name)")
-    .eq("item_type", "raw_material")
-    .eq("item_id", id);
+  const entries = await fetchAllRows<any>(
+    supabase, "stock_ledger", "*, warehouses(name)",
+    (q) => q.eq("item_type", "raw_material").eq("item_id", id)
+  );
 
   const sorted = (entries ?? []).sort((a: any, b: any) => {
     if (a.txn_date !== b.txn_date) return a.txn_date.localeCompare(b.txn_date);

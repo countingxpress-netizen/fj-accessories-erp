@@ -4,6 +4,7 @@ import ProformaTable from "./ProformaTable";
 import { AT_DEFAULT_MARKUP_PERCENTAGE } from "@/lib/atCommission";
 import { calcInvoiceCommission } from "@/lib/commission";
 import { getCurrentAppUser } from "@/lib/supabase/getCurrentAppUser";
+import { fetchAllRows, fetchAllRowsIn } from "@/lib/fetchAll";
 
 export default async function ProformaListPage() {
   const supabase = await createClient();
@@ -12,15 +13,16 @@ export default async function ProformaListPage() {
   // সরাসরি ID দিয়ে অন্য PI-তে ঢোকার চেষ্টা [id]/page.tsx ও edit/page.tsx-এ আটকানো হয়।
   const restrictedCustomerId = appUser?.role === "customer_pi_only" ? appUser.restricted_customer_id : null;
 
-  let piQuery = supabase
-    .from("proforma_invoices")
-    .select(`*, customers(name, price_per_lbs, code, commission_enabled, commission_percentage),
+  const pis = await fetchAllRows<any>(
+    supabase, "proforma_invoices",
+    `*, customers(name, price_per_lbs, code, commission_enabled, commission_percentage),
       pi_items(qty_pcs, booking_id, bookings(garments_name, quantity_pcs, buyer_id, required_lbs, measurement_type, measurement_unit, length_val, width_val, flap_val, gusset_val)),
-      creator:app_users!proforma_invoices_created_by_fkey(full_name)`)
-    .order("pi_date", { ascending: false })
-    .order("created_at", { ascending: false });
-  if (restrictedCustomerId) piQuery = piQuery.eq("customer_id", restrictedCustomerId);
-  const { data: pis } = await piQuery;
+      creator:app_users!proforma_invoices_created_by_fkey(full_name)`,
+    (q) => {
+      q = q.order("pi_date", { ascending: false }).order("created_at", { ascending: false });
+      return restrictedCustomerId ? q.eq("customer_id", restrictedCustomerId) : q;
+    }
+  );
   // real_amount/commission_amount আগের কোনো সেশনে DB-তে বসলেও এখানে select("*") দিয়েই আসবে
 
   // প্রতিটা PI-এর সাথে যুক্ত booking_id গুলোর বিপরীতে sales_invoice_items থেকে মোট বিক্রয় বের করুন
@@ -28,9 +30,9 @@ export default async function ProformaListPage() {
     new Set((pis ?? []).flatMap((pi: any) => (pi.pi_items ?? []).map((it: any) => it.booking_id).filter(Boolean)))
   );
 
-  const { data: invoiceItems } = bookingIds.length
-    ? await supabase.from("sales_invoice_items").select("booking_id, amount, unit_price, quantity_pcs").in("booking_id", bookingIds)
-    : { data: [] };
+  const invoiceItems = await fetchAllRowsIn<any>(
+    supabase, "sales_invoice_items", "booking_id, amount, unit_price, quantity_pcs", "booking_id", bookingIds as string[]
+  );
 
   const invoiceValueByBooking: Record<string, number> = {};
   const invoiceItemsByBooking: Record<string, { unit_price: number; quantity_pcs: number; amount: number }[]> = {};

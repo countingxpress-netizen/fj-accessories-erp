@@ -18,6 +18,7 @@ import {
   SALES_RANGE_OPTIONS,
   type SalesByCustomerRow,
 } from "@/lib/salesByCustomer";
+import { fetchAllRows } from "@/lib/fetchAll";
 
 type Cust = { id: string; name: string };
 
@@ -44,11 +45,10 @@ export default function SalesByCustomer({ customers, groupMap }: { customers: Cu
     (async () => {
       setLoading(true);
       setErr("");
-      let q = supabase
-        .from("sales_invoices")
-        .select("customer_id, sales_invoice_items(amount, required_lbs, bookings(required_lbs))");
-      if (from) q = q.gte("invoice_date", from);
-      if (to) q = q.lte("invoice_date", to);
+      const q = fetchAllRows<any>(
+        supabase, "sales_invoices", "customer_id, sales_invoice_items(amount, required_lbs, bookings(required_lbs))",
+        (qq) => { if (from) qq = qq.gte("invoice_date", from); if (to) qq = qq.lte("invoice_date", to); return qq; }
+      ).then((data) => ({ data, error: null as { message: string } | null }));
       let rmsQ = supabase.from("raw_material_sales").select("customer_id, amount, quantity_lbs");
       if (from) rmsQ = rmsQ.gte("sale_date", from);
       if (to) rmsQ = rmsQ.lte("sale_date", to);

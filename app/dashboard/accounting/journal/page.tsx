@@ -1,14 +1,19 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { fetchAllRows } from "@/lib/fetchAll";
 import VouchersTable from "./VouchersTable";
 
 export default async function JournalListPage() {
   const supabase = await createClient();
-  const { data: vouchers } = await supabase
-    .from("journal_vouchers")
-    .select("*, journal_entry_lines(debit, credit), creator:app_users!journal_vouchers_created_by_fkey(full_name)")
-    .order("voucher_date", { ascending: false })
-    .order("created_at", { ascending: false });
+  // 1000+ voucher হয়ে গেছে — Supabase-এর 1000-রো ক্যাপে যেন পুরনোগুলো বাদ না পড়ে, পেজ করে সব আনা।
+  // লাইনের account নামসহ আনা হয় যাতে রো-তে ক্লিক করলে ডিটেলস দেখানো ও account দিয়ে সার্চ করা যায়।
+  const vouchers = (await fetchAllRows<any>(
+    supabase,
+    "journal_vouchers",
+    "*, journal_entry_lines(id, debit, credit, memo, chart_of_accounts(account_code, account_name)), creator:app_users!journal_vouchers_created_by_fkey(full_name)",
+  )).sort((a, b) =>
+    (b.voucher_date ?? "").localeCompare(a.voucher_date ?? "") || (b.created_at ?? "").localeCompare(a.created_at ?? "")
+  );
 
   return (
     <div>
@@ -22,7 +27,7 @@ export default async function JournalListPage() {
         </Link>
       </div>
 
-      <VouchersTable vouchers={vouchers ?? []} />
+      <VouchersTable vouchers={vouchers} />
     </div>
   );
 }

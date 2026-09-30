@@ -7,6 +7,7 @@ import { AT_DEFAULT_MARKUP_PERCENTAGE, calcAtCustomerLine } from "@/lib/atCommis
 import { isCommissionExcludedLine } from "@/lib/commission";
 import { buildPdfFilename } from "@/lib/saveAsPdf";
 import InvoiceSummary from "../InvoiceSummary";
+import { fetchAllRows } from "@/lib/fetchAll";
 
 function fmt(n: number) {
   return n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -99,9 +100,10 @@ export default async function InvoicePrintCustomerPage({ params }: { params: Pro
 
   // --- নিচের শর্ট সামারির অটো মান (regular print page-এর মতোই — কাস্টমার ledger) ---
   const [{ data: allInvoices }, { data: payments }] = await Promise.all([
-    supabase.from("sales_invoices")
-      .select("id, invoice_no, invoice_date, sales_invoice_items(amount)")
-      .eq("customer_id", invoice.customer_id),
+    fetchAllRows<any>(
+      supabase, "sales_invoices", "id, invoice_no, invoice_date, sales_invoice_items(amount)",
+      (q) => q.eq("customer_id", invoice.customer_id)
+    ).then((data) => ({ data })),
     supabase.from("customer_payments")
       .select("amount, payment_date")
       .eq("customer_id", invoice.customer_id),

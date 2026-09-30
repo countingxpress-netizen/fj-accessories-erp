@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import EditPaymentForm from "./EditPaymentForm";
 import { notFound } from "next/navigation";
+import { fetchAllRows, fetchAllRowsIn } from "@/lib/fetchAll";
 
 export default async function EditPaymentPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -19,14 +20,14 @@ export default async function EditPaymentPage({ params }: { params: Promise<{ id
   const depositAccounts = mdJaforAccount ? [...(cashBankAccounts ?? []), mdJaforAccount] : (cashBankAccounts ?? []);
 
   // এই কাস্টমারের সব Invoice, এবং এই payment ছাড়া বাকি payment-গুলোর allocation বাদ দিয়ে "available due" বের করুন
-  const { data: allInvoices } = await supabase
-    .from("sales_invoices")
-    .select("id, invoice_no, invoice_date, sales_invoice_items(amount)")
-    .eq("customer_id", payment.customer_id);
+  const allInvoices = await fetchAllRows<any>(
+    supabase, "sales_invoices", "id, invoice_no, invoice_date, sales_invoice_items(amount)",
+    (q) => q.eq("customer_id", payment.customer_id)
+  );
 
   const invoiceIds = (allInvoices ?? []).map((inv: any) => inv.id);
   const { data: otherAllocations } = invoiceIds.length
-    ? await supabase.from("payment_allocations").select("invoice_id, amount, payment_id").in("invoice_id", invoiceIds).neq("payment_id", id)
+    ? { data: await fetchAllRowsIn<any>(supabase, "payment_allocations", "invoice_id, amount, payment_id", "invoice_id", invoiceIds, (q) => q.neq("payment_id", id)) }
     : { data: [] };
 
   const allocatedByOthers: Record<string, number> = {};

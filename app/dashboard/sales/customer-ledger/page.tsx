@@ -2,13 +2,12 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { money } from "@/lib/format";
 import { loadGroupMap, foldNumbers, ledgerHref } from "@/lib/customerGroups";
+import { fetchAllRows } from "@/lib/fetchAll";
 
 export default async function CustomerLedgerListPage() {
   const supabase = await createClient();
   const { data: customers } = await supabase.from("customers").select("id, name").order("name");
-  const { data: invoices } = await supabase
-    .from("sales_invoices")
-    .select("customer_id, sales_invoice_items(amount)");
+  const invoices = await fetchAllRows<any>(supabase, "sales_invoices", "customer_id, sales_invoice_items(amount)");
 
   const totals: Record<string, number> = {};
   (invoices ?? []).forEach((inv: any) => {

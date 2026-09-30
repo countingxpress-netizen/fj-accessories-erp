@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import BookingForm from "./BookingForm";
+import { fetchAllRows } from "@/lib/fetchAll";
 
 export default async function NewBookingPage() {
   const supabase = await createClient();
@@ -12,10 +13,9 @@ export default async function NewBookingPage() {
     .order("name");
   const { data: garmentsMaster } = await supabase.from("garments").select("id, customer_id, name, address").order("name");
   const { data: merchantsMaster } = await supabase.from("merchants").select("id, name").order("name");
-  const { data: bookingMerchantLinks } = await supabase
-    .from("bookings")
-    .select("customer_id, merchant_id")
-    .not("merchant_id", "is", null);
+  const bookingMerchantLinks = await fetchAllRows<any>(
+    supabase, "bookings", "customer_id, merchant_id", (q) => q.not("merchant_id", "is", null)
+  );
   const { data: priceHistory } = await supabase
     .from("rate_history")
     .select("customer_id, effective_from, rate, material_type")

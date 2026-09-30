@@ -11,6 +11,7 @@ import {
   todayDhaka,
   SALES_RANGE_OPTIONS,
 } from "@/lib/salesByCustomer";
+import { fetchAllRows } from "@/lib/fetchAll";
 
 export default async function SalesByCustomerReportPage({
   searchParams,
@@ -29,12 +30,10 @@ export default async function SalesByCustomerReportPage({
   ]);
   const groupMap = await loadGroupMap(supabase);
 
-  let q = supabase
-    .from("sales_invoices")
-    .select("customer_id, sales_invoice_items(amount, required_lbs, bookings(required_lbs))");
-  if (from) q = q.gte("invoice_date", from);
-  if (to) q = q.lte("invoice_date", to);
-  const { data: invoices } = await q;
+  const invoices = await fetchAllRows<any>(
+    supabase, "sales_invoices", "customer_id, sales_invoice_items(amount, required_lbs, bookings(required_lbs))",
+    (q) => { if (from) q = q.gte("invoice_date", from); if (to) q = q.lte("invoice_date", to); return q; }
+  );
 
   let rmsQ = supabase.from("raw_material_sales").select("customer_id, amount, quantity_lbs");
   if (from) rmsQ = rmsQ.gte("sale_date", from);

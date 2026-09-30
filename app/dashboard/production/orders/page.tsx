@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import ProductionStageRow from "./ProductionStageRow";
 import { getCurrentAppUser } from "@/lib/supabase/getCurrentAppUser";
 import { buildStageRows, PRODUCTION_ORDER_SELECT, type StageRow } from "@/lib/productionStageRows";
+import { fetchAllRows } from "@/lib/fetchAll";
 
 export type { StageRow };
 
@@ -18,13 +19,12 @@ export default async function ProductionOrdersPage({
   const appUser = await getCurrentAppUser();
   const isAdmin = appUser?.role === "admin";
 
-  const { data: orders } = await supabase
-    .from("production_orders")
-    .select(PRODUCTION_ORDER_SELECT)
-    // সম্পূর্ণ শেষ হওয়া অর্ডার (stage="finished") এই active পেজ থেকে বাদ —
-    // ওগুলো Complete Production পেজে থাকবে
-    .neq("stage", "finished")
-    .order("order_date", { ascending: false });
+  // সম্পূর্ণ শেষ হওয়া অর্ডার (stage="finished") এই active পেজ থেকে বাদ —
+  // ওগুলো Complete Production পেজে থাকবে
+  const orders = await fetchAllRows<any>(
+    supabase, "production_orders", PRODUCTION_ORDER_SELECT,
+    (q) => q.neq("stage", "finished").order("order_date", { ascending: false })
+  );
 
   const { blowingRows, printingRows, cuttingRows } = buildStageRows(orders ?? []);
 

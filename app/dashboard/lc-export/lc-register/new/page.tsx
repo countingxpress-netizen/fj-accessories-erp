@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import NewLCForm from "./NewLCForm";
+import { fetchAllRows } from "@/lib/fetchAll";
 
 export default async function NewLCPage() {
   const supabase = await createClient();
@@ -11,10 +12,10 @@ export default async function NewLCPage() {
   const { data: customers } = await supabase.from("customers").select("id, name, address").order("name");
   const { data: suppliers } = await supabase.from("suppliers").select("id, name").order("name");
   const { data: garments } = await supabase.from("garments").select("id, customer_id, name, address").order("name");
-  const { data: pis } = await supabase
-    .from("proforma_invoices")
-    .select("id, pi_no, pi_date, customer_id, total_amount, customers(name)")
-    .order("pi_date", { ascending: false });
+  const pis = await fetchAllRows<any>(
+    supabase, "proforma_invoices", "id, pi_no, pi_date, customer_id, total_amount, customers(name)",
+    (q) => q.order("pi_date", { ascending: false })
+  );
 
   // সব Export LC মিলিয়ে একটাই সিরিয়াল ক্রম — নতুন LC-তে সর্বোচ্চ + 1 (ফর্মে এডিটযোগ্য)
   const { data: lastSerial } = await supabase

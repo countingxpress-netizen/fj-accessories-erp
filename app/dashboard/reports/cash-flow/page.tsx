@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { formatDate } from "@/lib/formatDate";
 import { money } from "@/lib/format";
 import PrintButton from "@/app/dashboard/PrintButton";
+import { fetchAllRows } from "@/lib/fetchAll";
 
 export default async function CashFlowPage({
   searchParams,
@@ -18,12 +19,10 @@ export default async function CashFlowPage({
 
   const accountIds = (cashBankAccounts ?? []).map((a) => a.id);
 
-  let query = supabase
-    .from("journal_entry_lines")
-    .select("*, journal_vouchers(voucher_no, voucher_date, narration), chart_of_accounts(account_name)")
-    .in("account_id", accountIds.length ? accountIds : ["00000000-0000-0000-0000-000000000000"]);
-
-  const { data: lines } = await query;
+  const lines = await fetchAllRows<any>(
+    supabase, "journal_entry_lines", "*, journal_vouchers(voucher_no, voucher_date, narration), chart_of_accounts(account_name)",
+    (q) => q.in("account_id", accountIds.length ? accountIds : ["00000000-0000-0000-0000-000000000000"])
+  );
 
   let filtered = lines ?? [];
   if (from) filtered = filtered.filter((l: any) => (l.journal_vouchers?.voucher_date ?? "") >= from);

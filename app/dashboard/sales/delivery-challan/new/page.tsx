@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import DeliveryChallanForm from "./DeliveryChallanForm";
+import { fetchAllRows } from "@/lib/fetchAll";
 
 export default async function NewDeliveryChallanPage() {
   const supabase = await createClient();
@@ -13,15 +14,11 @@ export default async function NewDeliveryChallanPage() {
     { data: fgStock },
   ] = await Promise.all([
     supabase.from("customers").select("id, name, code, challan_next_serial_hint").order("name"),
-    supabase.from("delivery_challans").select("customer_id"),
-    supabase
-      .from("bookings")
-      .select("id, booking_no, quantity_pcs, product_id, customer_id, warehouse_id, style, garments_name, buyers(name), merchants(name), delivery_point, customer_booking_ref, finished_goods(product_name)")
-      .neq("status", "cancelled")
-      .order("booking_date", { ascending: false })
-      .order("created_at", { ascending: true }),
+    fetchAllRows<any>(supabase, "delivery_challans", "customer_id").then((data) => ({ data })),
+    fetchAllRows<any>(supabase, "bookings", "id, booking_no, quantity_pcs, product_id, customer_id, warehouse_id, style, garments_name, buyers(name), merchants(name), delivery_point, customer_booking_ref, finished_goods(product_name)",
+      (q) => q.neq("status", "cancelled").order("booking_date", { ascending: false }).order("created_at", { ascending: true })).then((data) => ({ data })),
     supabase.from("warehouses").select("id, name").order("name"),
-    supabase.from("delivery_challan_items").select("quantity_pcs, booking_id, delivery_challans(booking_id)"),
+    fetchAllRows<any>(supabase, "delivery_challan_items", "quantity_pcs, booking_id, delivery_challans(booking_id)").then((data) => ({ data })),
     // প্রতিটা product কোন warehouse-এ কত pcs আছে — challan ফর্মে warehouse বাছাই ও
     // stock দেখানোর জন্য (আগে সাবমিটের সময় অনুমান করা হতো, এখন ইউজার দেখে বাছে)
     supabase.from("finished_goods_stock").select("product_id, warehouse_id, quantity_pcs"),

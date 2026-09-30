@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { money } from "@/lib/format";
+import { fetchAllRows } from "@/lib/fetchAll";
 
 export default async function BankBookPage({
   searchParams,
@@ -25,10 +26,10 @@ export default async function BankBookPage({
   let selectedAccount = bankAccounts?.find((a) => a.id === selectedAccountId);
 
   if (selectedAccountId) {
-    const { data: lines } = await supabase
-      .from("journal_entry_lines")
-      .select("*, journal_vouchers(voucher_no, voucher_date, narration)")
-      .eq("account_id", selectedAccountId);
+    const lines = await fetchAllRows<any>(
+      supabase, "journal_entry_lines", "*, journal_vouchers(voucher_no, voucher_date, narration)",
+      (q) => q.eq("account_id", selectedAccountId)
+    );
 
     let filtered = lines ?? [];
 

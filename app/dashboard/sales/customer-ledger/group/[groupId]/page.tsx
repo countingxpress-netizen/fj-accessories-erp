@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { formatDate } from "@/lib/formatDate";
 import { notFound } from "next/navigation";
 import { money } from "@/lib/format";
+import { fetchAllRowsIn } from "@/lib/fetchAll";
 
 function getRangeDates(range: string | undefined, customFrom?: string, customTo?: string) {
   const now = new Date();
@@ -47,12 +48,11 @@ export default async function GroupLedgerPage({
   const nameById: Record<string, string> = {};
   memberList.forEach((m) => { nameById[m.id] = m.name; });
 
-  const { data: invoices } = memberIds.length
-    ? await supabase
-        .from("sales_invoices")
-        .select("id, customer_id, invoice_no, invoice_date, payment_type, sales_invoice_items(quantity_pcs, amount, line_label, finished_goods(product_name))")
-        .in("customer_id", memberIds)
-    : { data: [] };
+  const invoices = await fetchAllRowsIn<any>(
+    supabase, "sales_invoices",
+    "id, customer_id, invoice_no, invoice_date, payment_type, sales_invoice_items(quantity_pcs, amount, line_label, finished_goods(product_name))",
+    "customer_id", memberIds
+  );
 
   const { data: payments } = memberIds.length
     ? await supabase.from("customer_payments").select("customer_id, amount, payment_date, note").in("customer_id", memberIds)

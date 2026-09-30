@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { formatDate } from "@/lib/formatDate";
 import { notFound } from "next/navigation";
 import { money } from "@/lib/format";
+import { fetchAllRows } from "@/lib/fetchAll";
 
 function getRangeDates(range: string | undefined, customFrom?: string, customTo?: string) {
   const now = new Date();
@@ -37,10 +38,11 @@ export default async function CustomerLedgerDetailPage({
   const { data: customer } = await supabase.from("customers").select("*").eq("id", id).single();
   if (!customer) return notFound();
 
-  const { data: invoices } = await supabase
-    .from("sales_invoices")
-    .select("id, invoice_no, invoice_date, payment_type, sales_invoice_items(quantity_pcs, unit_price, amount, line_label, finished_goods(product_name))")
-    .eq("customer_id", id);
+  const invoices = await fetchAllRows<any>(
+    supabase, "sales_invoices",
+    "id, invoice_no, invoice_date, payment_type, sales_invoice_items(quantity_pcs, unit_price, amount, line_label, finished_goods(product_name))",
+    (q) => q.eq("customer_id", id)
+  );
 
   const { data: payments } = await supabase
     .from("customer_payments")

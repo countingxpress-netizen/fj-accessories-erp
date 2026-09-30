@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { formatDate } from "@/lib/formatDate";
 import { money } from "@/lib/format";
 import PrintButton from "@/app/dashboard/PrintButton";
+import { fetchAllRows } from "@/lib/fetchAll";
 
 export default async function ProductionReportPage({
   searchParams,
@@ -10,15 +11,16 @@ export default async function ProductionReportPage({
   const { from, to } = await searchParams;
   const supabase = await createClient();
 
-  let query = supabase
-    .from("production_orders")
-    .select("*, bookings(booking_no, customers(name), finished_goods(product_name)), material_consumption(quantity_lbs, raw_materials(material_name)), wastage(quantity_lbs, stage, recycled)")
-    .order("order_date", { ascending: false });
-
-  if (from) query = query.gte("order_date", from);
-  if (to) query = query.lte("order_date", to);
-
-  const { data: orders } = await query;
+  const orders = await fetchAllRows<any>(
+    supabase, "production_orders",
+    "*, bookings(booking_no, customers(name), finished_goods(product_name)), material_consumption(quantity_lbs, raw_materials(material_name)), wastage(quantity_lbs, stage, recycled)",
+    (q) => {
+      q = q.order("order_date", { ascending: false });
+      if (from) q = q.gte("order_date", from);
+      if (to) q = q.lte("order_date", to);
+      return q;
+    }
+  );
 
   const totalConsumption = (orders ?? []).reduce(
     (s: number, o: any) => s + (o.material_consumption ?? []).reduce((s2: number, m: any) => s2 + m.quantity_lbs, 0), 0

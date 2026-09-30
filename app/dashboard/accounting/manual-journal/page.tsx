@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { fetchAllRows } from "@/lib/fetchAll";
 import VouchersTable from "../journal/VouchersTable";
 
 // শুধু হাতে-বানানো Journal Voucher (source='manual')। সিস্টেম-জেনারেটেড ভাউচার
@@ -7,12 +8,16 @@ import VouchersTable from "../journal/VouchersTable";
 // এখানে দেখাবে না — সেসব "Journal Vouchers" পেজে সব একসাথে থাকে।
 export default async function ManualJournalListPage() {
   const supabase = await createClient();
-  const { data: vouchers } = await supabase
-    .from("journal_vouchers")
-    .select("*, journal_entry_lines(debit, credit), creator:app_users!journal_vouchers_created_by_fkey(full_name)")
-    .eq("source", "manual")
-    .order("voucher_date", { ascending: false })
-    .order("created_at", { ascending: false });
+  // 1000+ voucher হয়ে গেছে — Supabase-এর 1000-রো ক্যাপে যেন পুরনোগুলো বাদ না পড়ে, পেজ করে সব আনা।
+  // লাইনের account নামসহ আনা হয় যাতে রো-তে ক্লিক করলে ডিটেলস দেখানো ও account দিয়ে সার্চ করা যায়।
+  const vouchers = (await fetchAllRows<any>(
+    supabase,
+    "journal_vouchers",
+    "*, journal_entry_lines(id, debit, credit, memo, chart_of_accounts(account_code, account_name)), creator:app_users!journal_vouchers_created_by_fkey(full_name)",
+    (q) => q.eq("source", "manual")
+  )).sort((a, b) =>
+    (b.voucher_date ?? "").localeCompare(a.voucher_date ?? "") || (b.created_at ?? "").localeCompare(a.created_at ?? "")
+  );
 
   return (
     <div>
@@ -34,7 +39,7 @@ export default async function ManualJournalListPage() {
         পেজে যান।
       </p>
 
-      <VouchersTable vouchers={vouchers ?? []} />
+      <VouchersTable vouchers={vouchers} />
     </div>
   );
 }

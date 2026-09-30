@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import ProformaForm from "./ProformaForm";
 import { getCurrentAppUser } from "@/lib/supabase/getCurrentAppUser";
+import { fetchAllRows, fetchAllRowsIn } from "@/lib/fetchAll";
 
 export default async function NewProformaPage() {
   const appUser = await getCurrentAppUser();
@@ -11,20 +12,19 @@ export default async function NewProformaPage() {
   const supabase = await createClient();
   const { data: customers } = await supabase.from("customers").select("id, name, code, price_per_lbs, default_print_rate").order("name");
 
-  const { data: allBookings } = await supabase
-    .from("bookings")
-    .select("id, booking_no, booking_date, quantity_pcs, product_id, customer_id, style, customer_booking_ref, garments_name, buyer_id, buyers(name), merchants(name), measurement_type, measurement_unit, length_val, width_val, flap_val, gusset_val, pillow_val, pi_thickness_mm, material_type, has_print, print_colors, rate_per_color, plain_cm_conversion, finished_goods(product_name, length_cm, width_cm, thickness)")
-    .order("booking_date", { ascending: false })
-    .order("created_at", { ascending: true });
+  // bookings / pi_items দুটোই 1000-রো ক্যাপের কাছাকাছি/বেশি — পেজ করে সব আনা
+  const allBookings = await fetchAllRows<any>(
+    supabase, "bookings",
+    "id, booking_no, booking_date, quantity_pcs, product_id, customer_id, style, customer_booking_ref, garments_name, buyer_id, buyers(name), merchants(name), measurement_type, measurement_unit, length_val, width_val, flap_val, gusset_val, pillow_val, pi_thickness_mm, material_type, has_print, print_colors, rate_per_color, plain_cm_conversion, finished_goods(product_name, length_cm, width_cm, thickness)",
+    (q) => q.order("booking_date", { ascending: false }).order("created_at", { ascending: true })
+  );
 
-  const { data: usedItems } = await supabase.from("pi_items").select("booking_id").not("booking_id", "is", null);
+  const usedItems = await fetchAllRows<any>(supabase, "pi_items", "booking_id", (q) => q.not("booking_id", "is", null));
   const usedIds = new Set((usedItems ?? []).map((pi: any) => pi.booking_id));
   const availableBookings = (allBookings ?? []).filter((b: any) => !usedIds.has(b.id));
 
   const bookingIds = availableBookings.map((b: any) => b.id);
-  const { data: pastInvoiceItems } = bookingIds.length
-    ? await supabase.from("sales_invoice_items").select("booking_id, unit_price").in("booking_id", bookingIds)
-    : { data: [] };
+  const pastInvoiceItems = await fetchAllRowsIn<any>(supabase, "sales_invoice_items", "booking_id, unit_price", "booking_id", bookingIds);
   const lastUnitPriceByBooking: Record<string, number> = {};
   (pastInvoiceItems ?? []).forEach((it: any) => { lastUnitPriceByBooking[it.booking_id] = it.unit_price; });
 

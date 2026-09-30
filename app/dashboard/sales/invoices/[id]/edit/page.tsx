@@ -5,6 +5,7 @@ import EditOtherInvoiceForm from "./EditOtherInvoiceForm";
 import { notFound } from "next/navigation";
 import { resolveRate } from "@/lib/rateHistory";
 import { calcQuotedUnitPrice } from "@/lib/calcTubeCutting";
+import { fetchAllRows } from "@/lib/fetchAll";
 
 export default async function EditInvoicePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -92,13 +93,13 @@ export default async function EditInvoicePage({ params }: { params: Promise<{ id
     { data: customers }, { data: bookings }, { data: priceHistory }, { data: allItems }, { data: myItems },
   ] = await Promise.all([
     supabase.from("customers").select("*").order("name"),
-    supabase
-      .from("bookings")
-      .select("id, booking_no, booking_date, quantity_pcs, product_id, customer_id, style, garments_name, buyers(name), merchants(name), delivery_point, customer_booking_ref, has_print, print_colors, rate_per_color, rate_per_inch, measurement_type, measurement_unit, length_val, width_val, flap_val, gusset_val, pillow_val, thickness_mm, material_type, plain_cm_conversion, finished_goods(product_name, length_cm, width_cm, thickness)")
-      .order("booking_date", { ascending: false })
-      .order("created_at", { ascending: true }),
+    fetchAllRows<any>(
+      supabase, "bookings",
+      "id, booking_no, booking_date, quantity_pcs, product_id, customer_id, style, garments_name, buyers(name), merchants(name), delivery_point, customer_booking_ref, has_print, print_colors, rate_per_color, rate_per_inch, measurement_type, measurement_unit, length_val, width_val, flap_val, gusset_val, pillow_val, thickness_mm, material_type, plain_cm_conversion, finished_goods(product_name, length_cm, width_cm, thickness)",
+      (q) => q.order("booking_date", { ascending: false }).order("created_at", { ascending: true })
+    ).then((data) => ({ data })),
     supabase.from("rate_history").select("customer_id, effective_from, rate, material_type").not("customer_id", "is", null),
-    supabase.from("sales_invoice_items").select("booking_id, quantity_pcs"),
+    fetchAllRows<any>(supabase, "sales_invoice_items", "booking_id, quantity_pcs").then((data) => ({ data })),
     supabase.from("sales_invoice_items").select("id, booking_id, quantity_pcs, unit_price, line_type").eq("invoice_id", id),
   ]);
 

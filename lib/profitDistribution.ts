@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { generateNextDocNo } from "@/lib/docNumber";
 import { getCurrentUserId } from "@/lib/currentUser";
 import { monthRange } from "@/lib/payroll";
+import { fetchAllRows } from "@/lib/fetchAll";
 
 // মাস-শেষ প্রফিট বণ্টন:
 //   লাভ  →  Dr 3100 Retained Earnings / Cr 2800 লিল্লাহ্ ফান্ড (1%) / Cr 3300 ওমর ফারুক (99%)
@@ -38,10 +39,10 @@ export async function monthNetProfit(
   const ids = (accts ?? []).map((a: any) => a.id);
   if (!ids.length) return { income: 0, expense: 0, net: 0 };
 
-  const { data: lines } = await supabase
-    .from("journal_entry_lines")
-    .select("account_id, debit, credit, journal_vouchers(voucher_date)")
-    .in("account_id", ids);
+  const lines = await fetchAllRows<any>(
+    supabase, "journal_entry_lines", "account_id, debit, credit, journal_vouchers(voucher_date)",
+    (q) => q.in("account_id", ids)
+  );
 
   let income = 0;
   let expense = 0;

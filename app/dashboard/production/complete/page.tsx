@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import ProductionStageRow from "../orders/ProductionStageRow";
 import { getCurrentAppUser } from "@/lib/supabase/getCurrentAppUser";
 import { buildStageRows, PRODUCTION_ORDER_SELECT, type StageRow } from "@/lib/productionStageRows";
+import { fetchAllRows } from "@/lib/fetchAll";
 
 export default async function CompleteProductionPage({
   searchParams,
@@ -16,11 +17,10 @@ export default async function CompleteProductionPage({
   const appUser = await getCurrentAppUser();
   const isAdmin = appUser?.role === "admin";
 
-  const { data: orders } = await supabase
-    .from("production_orders")
-    .select(PRODUCTION_ORDER_SELECT)
-    .eq("stage", "finished")
-    .order("order_date", { ascending: false });
+  const orders = await fetchAllRows<any>(
+    supabase, "production_orders", PRODUCTION_ORDER_SELECT,
+    (q) => q.eq("stage", "finished").order("order_date", { ascending: false })
+  );
 
   const { blowingRows, printingRows, cuttingRows } = buildStageRows(orders ?? []);
 
