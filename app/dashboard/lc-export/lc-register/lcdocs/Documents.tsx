@@ -83,7 +83,7 @@ function DeliveryChallan({ ctx }: { ctx: DocCtx }) {
       <Editable k={`${k}.cert`} block className="mt-1 text-[11px]"
         def="This is certifying by applicant that applicant have received the goods in good condition and strictly as per specification of proforma invoice." />
       <LcFooter docKey={k} bankName={ctx.openingBankName} bankAddr={ctx.openingBankAddr} lines={ctx.lcLines} />
-      <Signature company={ctx.company} left="Applicant's Signature & Seal" />
+      <Signature company={ctx.company} left="Receiver's Signature" />
     </div>
   );
 }

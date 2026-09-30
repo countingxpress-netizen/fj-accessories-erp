@@ -149,9 +149,11 @@ export function LcFooter({ docKey, bankName, bankAddr, lines }: { docKey: string
 
 export function Signature({ company, left }: { company: Company | null; left?: string }) {
   return (
-    <div className={`mt-14 flex text-sm ${left ? "justify-between" : "justify-end"}`}>
+    // দুই পাশের সাইনের লাইন একই রো-তে — বাঁ পাশেও একই উচ্চতার ফাঁকা জায়গা
+    <div className={`mt-14 flex items-end text-sm ${left ? "justify-between" : "justify-end"}`}>
       {left && (
         <div className="w-48 text-center">
+          <div className="h-14" />
           <div className="border-t border-gray-600 pt-1">{left}</div>
         </div>
       )}
