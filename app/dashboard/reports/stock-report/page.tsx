@@ -2,11 +2,21 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import PrintButton from "@/app/dashboard/PrintButton";
 import { fetchAllRows } from "@/lib/fetchAll";
+import { resolveDatePreset, periodAsOf, formatLongDate } from "@/lib/datePresets";
+import DateRangeFields from "@/components/DateRangeFields";
 
 const LBS_PER_BAG = 55;
 const money = (n: number) => n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-export default async function StockReportPage() {
+export default async function StockReportPage({
+  searchParams,
+}: { searchParams: Promise<{ range?: string; from?: string; to?: string }> }) {
+  // নির্দিষ্ট তারিখ পর্যন্ত স্টক — বাছাই করা সময়ের শেষ দিন (ডিফল্ট All Time = আজকের স্টক)।
+  // পরিমাণ: আজকের স্টক থেকে ওই তারিখের পরের stock_ledger লেনদেন উল্টো হিসাব (আজকের সংখ্যা হুবহু ঠিক থাকে);
+  // মোট মূল্য: ওই তারিখ পর্যন্ত inventory account-এর খাতা (GL) ব্যালেন্স।
+  const sp = await searchParams;
+  const period = resolveDatePreset(sp.range, sp.from, sp.to, "all");
+  const asOf = periodAsOf(period);
   const supabase = await createClient();
 
   const [
@@ -22,14 +32,33 @@ export default async function StockReportPage() {
     fetchAllRows<any>(supabase, "finished_goods", "id, product_name, avg_cost_per_pc", (q) => q.order("product_name")).then((data) => ({ data })),
     supabase.from("finished_goods_stock").select("product_id, quantity_pcs"),
     supabase.from("chart_of_accounts").select("id, account_code"),
-    fetchAllRows<any>(supabase, "journal_entry_lines", "account_id, debit, credit").then((data) => ({ data })),
+    fetchAllRows<any>(supabase, "journal_entry_lines", "account_id, debit, credit, journal_vouchers(voucher_date)").then((data) => ({
+      data: asOf ? data.filter((l: any) => (l.journal_vouchers?.voucher_date ?? "") <= asOf) : data,
+    })),
   ]);
+
+  // asOf-এর পরের স্টক লেনদেন (in +, out −) — আজকের স্টক থেকে বাদ দিলে asOf দিনের স্টক
+  const laterMoves = asOf
+    ? await fetchAllRows<any>(supabase, "stock_ledger", "item_type, item_id, txn_type, quantity", (q) => q.gt("txn_date", asOf))
+    : [];
+  const laterNet = (itemType: string) => {
+    const m: Record<string, number> = {};
+    laterMoves.filter((l: any) => l.item_type === itemType).forEach((l: any) => {
+      const sign = l.txn_type === "in" ? 1 : l.txn_type === "out" ? -1 : 0;
+      m[l.item_id] = (m[l.item_id] ?? 0) + sign * (Number(l.quantity) || 0);
+    });
+    return m;
+  };
+  const rawLater = laterNet("raw_material");
+  const fgLater = laterNet("finished_goods");
 
   const rawTotals: Record<string, number> = {};
   (rawStock ?? []).forEach((s) => { rawTotals[s.material_id] = (rawTotals[s.material_id] ?? 0) + s.quantity_lbs; });
+  Object.entries(rawLater).forEach(([id, q]) => { rawTotals[id] = (rawTotals[id] ?? 0) - q; });
 
   const fgTotals: Record<string, number> = {};
   (fgStock ?? []).forEach((s) => { fgTotals[s.product_id] = (fgTotals[s.product_id] ?? 0) + s.quantity_pcs; });
+  Object.entries(fgLater).forEach(([id, q]) => { fgTotals[id] = (fgTotals[id] ?? 0) - q; });
 
   const totalRawLbs = Object.values(rawTotals).reduce((s, v) => s + v, 0);
   const totalFgPcs = Object.values(fgTotals).reduce((s, v) => s + v, 0);
@@ -57,8 +86,10 @@ export default async function StockReportPage() {
   const roundingDiff = Math.round((rawValue - rawValueByCosting) * 100) / 100;
   const fgValue = (products ?? []).reduce((s, p: any) => s + (fgTotals[p.id] ?? 0) * (Number(p.avg_cost_per_pc) || 0), 0);
 
+  const asOfText = asOf ? `${formatLongDate(asOf)} তারিখ পর্যন্ত` : "আজকের স্টক";
   const excelRows: (string | number)[][] = [
     ["Stock Report"],
+    [asOfText],
     [],
     ["Raw Material Stock"],
     ["Material", "Lbs", "Kg", "Bags", "গড় খরচ", "মূল্য"],
@@ -86,7 +117,14 @@ export default async function StockReportPage() {
         <h1 className="text-2xl font-semibold">Stock Report</h1>
         <Link href="/dashboard/reports" className="text-sm text-gray-500 hover:underline">← Reports-এ ফিরুন</Link>
       </div>
-      <PrintButton excelFilename="Stock-Report" excelSheets={[{ name: "Stock", rows: excelRows }]} />
+      <p className="print:hidden text-sm text-gray-500 -mt-2 mb-3">
+        {asOfText}{asOf && " — পরিমাণ Stock Ledger অনুযায়ী, প্রতি একক খরচ বর্তমান গড় খরচ"}
+      </p>
+      <form className="print:hidden mb-4 flex flex-wrap items-end gap-3">
+        <DateRangeFields preset={period.preset} from={period.from} to={period.to} includeAll hideFrom toLabel="As of Date" />
+        <button type="submit" className="rounded-lg bg-gray-900 px-4 py-2 text-sm text-white">দেখুন</button>
+      </form>
+      <PrintButton excelFilename={`Stock-Report${asOf ? `-${asOf}` : ""}`} excelSheets={[{ name: "Stock", rows: excelRows }]} />
 
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mb-6">
         <div className="rounded-xl border bg-white p-4 shadow-sm">

@@ -2,7 +2,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllRows } from "@/lib/fetchAll";
 import { money } from "@/lib/format";
-import { resolveDatePreset, dhakaToday } from "@/lib/datePresets";
+import { resolveDatePreset, periodAsOf } from "@/lib/datePresets";
 import DateRangeFields from "@/components/DateRangeFields";
 import { formatLongDate } from "@/lib/datePresets";
 
@@ -15,10 +15,7 @@ export default async function BalanceSheetPage({
   // ডিফল্ট All Time (আজ পর্যন্ত, আগের মতো); পুরনো ?asOf= লিংকও কাজ করে।
   const sp = await searchParams;
   const period = resolveDatePreset(sp.range, sp.from, sp.to ?? sp.asOf, "all");
-  const t = dhakaToday();
-  const todayStr = `${t.y}-${String(t.m).padStart(2, "0")}-${String(t.d).padStart(2, "0")}`;
-  // ভবিষ্যতের তারিখ (যেমন This Month-এর শেষ দিন) হলেও আজ পর্যন্ত যা আছে তাই দেখায়
-  const asOf = period.to ? (period.to > todayStr ? todayStr : period.to) : undefined;
+  const asOf = periodAsOf(period); // ভবিষ্যতের তারিখ হলে আজ পর্যন্ত
   const supabase = await createClient();
 
   const { data: accounts } = await supabase

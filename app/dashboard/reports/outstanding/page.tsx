@@ -5,8 +5,17 @@ import { loadGroupMap, foldNumbers, ledgerHref } from "@/lib/customerGroups";
 import PrintButton from "@/app/dashboard/PrintButton";
 import { fetchAllRows } from "@/lib/fetchAll";
 import { adjustmentSigned } from "@/lib/customerAdjustment";
+import { resolveDatePreset, periodAsOf, formatLongDate } from "@/lib/datePresets";
+import DateRangeFields from "@/components/DateRangeFields";
 
-export default async function OutstandingReportPage() {
+export default async function OutstandingReportPage({
+  searchParams,
+}: { searchParams: Promise<{ range?: string; from?: string; to?: string }> }) {
+  // নির্দিষ্ট তারিখ পর্যন্ত বাকি/পাওনা — বাছাই করা সময়ের শেষ দিন পর্যন্ত সব লেনদেন (ডিফল্ট All Time = আজ পর্যন্ত)
+  const sp = await searchParams;
+  const period = resolveDatePreset(sp.range, sp.from, sp.to, "all");
+  const asOf = periodAsOf(period);
+  const upTo = (col: string) => (q: any) => (asOf ? q.lte(col, asOf) : q);
   const supabase = await createClient();
 
   const [
@@ -21,20 +30,22 @@ export default async function OutstandingReportPage() {
     { data: supplierPayments },
     customerAdjustments,
   ] = await Promise.all([
-    supabase.from("customers").select("id, name, opening_balance"),
-    fetchAllRows<any>(supabase, "sales_invoices", "customer_id, payment_type, sales_invoice_items(amount)").then((data) => ({ data })),
-    supabase.from("customer_payments").select("customer_id, amount"),
-    supabase.from("wastage_sales").select("customer_id, amount, payment_received").not("customer_id", "is", null),
-    supabase.from("raw_material_sales").select("customer_id, amount, payment_received").not("customer_id", "is", null),
+    supabase.from("customers").select("id, name, opening_balance, opening_balance_date"),
+    fetchAllRows<any>(supabase, "sales_invoices", "customer_id, payment_type, sales_invoice_items(amount)", upTo("invoice_date")).then((data) => ({ data })),
+    fetchAllRows<any>(supabase, "customer_payments", "customer_id, amount", upTo("payment_date")).then((data) => ({ data })),
+    fetchAllRows<any>(supabase, "wastage_sales", "customer_id, amount, payment_received", (q) => upTo("sale_date")(q.not("customer_id", "is", null))).then((data) => ({ data })),
+    fetchAllRows<any>(supabase, "raw_material_sales", "customer_id, amount, payment_received", (q) => upTo("sale_date")(q.not("customer_id", "is", null))).then((data) => ({ data })),
     loadGroupMap(supabase),
     supabase.from("suppliers").select("id, name"),
-    supabase.from("purchase_entries").select("supplier_id, purchase_entry_items(quantity_lbs, rate_per_lbs)"),
-    supabase.from("supplier_payments").select("supplier_id, amount"),
-    fetchAllRows<any>(supabase, "customer_adjustments", "customer_id, direction, amount"),
+    fetchAllRows<any>(supabase, "purchase_entries", "supplier_id, purchase_entry_items(quantity_lbs, rate_per_lbs)", upTo("entry_date")).then((data) => ({ data })),
+    fetchAllRows<any>(supabase, "supplier_payments", "supplier_id, amount", upTo("payment_date")).then((data) => ({ data })),
+    fetchAllRows<any>(supabase, "customer_adjustments", "customer_id, direction, amount", upTo("adj_date")),
   ]);
 
   const customerDue: Record<string, number> = {};
   (customers ?? []).forEach((c: any) => {
+    // Opening Balance-এর তারিখ বাছাই করা তারিখের পরে হলে তখনো বাকি ছিল না
+    if (asOf && c.opening_balance_date && c.opening_balance_date > asOf) return;
     if (c.opening_balance) customerDue[c.id] = (customerDue[c.id] ?? 0) + c.opening_balance;
   });
   (invoices ?? []).forEach((inv: any) => {
@@ -78,8 +89,10 @@ export default async function OutstandingReportPage() {
   const totalPayable = Object.values(supplierDue).reduce((s, v) => s + (v > 0 ? v : 0), 0);
   const payableRows = (suppliers ?? []).filter((s) => (supplierDue[s.id] ?? 0) > 0);
 
+  const asOfText = asOf ? `${formatLongDate(asOf)} তারিখ পর্যন্ত` : "আজ পর্যন্ত (সব লেনদেন)";
   const excelRows: (string | number)[][] = [
     ["Outstanding Report"],
+    [asOfText],
     [],
     ["Customer Due"],
     ["Customer", "Due Amount"],
@@ -98,7 +111,12 @@ export default async function OutstandingReportPage() {
         <h1 className="text-2xl font-semibold">Outstanding Report</h1>
         <Link href="/dashboard/reports" className="text-sm text-gray-500 hover:underline">← Reports-এ ফিরুন</Link>
       </div>
-      <PrintButton excelFilename="Outstanding-Report" excelSheets={[{ name: "Outstanding", rows: excelRows }]} />
+      <p className="print:hidden text-sm text-gray-500 -mt-2 mb-3">{asOfText}</p>
+      <form className="print:hidden mb-4 flex flex-wrap items-end gap-3">
+        <DateRangeFields preset={period.preset} from={period.from} to={period.to} includeAll hideFrom toLabel="As of Date" />
+        <button type="submit" className="rounded-lg bg-gray-900 px-4 py-2 text-sm text-white">দেখুন</button>
+      </form>
+      <PrintButton excelFilename={`Outstanding-Report${asOf ? `-${asOf}` : ""}`} excelSheets={[{ name: "Outstanding", rows: excelRows }]} />
 
       <div className="grid grid-cols-2 gap-4 mb-6">
         <div className="rounded-xl border bg-white p-4 shadow-sm">

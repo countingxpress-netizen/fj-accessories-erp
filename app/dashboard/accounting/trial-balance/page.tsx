@@ -3,7 +3,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllRows } from "@/lib/fetchAll";
 import { money } from "@/lib/format";
-import { resolveDatePreset, dhakaToday, formatLongDate } from "@/lib/datePresets";
+import { resolveDatePreset, periodAsOf, formatLongDate } from "@/lib/datePresets";
 import DateRangeFields from "@/components/DateRangeFields";
 
 const typeLabels: Record<string, string> = {
@@ -22,9 +22,7 @@ export default async function TrialBalancePage({
   // ডিফল্ট All Time (আজ পর্যন্ত, আগের মতো)।
   const sp = await searchParams;
   const period = resolveDatePreset(sp.range, sp.from, sp.to, "all");
-  const t = dhakaToday();
-  const todayStr = `${t.y}-${String(t.m).padStart(2, "0")}-${String(t.d).padStart(2, "0")}`;
-  const asOf = period.to ? (period.to > todayStr ? todayStr : period.to) : undefined;
+  const asOf = periodAsOf(period);
   const supabase = await createClient();
 
   const { data: accounts } = await supabase

@@ -68,6 +68,22 @@ export function resolveDatePreset(
   }
 }
 
+/** Asia/Dhaka-র আজ, YYYY-MM-DD */
+export function dhakaTodayStr(): string {
+  const { y, m, d } = dhakaToday();
+  return ymd(y, m, d);
+}
+
+/**
+ * "নির্দিষ্ট তারিখ পর্যন্ত" রিপোর্টের (Balance Sheet / Trial Balance / Outstanding / Stock Report) তারিখ —
+ * বাছাই করা সময়ের শেষ দিন; ভবিষ্যতে হলে আজ (This Month-এর শেষ দিন ইত্যাদি)। All Time → undefined (আজ পর্যন্ত সব)।
+ */
+export function periodAsOf(r: { to: string }): string | undefined {
+  if (!r.to) return undefined;
+  const today = dhakaTodayStr();
+  return r.to > today ? today : r.to;
+}
+
 /** রিপোর্টের শিরোনামে দেখানোর লেখা, যেমন "This Month — 01 Sep 2026 থেকে 30 Sep 2026" */
 export function datePresetLabel(r: { preset: DatePreset; from: string; to: string }): string {
   if (r.preset === "all" || (!r.from && !r.to)) return "All Time (সব সময়)";
