@@ -63,6 +63,8 @@ export default function BookingRow({
             </summary>
             <div className="absolute right-0 z-20 mt-1 w-40 rounded-lg border bg-white shadow-lg py-1 text-left">
               <Link href={`/dashboard/sales/bookings/${booking.id}`} className="block px-3 py-1.5 text-xs hover:bg-gray-50">View</Link>
+            <Link href={`/dashboard/sales/bookings/new?clone=${booking.id}`} className="block px-3 py-1.5 text-xs hover:bg-gray-50">Clone</Link>
+              <Link href={`/dashboard/sales/bookings/new?clone=${booking.id}`} className="block px-3 py-1.5 text-xs hover:bg-gray-50">Clone</Link>
               <GuardedAction
                 table="bookings" recordId={booking.id} recordLabel={booking.booking_no} action="edit"
                 onAllowed={() => router.push(`/dashboard/sales/bookings/${booking.id}/edit`)}
@@ -123,6 +125,7 @@ export default function BookingRow({
           </summary>
           <div className="absolute right-0 z-20 mt-1 w-40 rounded-lg border bg-white shadow-lg py-1 text-left">
             <Link href={`/dashboard/sales/bookings/${booking.id}`} className="block px-3 py-1.5 text-xs hover:bg-gray-50">View</Link>
+            <Link href={`/dashboard/sales/bookings/new?clone=${booking.id}`} className="block px-3 py-1.5 text-xs hover:bg-gray-50">Clone</Link>
             <GuardedAction
               table="bookings" recordId={booking.id} recordLabel={booking.booking_no} action="edit"
               onAllowed={() => router.push(`/dashboard/sales/bookings/${booking.id}/edit`)}

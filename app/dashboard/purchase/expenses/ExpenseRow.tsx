@@ -43,6 +43,9 @@ export default function ExpenseRow({
       <td className="px-4 py-2 text-right">{money(expense.amount)}</td>
       <td className="px-4 py-2 text-right">
         <div className="flex justify-end gap-2">
+          <button type="button" title="এই Expense-এর মতো নতুন Expense বানান"
+            onClick={() => router.push(`/dashboard/purchase/expenses?clone=${expense.id}#expense-form`)}
+            className="rounded bg-gray-100 px-2 py-1 text-xs text-gray-700 hover:bg-gray-200">Clone</button>
           <GuardedAction table="expenses" recordId={expense.id} recordLabel={expense.description ?? formatDate(expense.expense_date)} action="edit"
             onAllowed={() => router.push(`/dashboard/purchase/expenses/${expense.id}/edit`)}
             className="rounded bg-gray-100 px-2 py-1 text-xs text-gray-700 hover:bg-gray-200">Edit</GuardedAction>

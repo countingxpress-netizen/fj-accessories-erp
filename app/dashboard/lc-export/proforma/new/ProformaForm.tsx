@@ -29,6 +29,18 @@ type ManualLine = {
   description: string; measurement: string; qtyPcs: string; priceUnit: string; priceBasis: "pcs" | "dzn";
   tubeInch: string; cuttingInch: string; thicknessMm: string; // Weight অটো-ক্যালকুলেশনের জন্য, ঐচ্ছিক
 };
+
+// Zoho-র মতো Clone — পুরনো PI-র হেডার + লাইন ভরা নতুন ফর্ম (Manual মোডে: একটা booking দুই PI-তে
+// থাকতে পারে না, তাই লাইনগুলো booking-লিংক ছাড়া কপি হয়)। তারিখ আজকের, নতুন PI No সেভের সময়।
+export type PiCloneSource = {
+  piNo: string;
+  customerId: string; garmentsId: string; garmentsAddress: string; merchantName: string; manualBuyerId: string;
+  currency: string; exchangeRate: string; discountType: "none" | "percentage" | "fixed"; discountValue: string;
+  adjustmentAmount: string; priceDecimals: string; termsConditions: string; itemDescription: string;
+  advisingBankId: string; advisingBankName: string; advisingBankBranch: string; advisingBankAddress: string; advisingBankSwift: string;
+  hsCode: string; binNo: string;
+  lines: ManualLine[];
+};
 // AT Accessories বাদে বাকি কাস্টমারদের বুকিং-লাইন দাম-ব্রেকডাউনে একটা ফিল্ড সদ্য বদলালে
 // সেই মানটা সরাসরি পাস করার জন্য (setState অ্যাসিঙ্ক বলে state read-back করলে এক টিক পুরনো
 // মান পাওয়া যেত) — lineThickness/lineTubeCuttingInches/lineQty/lineBreakdown সবাই এটা নেয়।
@@ -76,46 +88,48 @@ function buildBookingDescription(b: Booking): string {
 }
 
 export default function ProformaForm({
-  customers, bookings, buyersMaster, garments, advisingBanks, lastUnitPriceByBooking, buyerRateHistory = [], measurementPrices = [],
+  customers, bookings, buyersMaster, garments, advisingBanks, lastUnitPriceByBooking, buyerRateHistory = [], measurementPrices = [], cloneFrom,
 }: {
   customers: Customer[]; bookings: Booking[]; buyersMaster: BuyerMaster[];
   garments: Garment[]; advisingBanks: AdvisingBank[];
   lastUnitPriceByBooking: Record<string, number>;
   buyerRateHistory?: BuyerRateHistoryRow[];
   measurementPrices?: MeasurementPriceRow[];
+  cloneFrom?: PiCloneSource | null;
 }) {
-  const [mode, setMode] = useState<"booking" | "manual">("booking");
-  const [customerId, setCustomerId] = useState("");
-  const [garmentsId, setGarmentsId] = useState("");
+  const c = cloneFrom ?? null;
+  const [mode, setMode] = useState<"booking" | "manual">(c ? "manual" : "booking");
+  const [customerId, setCustomerId] = useState(c?.customerId ?? "");
+  const [garmentsId, setGarmentsId] = useState(c?.garmentsId ?? "");
   const [buyerFilter, setBuyerFilter] = useState("");
   const [merchantFilter, setMerchantFilter] = useState("");
-  const [merchantName, setMerchantName] = useState("");
+  const [merchantName, setMerchantName] = useState(c?.merchantName ?? "");
   const [styleFilter, setStyleFilter] = useState("");
   const today = new Date().toISOString().slice(0, 10);
   const [piDate, setPiDate] = useState(today);
   const [validTill, setValidTill] = useState(addMonthsISO(today, 2));
   const [validTillTouched, setValidTillTouched] = useState(false);
-  const [currency, setCurrency] = useState("USD");
-  const [exchangeRate, setExchangeRate] = useState("107");
-  const [rateTouched, setRateTouched] = useState(false);
-  const [discountType, setDiscountType] = useState<"none" | "percentage" | "fixed">("none");
-  const [discountValue, setDiscountValue] = useState("0");
-  const [adjustmentAmount, setAdjustmentAmount] = useState("0"); // Subtotal-Discount-এর উপরে ± ম্যানুয়াল সংশোধনী
-  const [priceDecimals, setPriceDecimals] = useState("4");
-  const [termsConditions, setTermsConditions] = useState(DEFAULT_TERMS);
-  const [garmentsAddress, setGarmentsAddress] = useState("");
-  const [itemDescription, setItemDescription] = useState("Poly Bags");
-  const [advisingBankId, setAdvisingBankId] = useState("");
-  const [advisingBankName, setAdvisingBankName] = useState("");
-  const [advisingBankBranch, setAdvisingBankBranch] = useState("");
-  const [advisingBankAddress, setAdvisingBankAddress] = useState("");
-  const [advisingBankSwift, setAdvisingBankSwift] = useState("");
+  const [currency, setCurrency] = useState(c?.currency ?? "USD");
+  const [exchangeRate, setExchangeRate] = useState(c?.exchangeRate ?? "107");
+  const [rateTouched, setRateTouched] = useState(!!c);
+  const [discountType, setDiscountType] = useState<"none" | "percentage" | "fixed">(c?.discountType ?? "none");
+  const [discountValue, setDiscountValue] = useState(c?.discountValue ?? "0");
+  const [adjustmentAmount, setAdjustmentAmount] = useState(c?.adjustmentAmount ?? "0"); // Subtotal-Discount-এর উপরে ± ম্যানুয়াল সংশোধনী
+  const [priceDecimals, setPriceDecimals] = useState(c?.priceDecimals ?? "4");
+  const [termsConditions, setTermsConditions] = useState(c?.termsConditions ?? DEFAULT_TERMS);
+  const [garmentsAddress, setGarmentsAddress] = useState(c?.garmentsAddress ?? "");
+  const [itemDescription, setItemDescription] = useState(c?.itemDescription ?? "Poly Bags");
+  const [advisingBankId, setAdvisingBankId] = useState(c?.advisingBankId ?? "");
+  const [advisingBankName, setAdvisingBankName] = useState(c?.advisingBankName ?? "");
+  const [advisingBankBranch, setAdvisingBankBranch] = useState(c?.advisingBankBranch ?? "");
+  const [advisingBankAddress, setAdvisingBankAddress] = useState(c?.advisingBankAddress ?? "");
+  const [advisingBankSwift, setAdvisingBankSwift] = useState(c?.advisingBankSwift ?? "");
   const [totalWeightKg, setTotalWeightKg] = useState("");
   const [weightTouched, setWeightTouched] = useState(false);
-  const [hsCode, setHsCode] = useState("3923.21.00");
-  const [binNo, setBinNo] = useState("000113803-1201");
+  const [hsCode, setHsCode] = useState(c?.hsCode ?? "3923.21.00");
+  const [binNo, setBinNo] = useState(c?.binNo ?? "000113803-1201");
 
-  const [manualBuyerId, setManualBuyerId] = useState(""); // Manual PI-র Buyer (buyer_name হিসেবে সেভ হয়)
+  const [manualBuyerId, setManualBuyerId] = useState(c?.manualBuyerId ?? ""); // Manual PI-র Buyer (buyer_name হিসেবে সেভ হয়)
   const [selectedBookings, setSelectedBookings] = useState<Record<string, boolean>>({});
   const [bookingPrice, setBookingPrice] = useState<Record<string, string>>({});
   const [bookingAdjust, setBookingAdjust] = useState<Record<string, string>>({}); // প্রতি unit ± (ঋণাত্মকও), Price/Unit-এর সাথে যোগ
@@ -138,7 +152,7 @@ export default function ProformaForm({
   const [bookingExtra, setBookingExtra] = useState<Record<string, string>>({});
   const [bookingOtherCharge, setBookingOtherCharge] = useState<Record<string, string>>({});
 
-  const [manualLines, setManualLines] = useState<ManualLine[]>([
+  const [manualLines, setManualLines] = useState<ManualLine[]>(c && c.lines.length ? c.lines : [
     { description: "", measurement: "", qtyPcs: "", priceUnit: "", priceBasis: "pcs", tubeInch: "", cuttingInch: "", thicknessMm: "" },
   ]);
 
@@ -758,6 +772,12 @@ export default function ProformaForm({
 
   return (
     <form onSubmit={handleSubmit} className="rounded-xl border bg-white p-6 shadow-sm space-y-4 max-w-5xl">
+      {c && (
+        <p className="text-sm text-blue-800 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2">
+          {c.piNo} থেকে Clone করা — হেডার ও সব লাইন Manual মোডে ভরা আছে (একটা booking দুই PI-তে থাকতে পারে না,
+          তাই লাইনগুলো booking-লিংক ছাড়া)। দরকারমতো বদলে সেভ করুন; নতুন PI No সেভের সময় বসবে।
+        </p>
+      )}
       <div className="flex gap-2">
         <button type="button" onClick={() => setMode("booking")} className={`rounded-lg px-4 py-2 text-sm ${mode === "booking" ? "bg-gray-900 text-white" : "border text-gray-600"}`}>
           Booking থেকে তৈরি করুন

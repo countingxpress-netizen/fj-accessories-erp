@@ -8,6 +8,8 @@ export type PaidViaAccount = { id: string; account_code: string; account_name: s
 
 // cash/bank নামের বাইরে যেসব পার্টি-অ্যাকাউন্টও "প্রায়-নগদ" Paid Via উৎস (lib/daybook.ts-এর
 // sourceIds-এর সাথে সামঞ্জস্যপূর্ণ রাখতে হবে — নতুন পার্টি এখানে যোগ হলে ওখানেও যোগ করা লাগবে)।
+// 2600 (এম কে এক্সেসোরিজ) daybook-এ উৎস হলেও এখানে নেই — শুধু Expense form-এ Paid Via হিসেবে যোগ করা
+// (app/dashboard/purchase/expenses), Purchase Freight-এ চাওয়া হয়নি।
 const EXTRA_PAID_VIA_CODES = ["1500", "3000"]; // রিপন থিনার, আবু জাফর
 
 export async function loadPaidViaAccounts(supabase: Client): Promise<PaidViaAccount[]> {

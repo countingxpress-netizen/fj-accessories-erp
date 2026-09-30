@@ -120,6 +120,11 @@ export default async function ProformaViewPage({ params }: { params: Promise<{ i
         <h1 className="text-2xl font-semibold">{pi.pi_no} {pi.revision > 0 && `(Rev-${pi.revision})`}</h1>
         <div className="flex gap-2">
           <ProformaViewActions piId={id} piNo={pi.pi_no} />
+          {!isPiOnly && (
+            <Link href={`/dashboard/lc-export/proforma/new?clone=${id}`} className="rounded-lg border border-gray-400 px-4 py-2 text-sm text-gray-800 hover:bg-gray-50">
+              Clone
+            </Link>
+          )}
           {!isPiOnly && <NewRevisionButton piId={id} />}
         </div>
       </div>

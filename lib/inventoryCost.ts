@@ -223,38 +223,6 @@ export async function postFgReceiveJv(
   return { voucherId, unitCost, totalCost: transfer };
 }
 
-/**
- * Delivery Challan — shipment-এর জন্য COGS ধরে।
- * Dr 5000 COGS / Cr 1400 FG Inventory = Σ(pcs × finished_goods.avg_cost_per_pc)।
- */
-export async function postChallanCogsJv(
-  supabase: Client,
-  args: { date: string; challanNo: string; lines: { productId: string; pcs: number }[] }
-): Promise<string | null> {
-  let total = 0;
-  for (const l of args.lines) {
-    if (!l.productId || !(l.pcs > 0)) continue;
-    const { data: fg } = await supabase
-      .from("finished_goods").select("avg_cost_per_pc").eq("id", l.productId).maybeSingle();
-    total = round2(total + l.pcs * (Number(fg?.avg_cost_per_pc) || 0));
-  }
-  if (total <= 0) return null;
-
-  const [cogsId, fgId] = await Promise.all([
-    accountIdByCode(supabase, COGS_CODE),
-    accountIdByCode(supabase, FG_INV_CODE),
-  ]);
-  if (!cogsId || !fgId) return null;
-
-  return makeVoucher(
-    supabase, args.date, `COGS — Delivery Challan ${args.challanNo}`,
-    [
-      { account_id: cogsId, debit: total, credit: 0, memo: `COGS ${args.challanNo}` },
-      { account_id: fgId, debit: 0, credit: total, memo: `COGS ${args.challanNo}` },
-    ]
-  );
-}
-
 /** production order-এ issue করা কাঁচামালের গড় খরচ প্রতি lb (consumption mix অনুযায়ী)। */
 export async function poCostPerLb(supabase: Client, productionOrderId: string): Promise<number> {
   const { data: rows } = await supabase
@@ -287,7 +255,12 @@ export async function postWastageJv(
   if (!(args.qtyLbs > 0)) return null;
 
   const perLb = await poCostPerLb(supabase, args.productionOrderId);
-  const wastedValue = round2(args.qtyLbs * perLb);
+  // Sales Invoice-এ COGS নেওয়ার সময় booking-এর পুরো কাঁচামাল-খরচ (wastage সহ) WIP থেকে খরচে চলে যায়
+  // (lib/invoiceCogs.ts) — তাই বাকি WIP-এর চেয়ে বেশি কাটলে একই খরচ দুবার হতো ও WIP ঋণাত্মক হতো।
+  const { data: poWip } = await supabase
+    .from("production_orders").select("wip_cost").eq("id", args.productionOrderId).maybeSingle();
+  const wipLeft = Math.max(0, Number(poWip?.wip_cost) || 0);
+  const wastedValue = round2(Math.min(args.qtyLbs * perLb, wipLeft));
   if (wastedValue <= 0) return null;
 
   let recoveredValue = 0;

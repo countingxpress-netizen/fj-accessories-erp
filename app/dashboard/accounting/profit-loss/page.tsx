@@ -2,13 +2,17 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllRows } from "@/lib/fetchAll";
 import { money } from "@/lib/format";
+import { DATE_PRESET_OPTIONS, resolveDatePreset, formatLongDate } from "@/lib/datePresets";
 
 export default async function ProfitLossPage({
   searchParams,
 }: {
-  searchParams: Promise<{ from?: string; to?: string }>;
+  searchParams: Promise<{ range?: string; from?: string; to?: string }>;
 }) {
-  const { from, to } = await searchParams;
+  // Today / Yesterday / This Month / This Year / Previous Month / Previous Year / Date Range
+  // (ডিফল্ট This Month; "আজ" Asia/Dhaka ধরে — lib/datePresets.ts)
+  const sp = await searchParams;
+  const { preset, from, to } = resolveDatePreset(sp.range, sp.from, sp.to);
   const supabase = await createClient();
 
   const { data: accounts } = await supabase
@@ -25,9 +29,10 @@ export default async function ProfitLossPage({
     "account_id, debit, credit, journal_vouchers(voucher_date)",
   );
 
-  let lines = allLines;
-  if (from) lines = lines.filter((l: any) => (l.journal_vouchers?.voucher_date ?? "") >= from);
-  if (to) lines = lines.filter((l: any) => (l.journal_vouchers?.voucher_date ?? "") <= to);
+  const lines = allLines.filter((l: any) => {
+    const d = l.journal_vouchers?.voucher_date ?? "";
+    return d >= from && d <= to;
+  });
 
   const totals: Record<string, { debit: number; credit: number }> = {};
   lines.forEach((l: any) => {
@@ -65,17 +70,23 @@ export default async function ProfitLossPage({
         </Link>
       </div>
       <p className="text-sm text-gray-500 mb-4">
-        {from || to ? `${from || "শুরু থেকে"} থেকে ${to || "আজ"} পর্যন্ত` : "সর্বমোট (সব সময়ের)"}
+        {DATE_PRESET_OPTIONS.find((o) => o.value === preset)?.label} — {formatLongDate(from)} থেকে {formatLongDate(to)} পর্যন্ত
       </p>
 
-      <form className="mb-6 flex items-end gap-3">
+      <form className="mb-6 flex flex-wrap items-end gap-3">
         <div>
-          <label className="block text-xs text-gray-500 mb-1">From</label>
-          <input type="date" name="from" defaultValue={from} className="rounded-lg border px-3 py-2 text-sm" />
+          <label className="block text-xs text-gray-500 mb-1">Date Range</label>
+          <select name="range" defaultValue={preset} className="rounded-lg border px-3 py-2 text-sm">
+            {DATE_PRESET_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
         </div>
         <div>
-          <label className="block text-xs text-gray-500 mb-1">To</label>
-          <input type="date" name="to" defaultValue={to} className="rounded-lg border px-3 py-2 text-sm" />
+          <label className="block text-xs text-gray-500 mb-1">From (Date Range-এর জন্য)</label>
+          <input type="date" name="from" defaultValue={preset === "custom" ? from : ""} className="rounded-lg border px-3 py-2 text-sm" />
+        </div>
+        <div>
+          <label className="block text-xs text-gray-500 mb-1">To (Date Range-এর জন্য)</label>
+          <input type="date" name="to" defaultValue={preset === "custom" ? to : ""} className="rounded-lg border px-3 py-2 text-sm" />
         </div>
         <button type="submit" className="rounded-lg bg-gray-900 px-4 py-2 text-sm text-white">
           ফিল্টার করুন

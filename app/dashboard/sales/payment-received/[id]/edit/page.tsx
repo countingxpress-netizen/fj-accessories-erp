@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import EditPaymentForm from "./EditPaymentForm";
 import { notFound } from "next/navigation";
-import { fetchAllRows, fetchAllRowsIn } from "@/lib/fetchAll";
+import { loadCustomerDues, allocationKey } from "@/lib/paymentDues";
 
 export default async function EditPaymentPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -19,58 +19,23 @@ export default async function EditPaymentPage({ params }: { params: Promise<{ id
     .eq("account_code", "3000").maybeSingle();
   const depositAccounts = mdJaforAccount ? [...(cashBankAccounts ?? []), mdJaforAccount] : (cashBankAccounts ?? []);
 
-  // এই কাস্টমারের সব Invoice, এবং এই payment ছাড়া বাকি payment-গুলোর allocation বাদ দিয়ে "available due" বের করুন
-  const allInvoices = await fetchAllRows<any>(
-    supabase, "sales_invoices", "id, invoice_no, invoice_date, sales_invoice_items(amount)",
-    (q) => q.eq("customer_id", payment.customer_id)
-  );
-
-  const invoiceIds = (allInvoices ?? []).map((inv: any) => inv.id);
-  const { data: otherAllocations } = invoiceIds.length
-    ? { data: await fetchAllRowsIn<any>(supabase, "payment_allocations", "invoice_id, amount, payment_id", "invoice_id", invoiceIds, (q) => q.neq("payment_id", id)) }
-    : { data: [] };
-
-  const allocatedByOthers: Record<string, number> = {};
-  (otherAllocations ?? []).forEach((a: any) => {
-    allocatedByOthers[a.invoice_id] = (allocatedByOthers[a.invoice_id] ?? 0) + a.amount;
-  });
-
+  // এই payment-এর নিজের allocation (key → টাকা) — key ফরম্যাট lib/paymentDues.ts দেখুন
   const { data: thisPaymentAllocations } = await supabase
-    .from("payment_allocations").select("invoice_id, amount").eq("payment_id", id);
+    .from("payment_allocations").select("invoice_id, raw_material_sale_id, wastage_sale_id, customer_adjustment_id, amount").eq("payment_id", id);
   const currentAllocationMap: Record<string, number> = {};
-  (thisPaymentAllocations ?? []).forEach((a: any) => { currentAllocationMap[a.invoice_id ?? "opening"] = a.amount; });
-
-  // এই payment বাদে বাকি সব payment-এর Opening Balance-এর বিপরীতে allocation যোগ করে
-  // "এই payment ফিরিয়ে দিলে Opening Balance-এ কত বাকি থাকবে" বের করা হচ্ছে।
-  const { data: otherOpeningAllocations } = await supabase
-    .from("payment_allocations")
-    .select("amount, payment_id, customer_payments!inner(customer_id)")
-    .is("invoice_id", null)
-    .eq("customer_payments.customer_id", payment.customer_id)
-    .neq("payment_id", id);
-  const openingPaidByOthers = (otherOpeningAllocations ?? []).reduce((s: number, a: any) => s + a.amount, 0);
-
-  const invoices = (allInvoices ?? [])
-    .map((inv: any) => {
-      const total = (inv.sales_invoice_items ?? []).reduce((s: number, i: any) => s + (i.amount || 0), 0);
-      const due = total - (allocatedByOthers[inv.id] ?? 0); // এই payment-এর নিজস্ব allocation বাদ দিয়ে যা বাকি আছে + এই payment ফিরিয়ে দিলে যা যোগ হবে
-      return { id: inv.id, invoice_no: inv.invoice_no, invoice_date: inv.invoice_date, total, due };
-    })
-    .filter((inv: any) => inv.due > 0.009 || currentAllocationMap[inv.id] > 0);
-
-  const openingDue = (payment.customers?.opening_balance ?? 0) - openingPaidByOthers;
-  if (openingDue > 0.009 || currentAllocationMap["opening"] > 0) {
-    invoices.unshift({
-      id: "opening", invoice_no: "Opening Balance (পূর্বের বাকি)",
-      invoice_date: payment.customers?.opening_balance_date ?? "2000-01-01",
-      total: payment.customers?.opening_balance ?? 0, due: openingDue,
-    });
-  }
-  invoices.sort((a: any, b: any) => {
-    if (a.id === "opening") return -1;
-    if (b.id === "opening") return 1;
-    return a.invoice_date.localeCompare(b.invoice_date);
+  (thisPaymentAllocations ?? []).forEach((a: any) => {
+    const key = allocationKey(a);
+    currentAllocationMap[key] = (currentAllocationMap[key] ?? 0) + Number(a.amount || 0);
   });
+
+  // এই payment বাদে বাকি সব payment-এর allocation বাদ দিয়ে "available due" (Opening + Invoice +
+  // কাঁচামাল/ওয়েস্টেজ বাকি-বিক্রি); আগে allocate করা লাইন due 0 হলেও তালিকায় থাকে।
+  const dues = await loadCustomerDues(supabase, {
+    customerId: payment.customer_id,
+    excludePaymentId: id,
+    keepKeys: new Set(Object.keys(currentAllocationMap).filter((k) => currentAllocationMap[k] > 0)),
+  });
+  const invoices = dues[payment.customer_id] ?? [];
 
   return (
     <div>

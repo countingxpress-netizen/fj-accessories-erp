@@ -6,7 +6,7 @@ import { fetchAllRows, fetchAllRowsIn } from "@/lib/fetchAll";
 // হাতে-লেখা "দৈনিক জমা খরচের হিসাব" খাতাটার হুবহু রূপ, কিন্তু পুরোটা ERP data থেকে।
 //
 // মডেল: DayBook আসলে **Cash in Hand (1000)** এর একটা বই। Bank (1010/1011/1012) আর
-//       Md Abu Jafor (3000) — এই দুটোকে ব্যবসা "প্রায়-নগদ উৎস" ধরে, তাই এদের দিয়ে
+//       Md Abu Jafor (3000), রিপন থিনার (1500), এম কে এক্সেসোরিজ (2600) — এদের ব্যবসা "প্রায়-নগদ উৎস" ধরে, তাই এদের দিয়ে
 //       করা লেনদেন pass-through দেখানো হয় (জমায় "উত্তরা ব্যাংক"/"আবু জাফর" এক লাইনে,
 //       খরচে আসল খাত — বা উল্টো)। সব pass-through কাটাকাটি হয়ে যায়, তাই নিচের
 //       "ক্যাশ দেনা" = account 1000-এর ঐ দিন শেষের প্রকৃত ledger balance (GL-এর সাথে মেলে)।
@@ -21,6 +21,9 @@ import { fetchAllRows, fetchAllRowsIn } from "@/lib/fetchAll";
 const CASH_CODE = "1000";
 const ABU_JAFOR_CODE = "3000";
 const RIPON_THINAR_CODE = "1500"; // "Paid Via" পার্টি (Expense form) — ব্যাংক/আবু-জাফরের মতোই প্রায়-নগদ উৎস
+// এম কে এক্সেসোরিজ (Sister Concern) মাঝে মাঝে F&J-এর খরচ দেয় (Expense form-এ Paid Via = 2600) —
+// তাই এটাও pass-through উৎস: জমায় "এম কে এক্সেসোরিজ", খরচে আসল খাত (ক্যাশ ব্যালেন্স বদলায় না)।
+const MK_ACCESSORIES_CODE = "2600";
 const AR_CODE = "1100";
 const AP_CODE = "2000";
 
@@ -94,11 +97,12 @@ export async function buildDayBook(
   const cashId = accounts.find((a) => a.account_code === CASH_CODE)?.id ?? "";
   const abuJaforId = accounts.find((a) => a.account_code === ABU_JAFOR_CODE)?.id ?? "";
   const riponThinarId = accounts.find((a) => a.account_code === RIPON_THINAR_CODE)?.id ?? "";
+  const mkAccessoriesId = accounts.find((a) => a.account_code === MK_ACCESSORIES_CODE)?.id ?? "";
   const bankIds = new Set(
     accounts.filter((a) => a.account_type === "asset" && a.account_code !== CASH_CODE && isBankName(a.account_name)).map((a) => a.id),
   );
-  // "প্রায়-নগদ উৎস" = ব্যাংক + আবু জাফর + রিপন থিনার
-  const sourceIds = new Set<string>([...bankIds, abuJaforId, riponThinarId].filter(Boolean));
+  // "প্রায়-নগদ উৎস" = ব্যাংক + আবু জাফর + রিপন থিনার + এম কে এক্সেসোরিজ
+  const sourceIds = new Set<string>([...bankIds, abuJaforId, riponThinarId, mkAccessoriesId].filter(Boolean));
   const poolIds = new Set<string>([cashId, ...sourceIds].filter(Boolean));
 
   // ── Journal lines (pool অ্যাকাউন্টে) — prior balance + in-range ──
@@ -426,8 +430,45 @@ export async function buildDayBook(
 
   const { data: customersRaw } = await supabase.from("customers").select("opening_balance");
   const arOpeningBase = (customersRaw ?? []).reduce((s: number, c: any) => s + num(c.opening_balance), 0);
-  const arOpening = arOpeningBase + arInvBefore - partyJamaBefore;
-  const arBikri = arInvRange;
+  // কাস্টমার এডজাস্টমেন্ট (cash ছোঁয় না, শুধু বাকির হিসাবে) — "বাকিতে যোগ" বাঁকি বিক্রির সাথে,
+  // "বাকি কমানো" পার্টি জমার সাথে; from-এর আগেরগুলো বাঁকি ছিলো-তে।
+  const custAdjs = await fetchAllRows<any>(
+    supabase, "customer_adjustments", "adj_no, adj_date, direction, amount, note, contra_account_id, customers(name)",
+    (q) => q.lte("adj_date", to),
+  );
+  let adjBefore = 0;
+  let adjDebitRange = 0;
+  let adjCreditRange = 0;
+  for (const a of custAdjs) {
+    const d = a.adj_date ?? "";
+    const amt = num(a.amount);
+    if (d < from) adjBefore += a.direction === "credit" ? -amt : amt;
+    else {
+      if (a.direction === "credit") adjCreditRange += amt;
+      else adjDebitRange += amt;
+      // জমা/খরচ কলামে pass-through (একই অঙ্ক দুই দিকে — ক্যাশ বদলায় না), খাতার ভাষায়:
+      //   বাকিতে যোগ : জমা = বিপরীত account (যেমন মুন্না-3 থেকে নেওয়া), খরচ = কাস্টমার (এটি-কে দেওয়া)
+      //   বাকি কমানো : জমা = কাস্টমার, খরচ = বিপরীত account
+      // বিপরীত account নিজেই Cash/Bank/আবু জাফর… হলে JV-টা উপরের pool-loop থেকেই আসে — দুবার নয়।
+      const contra = byId.get(a.contra_account_id);
+      if (amt > 0 && contra && !poolIds.has(contra.id)) {
+        const custName = one<any>(a.customers)?.name ?? "কাস্টমার";
+        const contraName = displayAccountName(contra);
+        const note = `এডজাস্টমেন্ট${a.note ? ` — ${a.note}` : ""}`;
+        if (a.direction === "credit") {
+          jama.push({ name: custName, note, amount: amt });
+          khoroch.push({ name: contraName, note, amount: amt });
+        } else {
+          jama.push({ name: contraName, note, amount: amt });
+          khoroch.push({ name: custName, note, amount: amt });
+        }
+      }
+    }
+  }
+
+  const arOpening = arOpeningBase + arInvBefore - partyJamaBefore + adjBefore;
+  const arBikri = arInvRange + adjDebitRange;
+  arPartyJama += adjCreditRange;
   const arClosing = arOpening + arBikri - arPartyJama;
 
   // ── Raw material stock ব্লক ──

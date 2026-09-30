@@ -144,6 +144,7 @@ export default function ProformaRow({ pi, autoSalesInvoiceValue, autoCommission,
         )}
         <Link href={`/dashboard/lc-export/proforma/${pi.id}`} className="text-blue-700 hover:underline text-xs mr-2">View</Link>
         <Link href={`/dashboard/lc-export/proforma/${pi.id}/print`} target="_blank" className="text-blue-700 hover:underline text-xs mr-2">Print</Link>
+        <Link href={`/dashboard/lc-export/proforma/new?clone=${pi.id}`} className="text-blue-700 hover:underline text-xs mr-2" title="এই PI-এর মতো নতুন PI বানান">Clone</Link>
         <GuardedAction table="proforma_invoices" recordId={pi.id} recordLabel={pi.pi_no} action="delete"
           onAllowed={handleDelete}
           className="rounded bg-red-50 px-2 py-1 text-xs text-red-700 hover:bg-red-100">Delete</GuardedAction>

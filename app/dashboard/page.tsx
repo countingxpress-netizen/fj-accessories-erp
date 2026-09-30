@@ -4,6 +4,7 @@ import { todayLocal, monthRange } from "@/lib/payroll";
 import { loadGroupMap, foldNumbers } from "@/lib/customerGroups";
 import SalesByCustomer from "./SalesByCustomer";
 import { fetchAllRows } from "@/lib/fetchAll";
+import { adjustmentSigned } from "@/lib/customerAdjustment";
 
 function fmt(n: number) {
   return n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -92,6 +93,10 @@ export default async function DashboardPage() {
     customerDue[inv.customer_id] = (customerDue[inv.customer_id] ?? 0) + amt;
   });
   (customerPayments ?? []).forEach((p: any) => { customerDue[p.customer_id] = (customerDue[p.customer_id] ?? 0) - p.amount; });
+  // কাস্টমার এডজাস্টমেন্ট — "বাকিতে যোগ" +, "বাকি কমানো" −
+  (await fetchAllRows<any>(supabase, "customer_adjustments", "customer_id, direction, amount")).forEach((a: any) => {
+    customerDue[a.customer_id] = (customerDue[a.customer_id] ?? 0) + adjustmentSigned(a);
+  });
   // গ্রুপভুক্ত কাস্টমার এক পার্টি হিসেবে net — Outstanding রিপোর্টের সাথে মিল রেখে।
   const totalReceivable = foldNumbers(groupMap, customers ?? [], customerDue).reduce((s, r) => s + (r.value > 0 ? r.value : 0), 0);
 

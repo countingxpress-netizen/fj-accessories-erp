@@ -20,10 +20,12 @@ export default async function EditExpensePage({ params }: { params: Promise<{ id
     .or("account_name.ilike.%cash%,account_name.ilike.%bank%")
     .order("account_code");
 
-  // Md Abu Jafor (3000) / রিপন থিনার (1500) দিয়ে খরচ করা এন্ট্রি এডিটেও দরকার
+  // Md Abu Jafor (3000) / রিপন থিনার (1500) / এম কে এক্সেসোরিজ (2600, Sister Concern) দিয়ে খরচ
+  // করা হলেও "Paid Via"-তে বাছা যায়। 2600 liability — JV: Dr খরচ / Cr 2600, অর্থাৎ F&J-এর
+  // এম কে-র কাছে দেনা বাড়ে (পরে এম কে-কে টাকা দিলে Dr 2600 / Cr Cash-এ শোধ হয়)।
   const { data: extraPaidVia } = await supabase
     .from("chart_of_accounts").select("id, account_code, account_name")
-    .in("account_code", ["1500", "3000"]).order("account_code");
+    .in("account_code", ["1500", "2600", "3000"]).order("account_code");
   const paidViaAccounts = [...(cashBankAccounts ?? []), ...(extraPaidVia ?? [])];
 
   return (

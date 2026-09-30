@@ -4,6 +4,7 @@ import { money } from "@/lib/format";
 import { loadGroupMap, foldNumbers, ledgerHref } from "@/lib/customerGroups";
 import PrintButton from "@/app/dashboard/PrintButton";
 import { fetchAllRows } from "@/lib/fetchAll";
+import { adjustmentSigned } from "@/lib/customerAdjustment";
 
 export default async function OutstandingReportPage() {
   const supabase = await createClient();
@@ -18,6 +19,7 @@ export default async function OutstandingReportPage() {
     { data: suppliers },
     { data: purchases },
     { data: supplierPayments },
+    customerAdjustments,
   ] = await Promise.all([
     supabase.from("customers").select("id, name, opening_balance"),
     fetchAllRows<any>(supabase, "sales_invoices", "customer_id, payment_type, sales_invoice_items(amount)").then((data) => ({ data })),
@@ -28,6 +30,7 @@ export default async function OutstandingReportPage() {
     supabase.from("suppliers").select("id, name"),
     supabase.from("purchase_entries").select("supplier_id, purchase_entry_items(quantity_lbs, rate_per_lbs)"),
     supabase.from("supplier_payments").select("supplier_id, amount"),
+    fetchAllRows<any>(supabase, "customer_adjustments", "customer_id, direction, amount"),
   ]);
 
   const customerDue: Record<string, number> = {};
@@ -51,6 +54,10 @@ export default async function OutstandingReportPage() {
   });
   (customerPayments ?? []).forEach((p: any) => {
     customerDue[p.customer_id] = (customerDue[p.customer_id] ?? 0) - p.amount;
+  });
+  // কাস্টমার এডজাস্টমেন্ট — "বাকিতে যোগ" +, "বাকি কমানো" −
+  customerAdjustments.forEach((a: any) => {
+    customerDue[a.customer_id] = (customerDue[a.customer_id] ?? 0) + adjustmentSigned(a);
   });
 
   // গ্রুপভুক্ত কাস্টমার এক পার্টি — তাদের বাকি একসাথে (net) দেখানো হয়।

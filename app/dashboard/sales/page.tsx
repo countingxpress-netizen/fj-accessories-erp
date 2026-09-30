@@ -8,6 +8,7 @@ const links = [
   { label: "Sales Invoice", href: "/dashboard/sales/invoices", desc: "বিক্রয় চালান, কাস্টমার-ওয়াইজ দর অনুযায়ী" },
   { label: "Delivery Challan", href: "/dashboard/sales/delivery-challan", desc: "ডেলিভারি চালান, আংশিক শিপমেন্ট সহ" },
   { label: "Customer Ledger", href: "/dashboard/sales/customer-ledger", desc: "কাস্টমার-ওয়াইজ পাওনার হিসাব" },
+  { label: "কাস্টমার এডজাস্টমেন্ট", href: "/dashboard/sales/customer-adjustments", desc: "বিক্রি/পেমেন্ট ছাড়া কাস্টমারের বাকিতে যোগ বা বাকি কমানো (যেমন মুন্না-3-এর কমিশন এটি-র বাকিতে)" },
 ];
 
 export default function SalesHomePage() {

@@ -56,6 +56,7 @@ const menu: MenuGroup[] = [
       { label: "Delivery Challan", href: "/dashboard/sales/delivery-challan" },
       { label: "Challan Received", href: "/dashboard/sales/challan-received" },
       { label: "Payment Received", href: "/dashboard/sales/payment-received" },
+      { label: "কাস্টমার এডজাস্টমেন্ট", href: "/dashboard/sales/customer-adjustments" },
       { label: "Customer Ledger", href: "/dashboard/sales/customer-ledger" },
     ],
   },

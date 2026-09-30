@@ -1,120 +1,43 @@
 import { createClient } from "@/lib/supabase/server";
 import BookingForm, { type BookingEditContext } from "../../new/BookingForm";
-import EditBookingForm from "./EditBookingForm";
 import { notFound } from "next/navigation";
-import { resolveRate } from "@/lib/rateHistory";
-import { calcQuotedUnitPrice } from "@/lib/calcTubeCutting";
 import { fetchAllRows } from "@/lib/fetchAll";
+import { buildBookingItems, bookingHeader, BOOKING_GROUP_SELECT, type BookingItemProgress } from "@/lib/bookingEditContext";
 
+// Booking Group Edit — সবসময় পুরো ফর্ম। Production শুরু / Challan / FG Receive / Wastage / হাতে-বানানো
+// Invoice / PI থাকলেও এডিট করা যায় (in-place — lib/bookingGroupWrite.ts updateBookingGroupInPlace),
+// অগ্রগতি অক্ষত থাকে; তবে পেজে ও সেভের সময় বারবার সতর্ক করা হয়।
 export default async function EditBookingPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const supabase = await createClient();
 
-  const { data: current } = await supabase
-    .from("bookings")
-    .select("id, booking_group_id")
-    .eq("id", id)
-    .single();
+  const { data: current } = await supabase.from("bookings").select("id, booking_group_id").eq("id", id).single();
   if (!current) return notFound();
-
   const groupId = current.booking_group_id ?? id;
 
-  const bookingsQuery = supabase
-    .from("bookings")
-    .select(`*, customers(name), buyers(name), merchants(name),
-      finished_goods(length_cm, width_cm, thickness),
-      booking_materials(quantity_lbs, raw_materials(material_name)),
-      production_orders(id, stage, blowing_completed_at, printing_completed_at, cutting_completed_at,
-        blowing_produced_lbs, printing_produced_pcs, cutting_produced_pcs)`)
-    .order("created_at", { ascending: true });
-
+  const bookingsQuery = supabase.from("bookings").select(BOOKING_GROUP_SELECT).order("created_at", { ascending: true });
   const { data: bookings } = current.booking_group_id
     ? await bookingsQuery.eq("booking_group_id", groupId)
     : await bookingsQuery.eq("id", id);
-
   if (!bookings || bookings.length === 0) return notFound();
   const first: any = bookings[0];
   const bookingIds = bookings.map((b: any) => b.id);
-
-  // ── Structural edit guard ────────────────────────────────────────────────
-  // Production শুরু হলে / Delivery Challan / Proforma Invoice / হাতে-বানানো Sales
-  // Invoice যুক্ত থাকলে full ফর্ম নয়, শুধু soft-field ফর্ম।
-  const productionStarted = bookings.some((b: any) => {
-    const po = b.production_orders?.[0];
-    if (!po) return false;
-    return (
-      po.blowing_completed_at || po.printing_completed_at || po.cutting_completed_at ||
-      (po.blowing_produced_lbs || 0) > 0 || (po.printing_produced_pcs || 0) > 0 || (po.cutting_produced_pcs || 0) > 0 ||
-      (po.stage && po.stage !== "blowing")
-    );
-  });
-
   const poIds = bookings.flatMap((b: any) => (b.production_orders ?? []).map((p: any) => p.id)).filter(Boolean);
-  const [{ data: challans }, { data: piItems }, { data: invItems }, { data: fgReceives }, { data: wastages }] = await Promise.all([
-    supabase.from("delivery_challans").select("id").in("booking_id", bookingIds),
-    supabase.from("pi_items").select("id").in("booking_id", bookingIds),
-    supabase.from("sales_invoice_items").select("invoice_id").in("booking_id", bookingIds),
-    poIds.length ? supabase.from("finished_goods_receive").select("id").in("production_id", poIds) : Promise.resolve({ data: [] as any[] }),
-    poIds.length ? supabase.from("wastage").select("id").in("production_id", poIds) : Promise.resolve({ data: [] as any[] }),
-  ]);
 
-  // embed এড়িয়ে আলাদা query (embed-এর array/object আচরণ role-ভেদে বদলায় — bookingDelete.ts-এর মতোই)
-  const invoiceIds = Array.from(new Set((invItems ?? []).map((it: any) => it.invoice_id).filter(Boolean)));
-  let hasManualInvoice = false;
-  if (invoiceIds.length > 0) {
-    const { data: invs } = await supabase
-      .from("sales_invoices").select("id, auto_generated, source_booking_group_id").in("id", invoiceIds);
-    hasManualInvoice = (invs ?? []).some(
-      (v: any) => !(v.auto_generated && v.source_booking_group_id === groupId),
-    );
-  }
-
-  const structuralLocked =
-    productionStarted ||
-    (challans ?? []).length > 0 ||
-    (piItems ?? []).length > 0 ||
-    (fgReceives ?? []).length > 0 ||
-    (wastages ?? []).length > 0 ||
-    hasManualInvoice;
-
-  // ── Locked → পুরনো soft-field ফর্ম ──────────────────────────────────────
-  if (structuralLocked) {
-    const bagMaterialBucket: "pe" | "pp" = first.material_type === "pp" ? "pp" : "pe";
-    const { data: customer } = await supabase
-      .from("customers").select("price_per_lbs_pe, price_per_lbs_pp").eq("id", first.customer_id).maybeSingle();
-    const { data: rateHistory } = await supabase
-      .from("rate_history").select("effective_from, rate").eq("customer_id", first.customer_id).eq("material_type", bagMaterialBucket);
-    const customerPriceForBucket = bagMaterialBucket === "pp" ? customer?.price_per_lbs_pp : customer?.price_per_lbs_pe;
-    const pricePerLbs = resolveRate(rateHistory ?? [], first.booking_date, customerPriceForBucket ?? 0);
-
-    const reason = productionStarted
-      ? "এই বুকিং-এর Production শুরু হয়ে গেছে"
-      : (challans ?? []).length > 0
-        ? "এই বুকিং-এর সাথে Delivery Challan যুক্ত"
-        : (piItems ?? []).length > 0
-          ? "এই বুকিং-এর সাথে Proforma Invoice (PI) যুক্ত"
-          : hasManualInvoice
-            ? "এই বুকিং-এর সাথে হাতে-বানানো Sales Invoice যুক্ত"
-            : "এই বুকিং প্রোডাকশন/স্টকে ব্যবহৃত হয়েছে";
-
-    return (
-      <div>
-        <h1 className="text-2xl font-semibold mb-2">Booking এডিট করুন — {first.booking_no}</h1>
-        <p className="mb-4 text-sm text-orange-700 bg-orange-50 border border-orange-200 rounded-lg p-3">
-          {reason} — তাই Quantity / মাপ / Material / Thickness এখান থেকে বদলানো যাবে না। শুধু নিচের
-          ফিল্ডগুলো বদলানো যাবে। পুরো বদল দরকার হলে বুকিং Delete করে নতুন করে দিন।
-        </p>
-        <EditBookingForm booking={first} pricePerLbs={pricePerLbs} />
-      </div>
-    );
-  }
-
-  // ── Unlocked → full BookingForm (edit mode) ─────────────────────────────
   const [
+    { data: challans }, { data: challanItems }, { data: piItems }, { data: invItems }, { data: fgReceives }, { data: wastages },
     { data: customers }, { data: warehouses }, { data: materials },
     { data: buyersMaster }, { data: garmentsMaster }, { data: merchantsMaster }, { data: priceHistory },
     { data: autoInvoice }, { data: bookingMerchantLinks },
   ] = await Promise.all([
+    supabase.from("delivery_challans").select("id, challan_no, booking_id").in("booking_id", bookingIds),
+    supabase.from("delivery_challan_items").select("booking_id, quantity_pcs, delivery_challans(challan_no)").in("booking_id", bookingIds),
+    supabase.from("pi_items").select("booking_id, proforma_invoices(pi_no)").in("booking_id", bookingIds),
+    supabase.from("sales_invoice_items").select("booking_id, sales_invoices(invoice_no, auto_generated, source_booking_group_id)").in("booking_id", bookingIds),
+    poIds.length ? supabase.from("finished_goods_receive").select("production_id, quantity_pcs").in("production_id", poIds) : Promise.resolve({ data: [] as any[] }),
+    supabase.from("wastage").select("booking_id, production_id, quantity_lbs").or(
+      [`booking_id.in.(${bookingIds.join(",")})`, ...(poIds.length ? [`production_id.in.(${poIds.join(",")})`] : [])].join(","),
+    ),
     supabase.from("customers").select("*").order("name"),
     supabase.from("warehouses").select("id, name").order("name"),
     supabase.from("raw_materials").select("id, material_name").order("material_name"),
@@ -126,91 +49,77 @@ export default async function EditBookingPage({ params }: { params: Promise<{ id
     fetchAllRows<any>(supabase, "bookings", "customer_id, merchant_id", (q) => q.not("merchant_id", "is", null)).then((data) => ({ data })),
   ]);
 
-  const warehouseName: Record<string, string> = {};
-  (warehouses ?? []).forEach((w: any) => (warehouseName[w.id] = w.name));
+  const one = (v: any) => (Array.isArray(v) ? v[0] : v);
+  const nf = (n: number) => Math.round(n).toLocaleString("en-IN");
 
-  const CM_PER_INCH = 2.54;
+  // ── প্রতিটা প্রোডাক্টের অগ্রগতি (সতর্কবার্তার জন্য) ──
+  const progressById: Record<string, BookingItemProgress> = {};
+  for (const b of bookings as any[]) {
+    const po = (b.production_orders ?? [])[0];
+    const notes: string[] = [];
+    if (po?.blowing_completed_at) notes.push("Blowing সম্পন্ন");
+    if (po?.printing_completed_at) notes.push("Printing সম্পন্ন");
+    if (po?.cutting_completed_at) notes.push("Cutting সম্পন্ন");
+    const producedPcs = Number(po?.cutting_produced_pcs) || Number(po?.printing_produced_pcs) || 0;
+    if (!po?.cutting_completed_at && producedPcs > 0) notes.push(`উৎপাদিত ${nf(producedPcs)} pcs`);
+    if (!notes.length && po && ((Number(po.blowing_produced_lbs) || 0) > 0 || (po.stage && po.stage !== "blowing"))) notes.push("Production শুরু হয়েছে");
+    const fgPcs = (fgReceives ?? []).filter((r: any) => r.production_id === po?.id).reduce((s: number, r: any) => s + (Number(r.quantity_pcs) || 0), 0);
+    if (fgPcs > 0) notes.push(`FG Receive ${nf(fgPcs)} pcs`);
+    const myChallanItems = (challanItems ?? []).filter((r: any) => r.booking_id === b.id);
+    const deliveredPcs = myChallanItems.reduce((s: number, r: any) => s + (Number(r.quantity_pcs) || 0), 0);
+    const challanNos = new Set<string>([
+      ...myChallanItems.map((r: any) => one(r.delivery_challans)?.challan_no).filter(Boolean),
+      ...(challans ?? []).filter((c: any) => c.booking_id === b.id).map((c: any) => c.challan_no).filter(Boolean),
+    ]);
+    if (challanNos.size || deliveredPcs > 0) notes.push(`Challan ${[...challanNos].join(", ")}${deliveredPcs ? ` — ${nf(deliveredPcs)} pcs ডেলিভারি` : ""}`);
+    if ((wastages ?? []).some((w: any) => w.booking_id === b.id || (po && w.production_id === po.id))) notes.push("Wastage আছে");
+    const manualInv = (invItems ?? [])
+      .filter((r: any) => r.booking_id === b.id)
+      .map((r: any) => one(r.sales_invoices))
+      .filter((v: any) => v && !(v.auto_generated && v.source_booking_group_id === groupId));
+    if (manualInv.length) notes.push(`হাতে-বানানো Invoice ${[...new Set(manualInv.map((v: any) => v.invoice_no))].join(", ")}`);
+    const piNos = [...new Set((piItems ?? []).filter((r: any) => r.booking_id === b.id).map((r: any) => one(r.proforma_invoices)?.pi_no).filter(Boolean))];
+    if (piNos.length) notes.push(`PI ${piNos.join(", ")}`);
+    progressById[b.id] = { notes, deliveredPcs, producedPcs };
+  }
 
-  // Booking Date-এ কার্যকর Price/Lbs — পুরনো Adjust/Pc implied ভাবে বের করতে লাগে
-  // (quoted_unit_price − formula দাম)। এই ফর্ম আলাদা adjustment কলাম রাখে না।
-  const editCustomer = (customers ?? []).find((c: any) => c.id === first.customer_id);
-  const firstBagMaterialBucket: "pe" | "pp" = first.material_type === "pp" ? "pp" : "pe";
-  const historyForCustomer = (priceHistory ?? []).filter((h: any) => h.customer_id === first.customer_id && h.material_type === firstBagMaterialBucket);
-  const editCustomerPriceForBucket = firstBagMaterialBucket === "pp" ? editCustomer?.price_per_lbs_pp : editCustomer?.price_per_lbs_pe;
-  const effRate = resolveRate(historyForCustomer, first.booking_date, Number(editCustomerPriceForBucket ?? 0));
+  // গ্রুপ-লেভেল সতর্কবার্তা (পেজের উপরে + সেভের সময় confirm)
+  const warnings: string[] = [];
+  const anyNote = (re: RegExp) => Object.values(progressById).some((p) => p.notes.some((n) => re.test(n)));
+  if (anyNote(/Blowing|Printing|Cutting|উৎপাদিত|Production/)) warnings.push("Production শুরু হয়ে গেছে — Production-এর অগ্রগতি (stage, উৎপাদিত পরিমাণ) যেমন আছে তেমন থাকবে; Qty/মাপ বদলালে Production Order-এর Qty/Lbs বদলাবে।");
+  if (anyNote(/^Challan/)) warnings.push("Challan হয়ে গেছে — Challan যেমন আছে থাকবে। Qty ডেলিভারির চেয়ে কমালে হিসাব গরমিল হবে।");
+  if (anyNote(/^FG Receive/)) warnings.push("FG Receive হয়েছে — সেই প্রোডাক্টের Finished Goods (মাপ/পণ্য) বদলাবে না, স্টক আগের পণ্যেই থাকবে।");
+  if (anyNote(/^Wastage/)) warnings.push("Wastage এন্ট্রি আছে — সেগুলো বদলাবে না।");
+  if (anyNote(/^হাতে-বানানো Invoice/)) warnings.push("হাতে-বানানো Sales Invoice আছে — সেই Invoice-এর Qty/দাম নিজে থেকে বদলাবে না, দরকার হলে Invoice আলাদা করে এডিট করুন।");
+  if (anyNote(/^PI /)) warnings.push("PI আছে — PI লাইনের Qty / মাপ / Description / Thickness নতুন করে বসবে ও PI total নতুন করে হিসাব হবে (Price/Unit একই থাকবে)।");
+  warnings.push("কাঁচামালের পরিমাণ/Warehouse/তারিখ বদলালে আগের কাঁচামাল কর্তন ফেরত দিয়ে নতুন করে কাটা হবে (WIP-এ শুধু পার্থক্য)। কোনো প্রোডাক্টের কাজ শুরু হয়ে থাকলে সেটা তালিকা থেকে মোছা যাবে না।");
+  const hasProgressWarning = warnings.length > 1;
 
-  const items = bookings.map((b: any) => {
-    const fg = b.finished_goods;
-    const lengthCm = fg?.length_cm ?? (b.measurement_unit === "cm" ? 0 : 0);
-    const widthCm = fg?.width_cm ?? 0;
-    const materialsNeeded = (b.booking_materials ?? [])
-      .map((bm: any) => ({ name: bm.raw_materials?.material_name ?? "", qty: Number(bm.quantity_lbs) || 0 }))
-      .filter((m: any) => m.name && m.qty > 0);
-    const finalLbs = Number(b.required_lbs) || 0;
-    // পুরনো Adjust/Pc = stored Unit Price − formula দাম (rate ভালোভাবে বের হলে তবেই)
-    const storedUnit = Number(b.quoted_unit_price) || 0;
-    const formulaUnit = calcQuotedUnitPrice(b, effRate, Number(b.thickness_mm) || 0);
-    const impliedAdj = formulaUnit > 0 && storedUnit > 0
-      ? Math.round((storedUnit - formulaUnit) * 100) / 100
-      : 0;
-    return {
-      style: b.style ?? "",
-      customerBookingRef: b.customer_booking_ref ?? "",
-      poNo: b.po_no ?? "",
-      printLayoutNote: b.print_layout_note ?? "",
-      printLayoutFileUrl: b.print_layout_file_url ?? "",
-      productDetails: b.product_details ?? "",
-      measurementType: b.measurement_type,
-      unit: b.measurement_unit,
-      lengthVal: Number(b.length_val) || 0,
-      widthVal: Number(b.width_val) || 0,
-      flapVal: Number(b.flap_val) || 0,
-      gussetVal: Number(b.gusset_val) || 0,
-      pillowVal: Number(b.pillow_val) || 0,
-      thicknessMm: Number(b.thickness_mm) || 0,
-      productionThicknessMm: Number(b.production_thickness_mm) || 0,
-      piThicknessMm: Number(b.pi_thickness_mm) || 0,
-      materialType: b.material_type,
-      quantity: Number(b.quantity_pcs) || 0,
-      warehouseId: b.warehouse_id ?? "",
-      warehouseName: warehouseName[b.warehouse_id] ?? "-",
-      finalLbs,
-      kg: Number(b.required_kg) || finalLbs * 0.453592,
-      bags: Number(b.required_bags) || finalLbs / 55,
-      materialsNeeded,
-      lengthCm: Number(lengthCm) || (b.measurement_unit === "cm" ? Number(b.length_val) : Number(b.length_val) * CM_PER_INCH) || 0,
-      widthCm: Number(widthCm) || (b.measurement_unit === "cm" ? Number(b.width_val) : Number(b.width_val) * CM_PER_INCH) || 0,
-      hasPrint: !!b.has_print,
-      printColors: Number(b.print_colors) || 0,
-      ratePerColor: Number(b.rate_per_color) || 0.20,
-      ratePerInch: Number(b.rate_per_inch) || 0.02,
-      adjustmentPerPc: impliedAdj,
-      unitPrice: Number(b.quoted_unit_price) || 0,
-      amount: Number(b.quoted_amount) || 0,
-    };
+  const customerRow = (customers ?? []).find((c: any) => c.id === first.customer_id) ?? null;
+  const items = buildBookingItems(bookings, {
+    warehouses: warehouses ?? [], customer: customerRow, priceHistory: (priceHistory ?? []) as any, progressById,
   });
 
   const editContext: BookingEditContext = {
     groupId,
-    bookingNo: first.booking_no,
-    bookingDate: first.booking_date,
-    customerId: first.customer_id,
-    customerName: first.customers?.name ?? "",
-    buyerId: first.buyer_id ?? null,
-    buyerName: first.buyers?.name ?? null,
-    garmentsId: first.garments_id ?? null,
-    garmentsName: first.garments_name ?? null,
-    merchantId: first.merchant_id ?? null,
-    merchantName: first.merchants?.name ?? null,
-    deliveryPoint: first.delivery_point ?? "",
+    ...bookingHeader(first),
     paymentReceived: !!autoInvoice?.payment_received,
     priceOverride: "",
     items: items as BookingEditContext["items"],
+    warnings: hasProgressWarning ? warnings : [],
   };
 
   return (
     <div>
       <h1 className="text-2xl font-semibold mb-4">Booking Group এডিট করুন — {first.booking_no}</h1>
+      {hasProgressWarning && (
+        <div className="mb-4 rounded-lg border-2 border-red-300 bg-red-50 p-3 text-sm text-red-800">
+          <p className="font-semibold mb-1">⚠ সতর্কতা — এই বুকিং-এর কাজ ইতিমধ্যে এগিয়েছে। এডিট করলে:</p>
+          <ul className="list-disc pl-5 space-y-0.5">
+            {warnings.map((w, i) => <li key={i}>{w}</li>)}
+          </ul>
+        </div>
+      )}
       <BookingForm
         customers={(customers ?? []) as any}
         warehouses={warehouses ?? []}

@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/client";
 import { generateNextDocNo } from "@/lib/docNumber";
 import { getCurrentUserId } from "@/lib/currentUser";
 import { buildLbsLines, type LbsBooking } from "@/lib/lbsInvoice";
+import { syncInvoiceCogs, reverseInvoiceCogs } from "@/lib/invoiceCogs";
 
 type SupabaseClient = ReturnType<typeof createClient>;
 
@@ -77,6 +78,7 @@ async function findAutoInvoice(supabase: SupabaseClient, groupId: string) {
 }
 
 async function destroyInvoice(supabase: SupabaseClient, inv: { id: string; voucher_id: string | null }) {
+  await reverseInvoiceCogs(supabase, inv.id);
   await clearInvoiceJv(supabase, inv.id, inv.voucher_id);
   await supabase.from("sales_invoice_items").delete().eq("invoice_id", inv.id);
   await supabase.from("sales_invoices").delete().eq("id", inv.id);
@@ -268,6 +270,9 @@ export async function syncAutoInvoiceForGroup(
     });
     if (voucherId) await supabase.from("sales_invoices").update({ voucher_id: voucherId }).eq("id", invoiceId);
   }
+
+  // লাইন নতুন করে লেখা হয়েছে — বিক্রির COGS (Dr 5050 / Cr WIP) নতুন করে (lib/invoiceCogs.ts)
+  await syncInvoiceCogs(supabase, invoiceId);
 
   return { ok: true, invoiceId, invoiceNo };
 }

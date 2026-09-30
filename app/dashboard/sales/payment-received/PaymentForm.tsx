@@ -6,6 +6,7 @@ import { generateNextDocNo } from "@/lib/docNumber";
 import { formatDate } from "@/lib/formatDate";
 import { getCurrentUserId } from "@/lib/currentUser";
 import { money } from "@/lib/format";
+import { allocationTarget } from "@/lib/paymentDues";
 
 type Customer = { id: string; name: string };
 type Account = { id: string; account_code: string; account_name: string };
@@ -193,8 +194,8 @@ export default function PaymentForm({
 
     if (validAllocations.length > 0) {
       await supabase.from("payment_allocations").insert(
-        validAllocations.map(([invoiceId, amount]) => ({
-          payment_id: payment.id, invoice_id: invoiceId === "opening" ? null : invoiceId, amount: parseFloat(amount),
+        validAllocations.map(([key, amount]) => ({
+          payment_id: payment.id, ...allocationTarget(key), amount: parseFloat(amount),
         }))
       );
     }
@@ -257,7 +258,7 @@ export default function PaymentForm({
           )}
 
           <div className="rounded-lg border overflow-x-auto">
-            <div className="bg-gray-50 px-3 py-2 text-sm font-semibold text-gray-700">Unpaid Invoices</div>
+            <div className="bg-gray-50 px-3 py-2 text-sm font-semibold text-gray-700">Unpaid Invoices / বাকি বিক্রি</div>
             <table className="w-full text-sm">
               <thead className="text-left text-gray-500 border-t">
                 <tr>

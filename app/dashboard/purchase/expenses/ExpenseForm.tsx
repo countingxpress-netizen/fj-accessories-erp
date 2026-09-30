@@ -7,15 +7,20 @@ import { getCurrentUserId } from "@/lib/currentUser";
 
 type Account = { id: string; account_code: string; account_name: string };
 
+export type ExpenseCloneSource = {
+  label: string; account_id: string; paid_via_account_id: string; amount: number; payee: string | null; description: string | null;
+};
+
 export default function ExpenseForm({
-  expenseAccounts, cashBankAccounts,
-}: { expenseAccounts: Account[]; cashBankAccounts: Account[] }) {
+  expenseAccounts, cashBankAccounts, cloneFrom,
+}: { expenseAccounts: Account[]; cashBankAccounts: Account[]; cloneFrom?: ExpenseCloneSource | null }) {
+  // cloneFrom — Zoho-র মতো Clone: পুরনো Expense-এর Head/Paid Via/টাকা/Payee/বিবরণ ভরা, তারিখ আজকের
   const [expenseDate, setExpenseDate] = useState(new Date().toISOString().slice(0, 10));
-  const [accountId, setAccountId] = useState("");
-  const [paidViaAccountId, setPaidViaAccountId] = useState("");
-  const [amount, setAmount] = useState("");
-  const [payee, setPayee] = useState("");
-  const [description, setDescription] = useState("");
+  const [accountId, setAccountId] = useState(cloneFrom?.account_id ?? "");
+  const [paidViaAccountId, setPaidViaAccountId] = useState(cloneFrom?.paid_via_account_id ?? "");
+  const [amount, setAmount] = useState(cloneFrom ? String(cloneFrom.amount) : "");
+  const [payee, setPayee] = useState(cloneFrom?.payee ?? "");
+  const [description, setDescription] = useState(cloneFrom?.description ?? "");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const router = useRouter();
@@ -68,11 +73,18 @@ export default function ExpenseForm({
 
     setLoading(false);
     setAmount(""); setPayee(""); setDescription("");
+    // Clone থেকে সেভ হলে URL থেকে ?clone সরিয়ে ফাঁকা ফর্মে ফিরি
+    if (cloneFrom) router.replace("/dashboard/purchase/expenses");
     router.refresh();
   }
 
   return (
-    <form onSubmit={handleSubmit} className="rounded-xl border bg-white p-6 shadow-sm space-y-4 max-w-2xl">
+    <form id="expense-form" onSubmit={handleSubmit} className="rounded-xl border bg-white p-6 shadow-sm space-y-4 max-w-2xl">
+      {cloneFrom && (
+        <p className="text-sm text-blue-800 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2">
+          {cloneFrom.label} থেকে Clone করা — তারিখ/টাকা দরকারমতো বদলে সেভ করুন।
+        </p>
+      )}
       <div className="flex flex-wrap gap-4">
         <div>
           <label className="block text-sm text-gray-600 mb-1">Date</label>

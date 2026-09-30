@@ -4,6 +4,7 @@ import { formatDate } from "@/lib/formatDate";
 import { notFound } from "next/navigation";
 import { money } from "@/lib/format";
 import { fetchAllRowsIn } from "@/lib/fetchAll";
+import { adjustmentSigned } from "@/lib/customerAdjustment";
 
 function getRangeDates(range: string | undefined, customFrom?: string, customTo?: string) {
   const now = new Date();
@@ -66,7 +67,13 @@ export default async function GroupLedgerPage({
     ? await supabase.from("raw_material_sales").select("customer_id, sale_no, sale_date, amount, payment_received").in("customer_id", memberIds)
     : { data: [] };
 
-  type Row = { date: string; type: "opening" | "invoice" | "payment"; customer: string; ref: string; desc: string; debit: number; credit: number };
+  const adjustments = await fetchAllRowsIn<any>(
+    supabase, "customer_adjustments",
+    "customer_id, adj_no, adj_date, direction, amount, note, contra:chart_of_accounts!customer_adjustments_contra_account_id_fkey(account_name)",
+    "customer_id", memberIds
+  );
+
+  type Row = { date: string; type: "opening" | "invoice" | "payment" | "adjustment"; customer: string; ref: string; desc: string; debit: number; credit: number };
   const rows: Row[] = [];
 
   // নগদ বিক্রি সব স্টেটমেন্টে দৃশ্যমান থাকে (সারি হিসেবে), কিন্তু Dr+Cr একইসাথে
@@ -103,6 +110,17 @@ export default async function GroupLedgerPage({
   (rawMaterialSales ?? []).forEach((r: any) => {
     const isCash = !!r.payment_received;
     rows.push({ date: r.sale_date, type: "invoice", customer: nameById[r.customer_id] ?? "-", ref: r.sale_no, desc: `Raw Material বিক্রি${isCash ? " · নগদ" : " (বাকি)"}`, ...saleRow(Number(r.amount || 0), isCash) });
+  });
+
+  // কাস্টমার এডজাস্টমেন্ট — "বাকিতে যোগ" Dr, "বাকি কমানো" Cr
+  adjustments.forEach((a: any) => {
+    const amt = Number(a.amount || 0);
+    const isCredit = a.direction === "credit";
+    rows.push({
+      date: a.adj_date, type: "adjustment", customer: nameById[a.customer_id] ?? "-", ref: a.adj_no,
+      desc: `${isCredit ? "বাকি কমানো" : "বাকিতে যোগ"}${a.contra?.account_name ? ` — ${a.contra.account_name}` : ""}${a.note ? ` (${a.note})` : ""}`,
+      debit: isCredit ? 0 : amt, credit: isCredit ? amt : 0,
+    });
   });
 
   rows.sort((a, b) => a.date.localeCompare(b.date));
@@ -146,8 +164,11 @@ export default async function GroupLedgerPage({
       .filter((r: any) => r.customer_id === m.id && !r.payment_received)
       .reduce((s: number, r: any) => s + Number(r.amount || 0), 0);
     const opening = m.opening_balance || 0;
+    const adjNet = adjustments
+      .filter((a: any) => a.customer_id === m.id)
+      .reduce((s: number, a: any) => s + adjustmentSigned(a), 0);
     const paid = (payments ?? []).filter((p: any) => p.customer_id === m.id).reduce((s: number, p: any) => s + p.amount, 0);
-    const invoiced = opening + inv + wsCredit + rmsCredit;
+    const invoiced = opening + inv + wsCredit + rmsCredit + adjNet;
     return { id: m.id, name: m.name, invoiced, paid, due: invoiced - paid };
   });
 
@@ -218,8 +239,8 @@ export default async function GroupLedgerPage({
                     <td className="px-4 py-2 text-gray-500">{formatDate(r.date)}</td>
                     <td className="px-4 py-2 text-gray-700">{r.customer}</td>
                     <td className="px-4 py-2">
-                      <span className={`rounded-full px-2 py-0.5 text-xs ${r.type === "invoice" ? "bg-blue-100 text-blue-700" : r.type === "payment" ? "bg-green-100 text-green-700" : "bg-purple-100 text-purple-700"}`}>
-                        {r.type === "invoice" ? "Invoice" : r.type === "payment" ? "Payment" : "Opening"}
+                      <span className={`rounded-full px-2 py-0.5 text-xs ${r.type === "invoice" ? "bg-blue-100 text-blue-700" : r.type === "payment" ? "bg-green-100 text-green-700" : r.type === "adjustment" ? "bg-amber-100 text-amber-800" : "bg-purple-100 text-purple-700"}`}>
+                        {r.type === "invoice" ? "Invoice" : r.type === "payment" ? "Payment" : r.type === "adjustment" ? "Adjustment" : "Opening"}
                       </span>
                     </td>
                     <td className="px-4 py-2">{r.ref}</td>

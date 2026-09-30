@@ -147,7 +147,7 @@ export default async function DayBookPage({
         </form>
         <PrintButton excelFilename={`DayBook-${from}${to !== from ? `_to_${to}` : ""}`} excelSheets={[{ name: "DayBook", rows: excelRows }]} />
         <p className="mb-4 text-xs text-gray-400">
-          নগদ (Cash in Hand) বই। Bank, আবু জাফর (3000) ও রিপন থিনার (1500) দিয়ে করা লেনদেন pass-through
+          নগদ (Cash in Hand) বই। Bank, আবু জাফর (3000), রিপন থিনার (1500) ও এম কে এক্সেসোরিজ (2600) দিয়ে করা লেনদেন pass-through
           দেখানো — নগদ অ্যাকাউন্টের ঐ দিন শেষের ব্যালেন্স পজিটিভ হলে "ক্যাশ জমা", নেগেটিভ হলে "ক্যাশ দেনা"। বিক্রি = ঐ দিনের সব বিক্রি (নগদ + বাকি);
           নগদ বিক্রি আলাদাভাবে জমা/খরচে আসে না, সরাসরি এখানের হিসাবেই ধরা হয়।
         </p>

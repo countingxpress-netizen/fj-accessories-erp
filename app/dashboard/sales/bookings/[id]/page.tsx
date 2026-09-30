@@ -172,6 +172,13 @@ export default async function BookingViewPage({ params }: { params: Promise<{ id
       <div className="flex items-center justify-between print:hidden">
         <Link href="/dashboard/sales/bookings" className="text-sm text-gray-500 hover:underline">← সব Booking-এর তালিকায় ফিরুন</Link>
         <div className="flex items-center gap-2">
+          <Link
+            href={`/dashboard/sales/bookings/new?clone=${id}`}
+            className="mb-4 rounded-lg border border-gray-400 px-4 py-2 text-sm text-gray-800 hover:bg-gray-50"
+            title="এই বুকিং-এর মতো নতুন বুকিং বানান"
+          >
+            Clone
+          </Link>
           <PrintButton />
           {nextScheduleType && (
             <Link

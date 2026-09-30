@@ -6,6 +6,7 @@ import { generateNextDocNo } from "@/lib/docNumber";
 import { formatDate } from "@/lib/formatDate";
 import { getCurrentUserId } from "@/lib/currentUser";
 import { money } from "@/lib/format";
+import { allocationTarget } from "@/lib/paymentDues";
 
 type Account = { id: string; account_code: string; account_name: string };
 type Invoice = { id: string; invoice_no: string; invoice_date: string; total: number; due: number };
@@ -67,8 +68,8 @@ export default function EditPaymentForm({
     await supabase.from("payment_allocations").delete().eq("payment_id", payment.id);
     if (validAllocations.length > 0) {
       await supabase.from("payment_allocations").insert(
-        validAllocations.map(([invoiceId, amount]) => ({
-          payment_id: payment.id, invoice_id: invoiceId === "opening" ? null : invoiceId, amount: parseFloat(amount),
+        validAllocations.map(([key, amount]) => ({
+          payment_id: payment.id, ...allocationTarget(key), amount: parseFloat(amount),
         }))
       );
     }

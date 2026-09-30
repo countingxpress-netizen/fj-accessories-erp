@@ -8,6 +8,7 @@ import { getCurrentUserId } from "@/lib/currentUser";
 import { resolveRate } from "@/lib/rateHistory";
 import { money } from "@/lib/format";
 import { buildLbsLines, type LbsBooking } from "@/lib/lbsInvoice";
+import { syncInvoiceCogs } from "@/lib/invoiceCogs";
 
 type Booking = {
   id: string; booking_no: string; booking_date: string | null; quantity_pcs: number; product_id: string; customer_id: string;
@@ -301,6 +302,7 @@ export default function SalesInvoiceForm({
         await supabase.from("sales_invoices").update({ voucher_id: voucher.id }).eq("id", invoice.id);
       }
     }
+    await syncInvoiceCogs(supabase, invoice.id); // বিক্রির COGS (Dr 5050 / Cr WIP) — lib/invoiceCogs.ts
 
     setLoading(false);
     router.push("/dashboard/sales/invoices");
@@ -399,6 +401,7 @@ export default function SalesInvoiceForm({
         await supabase.from("sales_invoices").update({ voucher_id: voucher.id }).eq("id", editInvoice.id);
       }
     }
+    await syncInvoiceCogs(supabase, editInvoice.id); // লাইন বদলেছে — COGS নতুন করে (আগেরটা উল্টে)
 
     setLoading(false);
     router.push("/dashboard/sales/invoices");
@@ -483,6 +486,7 @@ export default function SalesInvoiceForm({
         await supabase.from("sales_invoices").update({ voucher_id: voucher.id }).eq("id", invoice.id);
       }
     }
+    await syncInvoiceCogs(supabase, invoice.id); // বিক্রির COGS (Dr 5050 / Cr WIP) — lib/invoiceCogs.ts
 
     setLoading(false);
     router.push("/dashboard/sales/invoices");

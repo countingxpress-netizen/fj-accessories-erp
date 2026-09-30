@@ -17,6 +17,9 @@ export const JOURNAL_SOURCE_LABELS: Record<string, string> = {
   wastage_sale: "Wastage বিক্রি",
   bank_txn: "Bank",
   cash_txn: "Cash",
+  raw_material_sale: "Raw Material বিক্রি",
+  customer_adjustment: "কাস্টমার এডজাস্টমেন্ট",
+  cogs: "COGS (বিক্রির খরচ)",
 };
 
 export function journalSourceLabel(source: string | null | undefined): string {

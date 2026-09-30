@@ -68,6 +68,14 @@ export default function VoucherRow({
       <td className="px-4 py-2 text-right">{money(total)}</td>
       <td className="px-4 py-2 text-gray-500 text-xs">{voucher.creator?.full_name ?? "-"}</td>
       <td className="px-4 py-2 text-right whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+        <button
+          type="button"
+          onClick={() => router.push(`/dashboard/accounting/journal/new?clone=${voucher.id}`)}
+          className="rounded bg-gray-100 px-3 py-1 text-xs text-gray-700 mr-2 hover:bg-gray-200"
+          title="এই voucher-এর মতো নতুন voucher বানান"
+        >
+          Clone
+        </button>
         <GuardedAction
           table="journal_vouchers" recordId={voucher.id} recordLabel={voucher.voucher_no} action="edit"
           onAllowed={() => router.push(`/dashboard/accounting/journal/${voucher.id}/edit`)}

@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/client";
 import { recalcBookingStatus } from "@/lib/recalcBookingStatus";
-import { reverseInventoryJv, postChallanCogsJv } from "@/lib/inventoryCost";
+import { reverseInventoryJv } from "@/lib/inventoryCost";
 import { fulfilBookingForChallan, reverseChallanFulfilment } from "@/lib/challanProduction";
 
 type SupabaseClient = ReturnType<typeof createClient>;
@@ -132,11 +132,7 @@ export async function applyChallanLines(
     await recalcBookingStatus(supabase, li.bookingId);
   }
 
-  const cogsVoucherId = await postChallanCogsJv(supabase, {
-    date: challanDate, challanNo,
-    lines: lines.map((li) => ({ productId: li.productId, pcs: li.qtyPcs })),
-  });
-  if (cogsVoucherId) {
-    await supabase.from("delivery_challans").update({ inventory_voucher_id: cogsVoucherId }).eq("id", challanId);
-  }
+  // COGS আর Challan-এ পোস্ট হয় না — বিক্রির সময়ই Sales Invoice-এ হয় (lib/invoiceCogs.ts);
+  // এখানেও করলে একই মালের খরচ দুবার P&L-এ যেত। পুরনো challan-এর inventory_voucher_id (থাকলে)
+  // এডিট/ডিলিটে আগের মতোই উল্টানো হয়।
 }

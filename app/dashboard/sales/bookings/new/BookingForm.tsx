@@ -4,7 +4,8 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { generateNextDocNo } from "@/lib/docNumber";
 import { toInches, hasAdhesiveCharge } from "@/lib/calcTubeCutting";
-import { writeBookingGroup, reverseBookingGroupDerived, type BookingGroupItemInput } from "@/lib/bookingGroupWrite";
+import { writeBookingGroup, updateBookingGroupInPlace, type BookingGroupItemInput } from "@/lib/bookingGroupWrite";
+import type { BookingItemProgress } from "@/lib/bookingEditContext";
 import { getCurrentUserId } from "@/lib/currentUser";
 import { resolveRate, type RateHistoryRow } from "@/lib/rateHistory";
 import { money, qty as qtyFmt } from "@/lib/format";
@@ -65,6 +66,10 @@ export type PendingItem = {
   widthCm: number;
   unitPrice: number;
   amount: number;
+  /** Booking Group Edit — এই প্রোডাক্ট কোন বিদ্যমান booking (in-place আপডেট হয়) */
+  sourceBookingId?: string | null;
+  /** Booking Group Edit — এই প্রোডাক্টের কাজ কতদূর (Production/Challan/PI...) — সতর্কবার্তার জন্য */
+  progress?: BookingItemProgress;
 };
 
 const LBS_PER_BAG = 55;
@@ -236,7 +241,8 @@ function parseBulkPasteLine(line: string, defaults: RowDefaults): BulkParseResul
 
 // Booking Group Edit — এই ফর্মটাই এডিট মোডে খোলে (Production শুরুর আগে)। editContext
 // থাকলে পুরো group-এর সব প্রোডাক্ট pendingItems-এ প্রি-লোড হয়, header ফিল্ড ভরা থাকে,
-// সেভ করলে group-এর সব derived data নতুন করে হিসাব হয় (reverseBookingGroupDerived → writeBookingGroup)।
+// সেভ করলে group in-place আপডেট হয় (updateBookingGroupInPlace) — booking id একই থাকে।
+// cloneContext — একই আকারের seed, কিন্তু নতুন Booking হিসেবে সেভ হয় (Zoho-র মতো Clone)।
 export type BookingEditContext = {
   groupId: string;
   bookingNo: string;
@@ -253,12 +259,15 @@ export type BookingEditContext = {
   paymentReceived: boolean;
   priceOverride: string;
   items: PendingItem[];
+  /** কাজ এগিয়ে থাকলে সেভের আগে confirm-এ দেখানো সতর্কবার্তা */
+  warnings?: string[];
 };
 
 export default function BookingForm({
   customers, warehouses, materials, buyersMaster, garmentsMaster, merchantsMaster, priceHistory,
   bookingMerchantLinks = [],
   editContext,
+  cloneContext,
 }: {
   customers: Customer[]; warehouses: Warehouse[]; materials: Material[];
   buyersMaster: BuyerMaster[]; garmentsMaster: GarmentMaster[]; merchantsMaster: MerchantMaster[]; priceHistory: PriceHistoryRow[];
@@ -267,23 +276,26 @@ export default function BookingForm({
   // কাস্টমারের বুকিং-এ ব্যবহৃত হয়েছে) — ঠিক যেভাবে Style filter করা হয় ProformaForm-এ।
   bookingMerchantLinks?: { customer_id: string; merchant_id: string }[];
   editContext?: BookingEditContext;
+  cloneContext?: BookingEditContext;
 }) {
   const isEdit = !!editContext;
+  // ফর্মের শুরুর মান — Edit হলে সেই booking, Clone হলে যেটা থেকে clone
+  const seed = editContext ?? cloneContext;
 
   // পুরো বুকিং-এর জন্য কমন (একবার দিলেই সব স্টাইলে থাকবে)
-  const [customerId, setCustomerId] = useState(editContext?.customerId ?? "");
-  const [customerNameInput, setCustomerNameInput] = useState(editContext?.customerName ?? "");
-  const [garmentsId, setGarmentsId] = useState(editContext?.garmentsId ?? "");
-  const [garmentsNameInput, setGarmentsNameInput] = useState(editContext?.garmentsName ?? "");
-  const [buyerId, setBuyerId] = useState(editContext?.buyerId ?? "");
-  const [buyerNameInput, setBuyerNameInput] = useState(editContext?.buyerName ?? "");
-  const [merchantId, setMerchantId] = useState(editContext?.merchantId ?? "");
-  const [merchantNameInput, setMerchantNameInput] = useState(editContext?.merchantName ?? "");
-  const [priceOverride, setPriceOverride] = useState(editContext?.priceOverride ?? "");
+  const [customerId, setCustomerId] = useState(seed?.customerId ?? "");
+  const [customerNameInput, setCustomerNameInput] = useState(seed?.customerName ?? "");
+  const [garmentsId, setGarmentsId] = useState(seed?.garmentsId ?? "");
+  const [garmentsNameInput, setGarmentsNameInput] = useState(seed?.garmentsName ?? "");
+  const [buyerId, setBuyerId] = useState(seed?.buyerId ?? "");
+  const [buyerNameInput, setBuyerNameInput] = useState(seed?.buyerName ?? "");
+  const [merchantId, setMerchantId] = useState(seed?.merchantId ?? "");
+  const [merchantNameInput, setMerchantNameInput] = useState(seed?.merchantName ?? "");
+  const [priceOverride, setPriceOverride] = useState(seed?.priceOverride ?? "");
   const [bookingDate, setBookingDate] = useState(editContext?.bookingDate ?? new Date().toISOString().slice(0, 10));
-  const [deliveryPoint, setDeliveryPoint] = useState(editContext?.deliveryPoint ?? "");
+  const [deliveryPoint, setDeliveryPoint] = useState(seed?.deliveryPoint ?? "");
   // Booking সেভ করলে অটো Sales Invoice তৈরি হয় — টিক থাকলে Cash Sale, না থাকলে বাকিতে বিক্রি
-  const [paymentReceived, setPaymentReceived] = useState(editContext?.paymentReceived ?? false);
+  const [paymentReceived, setPaymentReceived] = useState(seed?.paymentReceived ?? false);
 
   // Style Info — এক স্টাইলের সব মাপের জন্য কমন। "এই স্টাইল বুকিং-এ যোগ করুন" চাপলে রিসেট হবে।
   const [style, setStyle] = useState("");
@@ -357,7 +369,9 @@ export default function BookingForm({
   const [bulkPasteText, setBulkPasteText] = useState("");
   const [bulkPasteErrors, setBulkPasteErrors] = useState<string[]>([]);
 
-  const [pendingItems, setPendingItems] = useState<PendingItem[]>(editContext?.items ?? []);
+  const [pendingItems, setPendingItems] = useState<PendingItem[]>(seed?.items ?? []);
+  // তালিকা থেকে Edit-এ তোলা প্রোডাক্টের পুরনো booking id — আবার যোগ হলে নতুন item-এ বসে
+  const [editingSource, setEditingSource] = useState<{ id: string | null; progress?: BookingItemProgress } | null>(null);
   const [customersList, setCustomersList] = useState(customers);
   const [buyersList, setBuyersList] = useState(buyersMaster);
   const [garmentsList, setGarmentsList] = useState(garmentsMaster);
@@ -837,6 +851,11 @@ export default function BookingForm({
       return;
     }
 
+    if (editingSource) {
+      newItems[0].sourceBookingId = editingSource.id;
+      newItems[0].progress = editingSource.progress;
+      setEditingSource(null);
+    }
     setPendingItems((prev) => [...prev, ...newItems]);
     if (failedRows.length > 0) {
       setWarning(`⚠ কিছু Row (${failedRows.join(", ")}) হিসাব করা যায়নি এবং যোগ হয়নি — মাপ/Thickness চেক করুন।`);
@@ -845,6 +864,10 @@ export default function BookingForm({
   }
 
   function removePendingItem(index: number) {
+    const it = pendingItems[index];
+    if (it?.progress?.notes.length) {
+      if (!window.confirm(`⚠ এই প্রোডাক্টের কাজ শুরু হয়ে গেছে (${it.progress.notes.join(", ")})। কাজ শুরু হওয়া প্রোডাক্ট মুছলে সেভ আটকে যাবে। তবু তালিকা থেকে সরাবেন?`)) return;
+    }
     setPendingItems((prev) => prev.filter((_, i) => i !== index));
   }
 
@@ -902,6 +925,7 @@ export default function BookingForm({
       adjustmentPerPc: it.adjustmentPerPc ? String(it.adjustmentPerPc) : "",
     }]);
 
+    setEditingSource(it.sourceBookingId || it.progress ? { id: it.sourceBookingId ?? null, progress: it.progress } : null);
     setPendingItems((prev) => prev.filter((_, i) => i !== index));
     setWarning("");
     measurementRowsRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -922,6 +946,10 @@ export default function BookingForm({
     const currentRowItems = unsavedRows
       .map((row) => buildPendingItemFromRow(row))
       .filter((item): item is PendingItem => item !== null);
+    if (editingSource && currentRowItems.length > 0) {
+      currentRowItems[0].sourceBookingId = editingSource.id;
+      currentRowItems[0].progress = editingSource.progress;
+    }
 
     const allItems = currentRowItems.length > 0 ? [...pendingItems, ...currentRowItems] : pendingItems;
 
@@ -937,6 +965,19 @@ export default function BookingForm({
       const name = it.style || it.productDetails || "প্রোডাক্ট";
       setError(`Row #${unpricedIndex + 1} (${name}) — Unit Price বের হচ্ছে না। Customer-এর Price/Lbs আছে কিনা দেখুন (auto Sales Invoice-এর জন্য দাম বাধ্যতামূলক)।`);
       return;
+    }
+
+    // কাজ এগিয়ে থাকা বুকিং — সেভের আগে প্রতিবার সতর্ক করি (ডেলিভারির চেয়ে কম Qty হলে আলাদা করে)
+    if (editContext) {
+      const shortQty = allItems
+        .filter((it) => it.progress && it.progress.deliveredPcs > 0 && it.quantity < it.progress.deliveredPcs)
+        .map((it) => `• ${it.style || it.productDetails || "প্রোডাক্ট"}: নতুন Qty ${it.quantity}, অথচ ডেলিভারি হয়ে গেছে ${it.progress!.deliveredPcs} pcs`);
+      const msgs = [...(editContext.warnings ?? []).map((w) => `• ${w}`), ...shortQty];
+      if (msgs.length > 0 && !window.confirm(
+        ["⚠ সতর্কতা — এই বুকিং-এর কাজ ইতিমধ্যে এগিয়েছে:", "", ...msgs, "", "তবুও সেভ করবেন?"].join("\n")
+      )) {
+        return;
+      }
     }
 
     setLoading(true);
@@ -979,18 +1020,6 @@ export default function BookingForm({
       ? editContext.bookingNo
       : await generateNextDocNo(supabase, "bookings", "booking_no", "BK", "booking_date", effectiveBookingDate);
 
-    // Booking Group Edit — আগের সব derived data (Production Order, স্টক কর্তন, WIP JV,
-    // auto Sales Invoice-এর লাইন) ফেরত/মুছে দিন, তারপর নতুন করে লিখুন।
-    if (editContext) {
-      try {
-        await reverseBookingGroupDerived(supabase, groupId);
-      } catch (err: any) {
-        setLoading(false);
-        setError(`পুরনো Booking data সরাতে সমস্যা: ${err?.message ?? "অজানা কারণ"}`);
-        return;
-      }
-    }
-
     const items: BookingGroupItemInput[] = allItems.map((it) => ({
       style: it.style, customerBookingRef: it.customerBookingRef, poNo: it.poNo,
       printLayoutNote: it.printLayoutNote, printLayoutFileUrl: it.printLayoutFileUrl,
@@ -1002,9 +1031,11 @@ export default function BookingForm({
       hasPrint: it.hasPrint, printColors: it.printColors, ratePerColor: it.ratePerColor, ratePerInch: it.ratePerInch,
       lengthCm: it.lengthCm, widthCm: it.widthCm, unitPrice: it.unitPrice, amount: it.amount,
       materialsNeeded: it.materialsNeeded,
+      sourceBookingId: it.sourceBookingId ?? null,
     }));
 
-    const result = await writeBookingGroup(supabase, {
+    const writer = editContext ? updateBookingGroupInPlace : writeBookingGroup;
+    const result = await writer(supabase, {
       groupId,
       bookingNo: sharedBookingNo,
       bookingDate: effectiveBookingDate,
@@ -1050,9 +1081,19 @@ export default function BookingForm({
         <div className="rounded-lg border border-orange-300 bg-orange-50 p-3 text-sm text-orange-800">
           <p className="font-semibold">Booking Group এডিট — {editContext!.bookingNo}</p>
           <p className="text-xs mt-1">
-            সেভ করলে এই গ্রুপের সব Production Order, স্টক কর্তন, WIP Journal Voucher আর auto Sales Invoice
-            (+ তার JV) নতুন করে হিসাব হবে। Booking No ও তারিখ একই থাকবে। প্রোডাক্ট বদলাতে তালিকা থেকে
-            সেই সারির Edit বাটন চাপুন, নতুন প্রোডাক্ট নিচে যোগ করুন।
+            সেভ করলে বুকিং, Production Order-এর Qty/Lbs, auto Sales Invoice (+ JV) আর PI লাইন নতুন তথ্যে আপডেট
+            হবে; কাঁচামাল বদলালে স্টক কর্তন ও WIP JV নতুন করে হবে। Production-এর অগ্রগতি, Challan, FG Receive
+            যেমন আছে থাকবে। Booking No একই থাকবে। প্রোডাক্ট বদলাতে তালিকা থেকে সেই সারির Edit বাটন চাপুন,
+            নতুন প্রোডাক্ট নিচে যোগ করুন।
+          </p>
+        </div>
+      )}
+      {!isEdit && cloneContext && (
+        <div className="rounded-lg border border-blue-300 bg-blue-50 p-3 text-sm text-blue-800">
+          <p className="font-semibold">Booking {cloneContext.bookingNo} থেকে Clone করা</p>
+          <p className="text-xs mt-1">
+            সব তথ্য ও প্রোডাক্ট ভরা আছে — দরকারমতো বদলে সেভ করুন। নতুন Booking No, নতুন Production Order ও
+            auto Sales Invoice তৈরি হবে; তারিখ আজকের।
           </p>
         </div>
       )}
@@ -1442,7 +1483,12 @@ export default function BookingForm({
               <tbody>
                 {pendingItems.map((item, i) => (
                   <tr key={i} className="border-t">
-                    <td className="px-3 py-2">{item.style || "-"}</td>
+                    <td className="px-3 py-2">
+                      {item.style || "-"}
+                      {item.progress && item.progress.notes.length > 0 && (
+                        <div className="mt-0.5 text-[11px] text-red-700">⚠ {item.progress.notes.join(" · ")}</div>
+                      )}
+                    </td>
                     <td className="px-3 py-2">{item.customerBookingRef || "-"}</td>
                     <td className="px-3 py-2">{item.poNo || "-"}</td>
                     <td className="px-3 py-2">{item.productDetails || "-"}</td>

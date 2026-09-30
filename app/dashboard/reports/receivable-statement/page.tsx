@@ -52,6 +52,14 @@ export default async function ReceivableStatementPage() {
     customerData[p.customer_id].paid += p.amount;
   });
 
+  // কাস্টমার এডজাস্টমেন্ট — "বাকিতে যোগ" invoiced-এ, "বাকি কমানো" paid-এ
+  const adjustments = await fetchAllRows<any>(supabase, "customer_adjustments", "customer_id, direction, amount");
+  adjustments.forEach((a: any) => {
+    if (!customerData[a.customer_id]) customerData[a.customer_id] = { invoiced: 0, paid: 0, lastInvoiceDate: null };
+    if (a.direction === "credit") customerData[a.customer_id].paid += Number(a.amount || 0);
+    else customerData[a.customer_id].invoiced += Number(a.amount || 0);
+  });
+
   // গ্রুপভুক্ত কাস্টমার এক পার্টি — invoiced/paid একসাথে যোগ, শেষ ইনভয়েস তারিখ = সর্বশেষ।
   const gm = await loadGroupMap(supabase);
   type Agg = { key: string; id: string; name: string; isGroup: boolean; invoiced: number; paid: number; lastInvoiceDate: string | null };

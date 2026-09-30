@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/client";
 import { DeleteResult, friendlyDeleteError } from "@/lib/deleteResult";
+import { reverseInvoiceCogs } from "@/lib/invoiceCogs";
 
 type SupabaseClient = ReturnType<typeof createClient>;
 
@@ -18,6 +19,8 @@ export async function deleteInvoiceCascade(
   invoiceId: string,
   voucherId?: string | null
 ): Promise<DeleteResult> {
+  // বিক্রির COGS উল্টে (WIP ফেরত) — invoice_cogs সারি invoice-এর সাথে cascade হলেও JV/wip নিজে ফেরত আসে না
+  await reverseInvoiceCogs(supabase, invoiceId);
   await supabase.from("sales_invoice_items").delete().eq("invoice_id", invoiceId);
   const { error } = await supabase.from("sales_invoices").delete().eq("id", invoiceId);
   if (error) return { ok: false, error: friendlyDeleteError(error) };
