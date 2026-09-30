@@ -12,7 +12,7 @@ export default async function EditProformaPage({ params }: { params: Promise<{ i
   const appUser = await getCurrentAppUser();
   // role='customer_pi_only' — ID দিয়ে সরাসরি অন্য কাস্টমারের PI এডিট করতে ঢোকার চেষ্টা আটকানো
   if (appUser?.role === "customer_pi_only" && pi.customer_id !== appUser?.restricted_customer_id) return notFound();
-  const { data: items } = await supabase.from("pi_items").select("*").eq("pi_id", id).order("sl_no");
+  const { data: items } = await supabase.from("pi_items").select("*, bookings(buyer_id, measurement_type, measurement_unit, length_val, width_val, flap_val, gusset_val, pillow_val)").eq("pi_id", id).order("sl_no");
 
   const { data: garments } = pi.customer_id
     ? await supabase.from("garments").select("id, customer_id, name, address").eq("customer_id", pi.customer_id).order("name")
@@ -26,6 +26,7 @@ export default async function EditProformaPage({ params }: { params: Promise<{ i
   let buyersMaster: any[] = [];
   let buyerRateHistory: any[] = [];
   let lastUnitPriceByBooking: Record<string, number> = {};
+  let measurementPrices: any[] = [];
 
   if (pi.customer_id) {
     const { data: allBookings } = await supabase
@@ -49,6 +50,11 @@ export default async function EditProformaPage({ params }: { params: Promise<{ i
     buyersMaster = bm ?? [];
     const { data: rh } = await supabase.from("rate_history").select("buyer_id, effective_from, rate").not("buyer_id", "is", null);
     buyerRateHistory = rh ?? [];
+    const buyerIds = buyersMaster.map((b: any) => b.id);
+    const { data: mp } = buyerIds.length
+      ? await supabase.from("buyer_measurement_prices").select("*").in("buyer_id", buyerIds)
+      : { data: [] };
+    measurementPrices = mp ?? [];
   }
 
   const { data: customerRow } = pi.customer_id
@@ -67,6 +73,7 @@ export default async function EditProformaPage({ params }: { params: Promise<{ i
         buyersMaster={buyersMaster}
         buyerRateHistory={buyerRateHistory as any}
         lastUnitPriceByBooking={lastUnitPriceByBooking}
+        measurementPrices={measurementPrices}
         customerDefaultPrintRate={customerRow?.default_print_rate ?? null}
         isAtAccessories={customerRow?.code === "AT"}
       />

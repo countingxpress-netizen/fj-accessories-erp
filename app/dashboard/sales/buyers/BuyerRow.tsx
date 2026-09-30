@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { deleteSimpleRow } from "@/lib/simpleDelete";
 import GuardedAction from "@/app/dashboard/GuardedAction";
 import RateHistoryPanel from "@/app/dashboard/sales/RateHistoryPanel";
+import MeasurementPricePanel from "./MeasurementPricePanel";
 
 const COL_SPAN = 14;
 
@@ -13,6 +14,8 @@ export default function BuyerRow({
 }: { buyer: any; selected?: boolean; onToggleSelect?: () => void }) {
   const [editing, setEditing] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+  const [showMeasurementPrices, setShowMeasurementPrices] = useState(false);
+  const [rememberMeasurementPrice, setRememberMeasurementPrice] = useState(!!buyer.remember_measurement_price);
   const [name, setName] = useState(buyer.name);
   const [pricingRule, setPricingRule] = useState(buyer.pricing_rule ?? "manual");
   const [percentageValue, setPercentageValue] = useState(String(buyer.percentage_value ?? 0));
@@ -53,6 +56,7 @@ export default function BuyerRow({
       usd_bdt_rate: parseFloat(usdBdtRate) || null,
       usd_surcharge_per_pc: parseFloat(usdSurchargePerPc) || 0,
       price_basis_default: priceBasisDefault,
+      remember_measurement_price: rememberMeasurementPrice,
     }).eq("id", buyer.id);
     setLoading(false);
 
@@ -96,12 +100,26 @@ export default function BuyerRow({
     </tr>
   ) : null;
 
+  const measurementPriceRow = showMeasurementPrices && buyer.remember_measurement_price ? (
+    <tr className="border-t bg-emerald-50/40">
+      <td colSpan={COL_SPAN} className="px-4 py-3">
+        <MeasurementPricePanel buyerId={buyer.id} label={buyer.name} />
+      </td>
+    </tr>
+  ) : null;
+
   if (editing) {
     return (
       <>
         <tr className="border-t bg-yellow-50">
           {checkboxCell}
-          <td className="px-4 py-2"><input value={name} onChange={(e) => setName(e.target.value)} className="w-full rounded border px-2 py-1 text-sm" /></td>
+          <td className="px-4 py-2">
+            <input value={name} onChange={(e) => setName(e.target.value)} className="w-full rounded border px-2 py-1 text-sm" />
+            <label className="mt-1 flex items-center gap-1 text-[11px] text-gray-600 whitespace-nowrap" title="চালু থাকলে PI-তে এই বায়ারের একই সাইজ + থিকনেসের আগের দাম পাশে দেখাবে">
+              <input type="checkbox" checked={rememberMeasurementPrice} onChange={(e) => setRememberMeasurementPrice(e.target.checked)} />
+              মেজারমেন্ট-প্রাইস মনে রাখুন
+            </label>
+          </td>
           <td className="px-4 py-2">
             <div className="flex gap-2 items-center">
               <select value={pricingRule} onChange={(e) => setPricingRule(e.target.value)} className="rounded border px-2 py-1 text-sm">
@@ -148,6 +166,7 @@ export default function BuyerRow({
           </td>
         </tr>
         {historyRow}
+        {measurementPriceRow}
       </>
     );
   }
@@ -156,7 +175,18 @@ export default function BuyerRow({
     <>
       <tr className="border-t">
         {checkboxCell}
-        <td className="px-4 py-2 font-medium">{buyer.name}</td>
+        <td className="px-4 py-2 font-medium">
+          {buyer.name}
+          {buyer.remember_measurement_price && (
+            <button
+              onClick={() => setShowMeasurementPrices((v) => !v)}
+              className="ml-2 rounded bg-emerald-50 px-1.5 py-0.5 text-[11px] font-normal text-emerald-700 hover:bg-emerald-100 whitespace-nowrap"
+              title="মেজারমেন্ট অনুযায়ী দাম লিস্ট"
+            >
+              মেজারমেন্ট দাম {showMeasurementPrices ? "▲" : "▼"}
+            </button>
+          )}
+        </td>
         <td className="px-4 py-2 text-gray-500">
           {buyer.pricing_rule === "percentage" && `${buyer.percentage_value}%`}
           {buyer.pricing_rule === "rate_per_lbs" && buyer.rate_per_lbs_value}
@@ -191,6 +221,7 @@ export default function BuyerRow({
         </td>
       </tr>
       {historyRow}
+      {measurementPriceRow}
     </>
   );
 }

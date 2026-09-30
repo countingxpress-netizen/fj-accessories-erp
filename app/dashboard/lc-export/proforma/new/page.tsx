@@ -33,6 +33,7 @@ export default async function NewProformaPage() {
     .from("rate_history")
     .select("buyer_id, effective_from, rate")
     .not("buyer_id", "is", null);
+  const { data: measurementPrices } = await supabase.from("buyer_measurement_prices").select("*");
   const { data: garments } = await supabase.from("garments").select("id, customer_id, name, address").order("name");
   const { data: advisingBanks } = await supabase.from("advising_banks").select("id, name, branch, address, swift").order("name");
 
@@ -47,6 +48,7 @@ export default async function NewProformaPage() {
         advisingBanks={advisingBanks ?? []}
         lastUnitPriceByBooking={lastUnitPriceByBooking}
         buyerRateHistory={(buyerRateHistory ?? []) as any}
+        measurementPrices={(measurementPrices ?? []) as any}
       />
     </div>
   );

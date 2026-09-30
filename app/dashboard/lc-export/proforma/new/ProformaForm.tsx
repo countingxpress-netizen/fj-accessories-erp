@@ -8,6 +8,7 @@ import { resolveRate } from "@/lib/rateHistory";
 import { amountInWords } from "@/lib/numberToWords";
 import { getCurrentUserId } from "@/lib/currentUser";
 import { money } from "@/lib/format";
+import { findMeasurementPrice, convertMeasurementPrice, recordPiMeasurementPrices, parseMeasurementText, thicknessNote, type MeasurementPriceRow } from "@/lib/measurementPrice";
 
 type Booking = {
   id: string; booking_no: string; booking_date: string | null; quantity_pcs: number; product_id: string; customer_id: string;
@@ -20,7 +21,7 @@ type Booking = {
   finished_goods: { product_name: string; length_cm: number; width_cm: number; thickness: number } | null;
 };
 type Customer = { id: string; name: string; code: string | null; price_per_lbs: number | null; default_print_rate: number | null };
-type BuyerMaster = { id: string; customer_id: string; name: string; pricing_rule: string; percentage_value: number; rate_per_lbs_value: number; pi_thickness_mm: number | null; adhesive_rate_per_inch: number | null; print_colors_default: number | null; usd_bdt_rate: number | null; price_basis_default: string | null; usd_surcharge_per_pc: number | null; rate_per_lbs_value_adhesive: number | null };
+type BuyerMaster = { id: string; customer_id: string; name: string; pricing_rule: string; percentage_value: number; rate_per_lbs_value: number; pi_thickness_mm: number | null; adhesive_rate_per_inch: number | null; print_colors_default: number | null; usd_bdt_rate: number | null; price_basis_default: string | null; usd_surcharge_per_pc: number | null; rate_per_lbs_value_adhesive: number | null; remember_measurement_price?: boolean | null };
 type Garment = { id: string; customer_id: string; name: string; address: string | null };
 type AdvisingBank = { id: string; name: string; branch: string | null; address: string | null; swift: string | null };
 type BuyerRateHistoryRow = { buyer_id: string; effective_from: string; rate: number };
@@ -75,12 +76,13 @@ function buildBookingDescription(b: Booking): string {
 }
 
 export default function ProformaForm({
-  customers, bookings, buyersMaster, garments, advisingBanks, lastUnitPriceByBooking, buyerRateHistory = [],
+  customers, bookings, buyersMaster, garments, advisingBanks, lastUnitPriceByBooking, buyerRateHistory = [], measurementPrices = [],
 }: {
   customers: Customer[]; bookings: Booking[]; buyersMaster: BuyerMaster[];
   garments: Garment[]; advisingBanks: AdvisingBank[];
   lastUnitPriceByBooking: Record<string, number>;
   buyerRateHistory?: BuyerRateHistoryRow[];
+  measurementPrices?: MeasurementPriceRow[];
 }) {
   const [mode, setMode] = useState<"booking" | "manual">("booking");
   const [customerId, setCustomerId] = useState("");
@@ -113,6 +115,7 @@ export default function ProformaForm({
   const [hsCode, setHsCode] = useState("3923.21.00");
   const [binNo, setBinNo] = useState("000113803-1201");
 
+  const [manualBuyerId, setManualBuyerId] = useState(""); // Manual PI-র Buyer (buyer_name হিসেবে সেভ হয়)
   const [selectedBookings, setSelectedBookings] = useState<Record<string, boolean>>({});
   const [bookingPrice, setBookingPrice] = useState<Record<string, string>>({});
   const [bookingAdjust, setBookingAdjust] = useState<Record<string, string>>({}); // প্রতি unit ± (ঋণাত্মকও), Price/Unit-এর সাথে যোগ
@@ -332,6 +335,60 @@ export default function ProformaForm({
     if (perPc > 0) {
       setBookingPrice((prev) => ({ ...prev, [bookingId]: (perPc * basisFactor(basis)).toFixed(pd) }));
     }
+  }
+
+  // মেজারমেন্ট-প্রাইস চালু বায়ারের জন্য — এই সাইজ + PI thickness-এ আগে যে দাম ছিল
+  // (বায়ার পেজের লিস্ট বা আগের PI থেকে); থিকনেস না মিললে শুধু সাইজ মিলিয়ে সর্বশেষ দাম।
+  // ফর্মুলার দাম বদলায় না, শুধু পাশে বাটন দেখায়।
+  function rememberedPrice(b: Booking, basis: "pcs" | "dzn"): { price: number; row: MeasurementPriceRow } | null {
+    const rule = getBuyerRule(b);
+    if (!rule?.remember_measurement_price) return null;
+    const row = findMeasurementPrice(measurementPrices, b.buyer_id, b, lineThickness(b));
+    if (!row) return null;
+    const price = roundPrice(convertMeasurementPrice(row, currency, basis, parseFloat(exchangeRate) || 107));
+    return price > 0 ? { price, row } : null;
+  }
+
+  // Manual লাইন — বায়ার = ওপরে বাছা Manual Buyer, সাইজ = Measurement টেক্সট parse করে
+  function manualRememberedButton(i: number) {
+    const l = manualLines[i];
+    const buyer = buyersMaster.find((bm) => bm.id === manualBuyerId);
+    if (!buyer?.remember_measurement_price) return null;
+    const size = parseMeasurementText(l.measurement);
+    if (!size) return null;
+    const row = findMeasurementPrice(measurementPrices, buyer.id, size, parseFloat(l.thicknessMm) || null);
+    if (!row) return null;
+    const price = roundPrice(convertMeasurementPrice(row, currency, l.priceBasis, parseFloat(exchangeRate) || 107));
+    if (price <= 0) return null;
+    const src = row.source === "pi" ? "আগের PI" : "প্রাইস লিস্ট";
+    return (
+      <button
+        type="button"
+        onClick={() => updateManualLine(i, "priceUnit", price.toFixed(pd))}
+        className="mt-1 block text-[11px] text-emerald-700 hover:underline whitespace-nowrap"
+        title={`${src} থেকে মনে রাখা দাম${row.updated_at ? ` — ${row.updated_at.slice(0, 10)}` : ""}`}
+      >
+        আগের দাম: {price.toFixed(pd)}{thicknessNote(row, parseFloat(l.thicknessMm) || null)}
+      </button>
+    );
+  }
+
+  function rememberedPriceButton(b: Booking, basis: "pcs" | "dzn") {
+    const rp = rememberedPrice(b, basis);
+    if (!rp) return null;
+    const src = rp.row.source === "pi" ? "আগের PI" : "প্রাইস লিস্ট";
+    const conv = rp.row.currency !== currency || rp.row.price_basis !== basis
+      ? ` (মূল: ${rp.row.price} ${rp.row.currency}/${rp.row.price_basis === "dzn" ? "dzn" : "pc"})` : "";
+    return (
+      <button
+        type="button"
+        onClick={() => setBookingPrice((prev) => ({ ...prev, [b.id]: rp.price.toFixed(pd) }))}
+        className="mt-1 block text-[11px] text-emerald-700 hover:underline whitespace-nowrap"
+        title={`${src} থেকে মনে রাখা দাম${conv}${rp.row.updated_at ? ` — ${rp.row.updated_at.slice(0, 10)}` : ""}`}
+      >
+        আগের দাম: {rp.price.toFixed(pd)}{thicknessNote(rp.row, lineThickness(b))}
+      </button>
+    );
   }
 
   // rate state আপডেট অ্যাসিঙ্ক বলে, একই টিকে breakdown রিক্যালকুলেট করতে হলে নতুন রেটটা
@@ -587,7 +644,9 @@ export default function ProformaForm({
         pi_date: piDate,
         valid_till: validTill || null,
         style: styles,
-        buyer_name: firstBooking?.buyers?.name ?? null,
+        buyer_name: mode === "booking"
+          ? firstBooking?.buyers?.name ?? null
+          : buyersMaster.find((bm) => bm.id === manualBuyerId)?.name ?? null,
         merchant_name: merchantName || firstBooking?.merchants?.name || null,
         garments_id: garmentsId || null,
         garments_name: selectedGarment?.name ?? firstBooking?.garments_name ?? null,
@@ -650,6 +709,9 @@ export default function ProformaForm({
         setError("PI Item সেভ ব্যর্থ হয়েছে: " + itemsError.message);
         return;
       }
+      // মেজারমেন্ট-প্রাইস চালু বায়ারদের দাম লিস্ট আপডেট (ব্যর্থ হলেও PI সেভ ঠিক থাকে)
+      const mpErr = await recordPiMeasurementPrices(supabase, pi.id);
+      if (mpErr) console.warn("মেজারমেন্ট-প্রাইস আপডেট ব্যর্থ:", mpErr);
     } else {
       const { error: itemsError } = await supabase.from("pi_items").insert(
         manualLineItems.map((li, i) => ({
@@ -665,6 +727,8 @@ export default function ProformaForm({
         setError("PI Item সেভ ব্যর্থ হয়েছে: " + itemsError.message);
         return;
       }
+      const mpErr = await recordPiMeasurementPrices(supabase, pi.id);
+      if (mpErr) console.warn("মেজারমেন্ট-প্রাইস আপডেট ব্যর্থ:", mpErr);
     }
 
     setLoading(false);
@@ -708,7 +772,7 @@ export default function ProformaForm({
           <label className="block text-sm text-gray-600 mb-1">Customer {mode === "manual" && "(ঐচ্ছিক)"}</label>
           <select
             value={customerId}
-            onChange={(e) => { setCustomerId(e.target.value); setSelectedBookings({}); setBookingAdjust({}); setGarmentsId(""); setGarmentsAddress(""); setBuyerFilter(""); setMerchantFilter(""); setMerchantName(""); setStyleFilter(""); }}
+            onChange={(e) => { setCustomerId(e.target.value); setSelectedBookings({}); setBookingAdjust({}); setGarmentsId(""); setGarmentsAddress(""); setBuyerFilter(""); setManualBuyerId(""); setMerchantFilter(""); setMerchantName(""); setStyleFilter(""); }}
             className="w-full rounded-lg border px-3 py-2 text-sm"
             required={mode === "booking"}
           >
@@ -838,6 +902,7 @@ export default function ProformaForm({
                           </button>
                         )}
                       </div>
+                      {rememberedPriceButton(b, basis)}
                       {(defaults.thickness || defaults.adhesiveRate || defaults.printColors !== null) && (
                         <div className="mt-1 text-[11px] text-gray-500">
                           {defaults.thickness !== null && <>PI Thick: {defaults.thickness} mm</>}
@@ -929,6 +994,7 @@ export default function ProformaForm({
                           onChange={(e) => setBookingPrice((prev) => ({ ...prev, [b.id]: e.target.value }))}
                           className="w-full rounded border px-2 py-1 text-sm"
                         />
+                        {rememberedPriceButton(b, basis)}
                       </td>
                       <td className="px-3 py-2 text-right">
                         {money(calcLineAmount(qty, effectivePriceUnit(b.id), basis))}
@@ -1011,6 +1077,16 @@ export default function ProformaForm({
         </div>
       )}
 
+      {mode === "manual" && customerId && availableBuyers.length > 0 && (
+        <div>
+          <label className="block text-sm text-gray-600 mb-1">Buyer (ঐচ্ছিক)</label>
+          <select value={manualBuyerId} onChange={(e) => setManualBuyerId(e.target.value)} className="rounded-lg border px-3 py-2 text-sm min-w-[200px]">
+            <option value="">-- বাছুন --</option>
+            {availableBuyers.map((bm) => <option key={bm.id} value={bm.id}>{bm.name}{bm.remember_measurement_price ? " (দাম মনে রাখা)" : ""}</option>)}
+          </select>
+        </div>
+      )}
+
       {mode === "manual" && (
         <div className="overflow-x-auto rounded-lg border">
           <table className="w-full text-sm">
@@ -1040,7 +1116,10 @@ export default function ProformaForm({
                       <option value="dzn">Per Dzn</option>
                     </select>
                   </td>
-                  <td className="px-3 py-2"><input type="number" step="0.0001" value={l.priceUnit} onChange={(e) => updateManualLine(i, "priceUnit", e.target.value)} className="w-full rounded border px-2 py-1 text-sm" /></td>
+                  <td className="px-3 py-2">
+                    <input type="number" step="0.0001" value={l.priceUnit} onChange={(e) => updateManualLine(i, "priceUnit", e.target.value)} className="w-full rounded border px-2 py-1 text-sm" />
+                    {manualRememberedButton(i)}
+                  </td>
                   <td className="px-3 py-2"><input type="number" step="0.01" value={l.tubeInch} onChange={(e) => updateManualLine(i, "tubeInch", e.target.value)} className="w-full rounded border px-2 py-1 text-xs" placeholder="ইঞ্চি" /></td>
                   <td className="px-3 py-2"><input type="number" step="0.01" value={l.cuttingInch} onChange={(e) => updateManualLine(i, "cuttingInch", e.target.value)} className="w-full rounded border px-2 py-1 text-xs" placeholder="ইঞ্চি" /></td>
                   <td className="px-3 py-2"><input type="number" step="0.1" value={l.thicknessMm} onChange={(e) => updateManualLine(i, "thicknessMm", e.target.value)} className="w-full rounded border px-2 py-1 text-xs" placeholder="mm" /></td>

@@ -7,6 +7,7 @@ import { money } from "@/lib/format";
 import { calcPiUnitPrice, calcPiUnitPriceWithMarkup, calcPiWeightLbs, calcTubeCutting, toInches, calcPiBreakdownCore, convertBreakdownToPrice, hasAdhesiveCharge } from "@/lib/calcTubeCutting";
 import { resolveRate } from "@/lib/rateHistory";
 import { splitPiNoForEdit, composePiNoFromParts, type PiNoParts } from "@/lib/docNumber";
+import { findMeasurementPrice, convertMeasurementPrice, recordPiMeasurementPrices, parseMeasurementText, matchBuyerByName, thicknessNote, type MeasurementPriceRow } from "@/lib/measurementPrice";
 
 type Garment = { id: string; customer_id: string; name: string; address: string | null };
 type AdvisingBank = { id: string; name: string; branch: string | null; address: string | null; swift: string | null };
@@ -20,7 +21,7 @@ type Booking = {
   plain_cm_conversion?: boolean | null;
   finished_goods: { product_name: string; length_cm: number; width_cm: number; thickness: number } | null;
 };
-type BuyerMaster = { id: string; customer_id: string; name: string; pricing_rule: string; percentage_value: number; rate_per_lbs_value: number; pi_thickness_mm: number | null; adhesive_rate_per_inch: number | null; print_colors_default: number | null; usd_bdt_rate: number | null; price_basis_default: string | null; usd_surcharge_per_pc: number | null; rate_per_lbs_value_adhesive: number | null };
+type BuyerMaster = { id: string; customer_id: string; name: string; pricing_rule: string; percentage_value: number; rate_per_lbs_value: number; pi_thickness_mm: number | null; adhesive_rate_per_inch: number | null; print_colors_default: number | null; usd_bdt_rate: number | null; price_basis_default: string | null; usd_surcharge_per_pc: number | null; rate_per_lbs_value_adhesive: number | null; remember_measurement_price?: boolean | null };
 type BuyerRateHistoryRow = { buyer_id: string; effective_from: string; rate: number };
 // AT বাদে বাকি কাস্টমারদের "নতুন বুকিং যোগ করুন" ব্রেকডাউনে একটা ফিল্ড সদ্য বদলালে সেই
 // মানটা সরাসরি পাস করার জন্য (setState অ্যাসিঙ্ক বলে state read-back এক টিক পুরনো হতো) —
@@ -84,12 +85,13 @@ function buildBookingDescription(b: Booking): string {
 export default function EditProformaForm({
   pi, items, garments = [], advisingBanks = [],
   bookings = [], buyersMaster = [], buyerRateHistory = [], lastUnitPriceByBooking = {}, customerDefaultPrintRate = null,
-  isAtAccessories = false,
+  isAtAccessories = false, measurementPrices = [],
 }: {
   pi: any; items: any[]; garments?: Garment[]; advisingBanks?: AdvisingBank[];
   bookings?: Booking[]; buyersMaster?: BuyerMaster[]; buyerRateHistory?: BuyerRateHistoryRow[];
   lastUnitPriceByBooking?: Record<string, number>; customerDefaultPrintRate?: number | null;
   isAtAccessories?: boolean;
+  measurementPrices?: MeasurementPriceRow[];
 }) {
   // PI No — নতুন Upload ফর্মের মতোই সিরিয়াল+কোড এডিটেবল (lib/docNumber.ts)। সেভ করা নম্বর
   // চেনা ফরম্যাটে না থাকলে (পুরনো/ব্যতিক্রমী ডেটা) সরাসরি ফ্রি-টেক্সট এডিট করা যায়।
@@ -504,6 +506,59 @@ export default function EditProformaForm({
     return basis === "dzn" ? 12 : 1;
   }
 
+  // মেজারমেন্ট-প্রাইস চালু বায়ারের জন্য — এই সাইজ + PI thickness-এ আগে যে দাম ছিল।
+  // ফর্মুলার দাম বদলায় না, শুধু পাশে "আগের দাম" বাটন দেখায় (/new ProformaForm-এর মতোই)।
+  function rememberedPriceButton(b: Booking, basis: "pcs" | "dzn", thicknessMm: number) {
+    const rule = getBuyerRule(b);
+    if (!rule?.remember_measurement_price) return null;
+    const row = findMeasurementPrice(measurementPrices, b.buyer_id, b, thicknessMm);
+    if (!row) return null;
+    const price = roundPrice(convertMeasurementPrice(row, currency, basis, parseFloat(exchangeRate) || 107));
+    if (price <= 0) return null;
+    const src = row.source === "pi" ? "আগের PI" : "প্রাইস লিস্ট";
+    const conv = row.currency !== currency || row.price_basis !== basis
+      ? ` (মূল: ${row.price} ${row.currency}/${row.price_basis === "dzn" ? "dzn" : "pc"})` : "";
+    return (
+      <button
+        type="button"
+        onClick={() => setBookingPrice((prev) => ({ ...prev, [b.id]: price.toFixed(pd) }))}
+        className="mt-1 block text-[11px] text-emerald-700 hover:underline whitespace-nowrap"
+        title={`${src} থেকে মনে রাখা দাম${conv}${row.updated_at ? ` — ${row.updated_at.slice(0, 10)}` : ""}`}
+      >
+        আগের দাম: {price.toFixed(pd)}{thicknessNote(row, thicknessMm)}
+      </button>
+    );
+  }
+
+  // বিদ্যমান লাইনের জন্য (Manual PI সহ) — বায়ার = PI-র buyer_name, সাইজ = বুকিং থাকলে বুকিংয়ের,
+  // নাহলে Measurement টেক্সট parse করে। ক্লিক করলে সেই লাইনের Price/Unit-এ বসে।
+  const piBuyer = matchBuyerByName(buyersMaster, pi.buyer_name, pi.customer_id);
+  function existingLineRememberedButton(i: number, onApply: (v: string) => void) {
+    const l = lines[i];
+    const it = items[i];
+    const booking = it?.booking_id ? it.bookings ?? undefined : undefined;
+    const buyer = booking ? buyersMaster.find((bm) => bm.id === booking.buyer_id) : piBuyer;
+    if (!buyer?.remember_measurement_price) return null;
+    const size = booking ?? parseMeasurementText(l.measurement);
+    if (!size) return null;
+    const row = findMeasurementPrice(measurementPrices, buyer.id, size, parseFloat(l.thickness) || null);
+    if (!row) return null;
+    const basis = l.priceBasis === "dzn" ? "dzn" : "pcs";
+    const price = roundPrice(convertMeasurementPrice(row, currency, basis, parseFloat(exchangeRate) || 107));
+    if (price <= 0 || price.toFixed(pd) === (parseFloat(l.priceUnit) || 0).toFixed(pd)) return null;
+    const src = row.source === "pi" ? "আগের PI" : "প্রাইস লিস্ট";
+    return (
+      <button
+        type="button"
+        onClick={() => onApply(price.toFixed(pd))}
+        className="mt-1 block text-[11px] text-emerald-700 hover:underline whitespace-nowrap"
+        title={`${src} থেকে মনে রাখা দাম${row.updated_at ? ` — ${row.updated_at.slice(0, 10)}` : ""}`}
+      >
+        আগের দাম: {price.toFixed(pd)}{thicknessNote(row, parseFloat(l.thickness) || null)}
+      </button>
+    );
+  }
+
   function applyAutoPrice(bookingId: string, basis: "pcs" | "dzn") {
     const b = bookings.find((bk) => bk.id === bookingId);
     if (!b) return;
@@ -690,8 +745,12 @@ export default function EditProformaForm({
       exchange_rate_to_bdt: parseFloat(exchangeRate) || 107,
     }).eq("id", pi.id);
 
+    if (updateError) { setLoading(false); setError(updateError.message); return; }
+    // মেজারমেন্ট-প্রাইস চালু বায়ারদের দাম লিস্ট আপডেট — PI-র currency আপডেটের পরে চালাতে হয়
+    // (ব্যর্থ হলেও PI সেভ ঠিক থাকে)
+    const mpErr = await recordPiMeasurementPrices(supabase, pi.id);
+    if (mpErr) console.warn("মেজারমেন্ট-প্রাইস আপডেট ব্যর্থ:", mpErr);
     setLoading(false);
-    if (updateError) { setError(updateError.message); return; }
     router.push(`/dashboard/lc-export/proforma/${pi.id}`);
     router.refresh();
   }
@@ -812,6 +871,7 @@ export default function EditProformaForm({
                 </td>
                 <td className="px-3 py-2">
                   <input type="number" step="0.0001" value={l.priceUnit} onChange={(e) => updateLine(i, "priceUnit", e.target.value)} className="w-full rounded border px-2 py-1 text-sm" />
+                  {existingLineRememberedButton(i, (v) => updateLine(i, "priceUnit", v))}
                   <div className="mt-1 text-[10px] whitespace-nowrap">
                     {(lineRatesRef.current[i] || 0) > 0
                       ? <span className="text-green-600">✓ Auto-recalc সক্রিয়</span>
@@ -864,7 +924,10 @@ export default function EditProformaForm({
                     <option value="pcs">Pc</option><option value="dzn">Dzn</option>
                   </select>
                 </td>
-                <td className="px-2 py-2"><input type="number" step="0.0001" value={l.priceUnit} onChange={(e) => updateNonAtLine(i, "priceUnit", e.target.value)} className="w-full rounded border px-2 py-1 text-xs" /></td>
+                <td className="px-2 py-2">
+                  <input type="number" step="0.0001" value={l.priceUnit} onChange={(e) => updateNonAtLine(i, "priceUnit", e.target.value)} className="w-full rounded border px-2 py-1 text-xs" />
+                  {existingLineRememberedButton(i, (v) => updateNonAtLine(i, "priceUnit", v))}
+                </td>
                 <td className="px-2 py-2 text-right">{sym}{money(calcAmount(l.qtyPcs, l.priceUnit, l.priceBasis))}</td>
               </tr>
             ))}
@@ -952,6 +1015,7 @@ export default function EditProformaForm({
                                 </button>
                               )}
                             </div>
+                            {rememberedPriceButton(b, basis, lineThickness(b))}
                           </td>
                           <td className="px-3 py-2">
                             <input type="number" step="0.0001" value={bookingAdjust[b.id] || ""} onChange={(e) => setBookingAdjust((prev) => ({ ...prev, [b.id]: e.target.value }))} className="w-20 rounded border px-2 py-1 text-sm" placeholder="0" />
@@ -1001,6 +1065,7 @@ export default function EditProformaForm({
                             </td>
                             <td className="px-3 py-2">
                               <input type="number" step="0.0001" value={bookingPrice[b.id] || ""} onChange={(e) => setBookingPrice((prev) => ({ ...prev, [b.id]: e.target.value }))} className="w-full rounded border px-2 py-1 text-sm" />
+                              {rememberedPriceButton(b, "pcs", newLineThickness(b))}
                             </td>
                             <td className="px-3 py-2 text-right">{money(calcLineAmount(qty, effectivePriceUnit(b.id), "pcs"))}</td>
                           </tr>

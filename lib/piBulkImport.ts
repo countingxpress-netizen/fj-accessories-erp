@@ -1,6 +1,7 @@
 import ExcelJS from "exceljs";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { generatePiNo } from "./docNumber";
+import { recordPiMeasurementPrices } from "./measurementPrice";
 
 // Excel Bulk Import for Manual Proforma Invoice — একই effect যা আগে script দিয়ে হতো
 // (AT Accessories / Irish Garments historical PI entry), এখন UI থেকে। একটা row = একটা
@@ -268,6 +269,10 @@ export async function insertPiGroup(
     })),
   );
   if (itemsError) return { ok: false, error: `PI ${piNo} তৈরি হয়েছে কিন্তু আইটেম সেভ ব্যর্থ: ${itemsError.message}` };
+
+  // মেজারমেন্ট-প্রাইস চালু বায়ারের দাম লিস্ট আপডেট (ব্যর্থ হলেও PI ঠিক থাকে)
+  const mpErr = await recordPiMeasurementPrices(supabase, pi.id);
+  if (mpErr) console.warn("মেজারমেন্ট-প্রাইস আপডেট ব্যর্থ:", mpErr);
 
   return { ok: true, piNo };
 }
