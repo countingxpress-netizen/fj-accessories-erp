@@ -36,6 +36,7 @@ export default async function EmployeesPage() {
               <th className="px-4 py-2">Type</th>
               <th className="px-4 py-2 text-right">Basic Salary</th>
               <th className="px-4 py-2 text-right">কার্যকর Basic</th>
+              <th className="px-4 py-2">Joining Date</th>
               <th className="px-4 py-2">Status</th>
               <th className="px-4 py-2 text-right">Action</th>
             </tr>
@@ -50,13 +51,13 @@ export default async function EmployeesPage() {
               />
             ))}
             {(!employees || employees.length === 0) && (
-              <tr><td colSpan={9} className="px-4 py-3 text-gray-400 italic">কোনো Employee যোগ করা হয়নি</td></tr>
+              <tr><td colSpan={10} className="px-4 py-3 text-gray-400 italic">কোনো Employee যোগ করা হয়নি</td></tr>
             )}
           </tbody>
         </table>
       </div>
       <p className="mt-2 text-xs text-gray-400">
-        Basic Salary = শুরুর/মূল অঙ্ক। বেতন বাড়লে <Link href="/dashboard/payroll/salary-revisions" className="underline">Salary Revisions</Link>-এ যোগ করুন — কার্যকর Basic সেখান থেকে হিসাব হয়।
+        Basic Salary = শুরুর/মূল অঙ্ক। বেতন বাড়লে Edit-এ "কার্যকর Basic" আর তার কার্যকর তারিখ বদলান (অথবা <Link href="/dashboard/payroll/salary-revisions" className="underline">Salary Revisions</Link>-এ যোগ করুন) — সেটা Revision হিসেবে সেভ হয়, আগের মাসের হিসাব বদলায় না।
       </p>
     </div>
   );

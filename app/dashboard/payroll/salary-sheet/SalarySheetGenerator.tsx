@@ -1,5 +1,5 @@
 "use client";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import {
@@ -48,8 +48,19 @@ export default function SalarySheetGenerator({ employees }: { employees: Employe
 
   const { start: monthStart, end: monthEnd } = monthRange(year, month);
 
+  // একবার Preview করার পর মাস/বছর বদলালে নতুন মাসের হিসাব নিজে থেকেই লোড হয়
+  const [previewed, setPreviewed] = useState(false);
+  useEffect(() => {
+    if (previewed) runPreview();
+  }, [month, year]); // eslint-disable-line react-hooks/exhaustive-deps
+
   async function handlePreview(e: React.FormEvent) {
     e.preventDefault();
+    setPreviewed(true);
+    await runPreview();
+  }
+
+  async function runPreview() {
     setError("");
     setLoading(true);
     setRows(null);
@@ -191,6 +202,8 @@ export default function SalarySheetGenerator({ employees }: { employees: Employe
         }
       }
       setRows(null);
+      setPreviewed(false);
+      router.push(`/dashboard/payroll/salary-sheet/${year}-${String(month).padStart(2, "0")}`);
       router.refresh();
     } catch (err: any) {
       setError(err.message || "সেভ করা যায়নি");

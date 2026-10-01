@@ -280,6 +280,15 @@ export async function buildDayBook(
       // শুধু pool↔source ট্রান্সফার (যেমন "Debt From MD": Dr 1000 / Cr 3000)
       if (cashDebit && srcCredit) addAgg(jamaAgg, byId.get(srcCredit.account_id)!, num(cashDebit.debit));
       else if (cashCredit && srcDebit) addAgg(khorochAgg, byId.get(srcDebit.account_id)!, num(cashCredit.credit));
+      else if (!cashLines.length) {
+        // source↔source ট্রান্সফার (যেমন "MK to MD": Dr 3000 / Cr 2600) — ক্যাশ ছোঁয় না,
+        // তবু খাতায় দেখাতে হয়: দাতা জমায়, গ্রহীতা খরচে (কাটাকাটি, ক্যাশ দেনা অপরিবর্তিত)
+        for (const l of srcLines) {
+          const acc = byId.get(l.account_id)!;
+          if (num(l.credit) > 0) addAgg(jamaAgg, acc, num(l.credit));
+          if (num(l.debit) > 0) addAgg(khorochAgg, acc, num(l.debit));
+        }
+      }
       continue;
     }
 
