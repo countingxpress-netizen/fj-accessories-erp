@@ -4,7 +4,7 @@ import { money } from "@/lib/format";
 import { loadGroupMap, foldNumbers, ledgerHref } from "@/lib/customerGroups";
 import PrintButton from "@/app/dashboard/PrintButton";
 import { fetchAllRows } from "@/lib/fetchAll";
-import { adjustmentSigned } from "@/lib/customerAdjustment";
+import { computeCustomerDues } from "@/lib/customerDues";
 import { resolveDatePreset, periodAsOf, formatLongDate } from "@/lib/datePresets";
 import DateRangeFields from "@/components/DateRangeFields";
 
@@ -19,60 +19,21 @@ export default async function OutstandingReportPage({
   const supabase = await createClient();
 
   const [
-    { data: customers },
-    { data: invoices },
-    { data: customerPayments },
-    { data: wastageSales },
-    { data: rawMaterialSales },
+    { customers, due: customerDue },
     gm,
     { data: suppliers },
     { data: purchases },
     { data: supplierPayments },
-    customerAdjustments,
   ] = await Promise.all([
-    supabase.from("customers").select("id, name, opening_balance, opening_balance_date"),
-    fetchAllRows<any>(supabase, "sales_invoices", "customer_id, payment_type, sales_invoice_items(amount)", upTo("invoice_date")).then((data) => ({ data })),
-    fetchAllRows<any>(supabase, "customer_payments", "customer_id, amount", upTo("payment_date")).then((data) => ({ data })),
-    fetchAllRows<any>(supabase, "wastage_sales", "customer_id, amount, payment_received", (q) => upTo("sale_date")(q.not("customer_id", "is", null))).then((data) => ({ data })),
-    fetchAllRows<any>(supabase, "raw_material_sales", "customer_id, amount, payment_received", (q) => upTo("sale_date")(q.not("customer_id", "is", null))).then((data) => ({ data })),
+    computeCustomerDues(supabase, asOf),
     loadGroupMap(supabase),
     supabase.from("suppliers").select("id, name"),
     fetchAllRows<any>(supabase, "purchase_entries", "supplier_id, purchase_entry_items(quantity_lbs, rate_per_lbs)", upTo("entry_date")).then((data) => ({ data })),
     fetchAllRows<any>(supabase, "supplier_payments", "supplier_id, amount", upTo("payment_date")).then((data) => ({ data })),
-    fetchAllRows<any>(supabase, "customer_adjustments", "customer_id, direction, amount", upTo("adj_date")),
   ]);
 
-  const customerDue: Record<string, number> = {};
-  (customers ?? []).forEach((c: any) => {
-    // Opening Balance-এর তারিখ বাছাই করা তারিখের পরে হলে তখনো বাকি ছিল না
-    if (asOf && c.opening_balance_date && c.opening_balance_date > asOf) return;
-    if (c.opening_balance) customerDue[c.id] = (customerDue[c.id] ?? 0) + c.opening_balance;
-  });
-  (invoices ?? []).forEach((inv: any) => {
-    if (inv.payment_type === "cash") return; // নগদ বিক্রি বাকি বাড়ায় না
-    const amt = (inv.sales_invoice_items ?? []).reduce((s: number, i: any) => s + (i.amount || 0), 0);
-    customerDue[inv.customer_id] = (customerDue[inv.customer_id] ?? 0) + amt;
-  });
-  // বাকিতে (payment_received = false) করা Wastage/Raw Material বিক্রিও কাস্টমারের বাকিতে যোগ —
-  // নগদগুলো বাদ (সেগুলো আসলে 1100 AR ছোঁয়ইনি)।
-  (wastageSales ?? []).forEach((w: any) => {
-    if (w.payment_received) return;
-    customerDue[w.customer_id] = (customerDue[w.customer_id] ?? 0) + Number(w.amount || 0);
-  });
-  (rawMaterialSales ?? []).forEach((r: any) => {
-    if (r.payment_received) return;
-    customerDue[r.customer_id] = (customerDue[r.customer_id] ?? 0) + Number(r.amount || 0);
-  });
-  (customerPayments ?? []).forEach((p: any) => {
-    customerDue[p.customer_id] = (customerDue[p.customer_id] ?? 0) - p.amount;
-  });
-  // কাস্টমার এডজাস্টমেন্ট — "বাকিতে যোগ" +, "বাকি কমানো" −
-  customerAdjustments.forEach((a: any) => {
-    customerDue[a.customer_id] = (customerDue[a.customer_id] ?? 0) + adjustmentSigned(a);
-  });
-
   // গ্রুপভুক্ত কাস্টমার এক পার্টি — তাদের বাকি একসাথে (net) দেখানো হয়।
-  const dueRows = foldNumbers(gm, customers ?? [], customerDue)
+  const dueRows = foldNumbers(gm, customers, customerDue)
     .filter((r) => r.value > 0)
     .sort((a, b) => b.value - a.value);
 

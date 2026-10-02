@@ -99,6 +99,7 @@ const menu: MenuGroup[] = [
     label: "Reports", href: "/dashboard/reports", icon: "reports",
     items: [
       { label: "DayBook (জমা খরচ)", href: "/dashboard/reports/daybook" },
+      { label: "মাসিক টপশীট", href: "/dashboard/reports/top-sheet" },
       { label: "Profit & Loss", href: "/dashboard/accounting/profit-loss" },
       { label: "Balance Sheet", href: "/dashboard/accounting/balance-sheet" },
       { label: "Stock Report", href: "/dashboard/reports/stock-report" },
