@@ -28,6 +28,7 @@ const menu: MenuGroup[] = [
       { label: "Warehouses", href: "/dashboard/inventory/warehouses" },
       { label: "Raw Material Stock", href: "/dashboard/inventory/raw-material" },
       { label: "Raw Material বিক্রি", href: "/dashboard/inventory/raw-material-sale" },
+      { label: "Material খরচ", href: "/dashboard/inventory/material-expense" },
       { label: "Stock Ledger", href: "/dashboard/inventory/stock-ledger" },
       { label: "Warehouse Transfer", href: "/dashboard/inventory/warehouse-transfer" },
     ],

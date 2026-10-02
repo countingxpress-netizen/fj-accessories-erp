@@ -18,6 +18,7 @@ export const JOURNAL_SOURCE_LABELS: Record<string, string> = {
   bank_txn: "Bank",
   cash_txn: "Cash",
   raw_material_sale: "Raw Material বিক্রি",
+  material_expense: "Material খরচ",
   customer_adjustment: "কাস্টমার এডজাস্টমেন্ট",
   cogs: "COGS (বিক্রির খরচ)",
 };

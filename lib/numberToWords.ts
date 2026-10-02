@@ -43,6 +43,23 @@ export function amountInWords(amount: number, currency: string): string {
 }
 
 
+// দেশি পদ্ধতি (Crore / Lac / Thousand) — যেমন 632800 → "Six Lac Thirty Two Thousand Eight Hundred Only"
+// (Salary Sheet-এ ব্যবহার; PI / Sales Invoice এখনো amountInWords-এর Million পদ্ধতিতে)
+export function amountInWordsLac(amount: number): string {
+  const n = Math.round(Math.abs(amount));
+  if (n === 0) return "Zero Only";
+  const crore = Math.floor(n / 10000000);
+  const lac = Math.floor((n % 10000000) / 100000);
+  const thousand = Math.floor((n % 100000) / 1000);
+  const rest = n % 1000;
+  const parts: string[] = [];
+  if (crore) parts.push(`${crore >= 100 ? amountInWordsLac(crore).replace(/ Only$/, "") : convertBelowThousand(crore)} Crore`);
+  if (lac) parts.push(`${convertBelowThousand(lac)} Lac`);
+  if (thousand) parts.push(`${convertBelowThousand(thousand)} Thousand`);
+  if (rest) parts.push(convertBelowThousand(rest));
+  return `${parts.join(" ")} Only`;
+}
+
 export function currencySymbol(currency: string): string {
   if (currency === "USD") return "$";
   if (currency === "EUR") return "€";

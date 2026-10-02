@@ -6,7 +6,7 @@ import { hourlyRate, monthRange, todayLocal } from "@/lib/payroll";
 import { postPayrollAccrual, postPayrollPayment, reversePayrollJv } from "@/lib/payrollJv";
 import { money } from "@/lib/format";
 import { formatDate } from "@/lib/formatDate";
-import { amountInWords } from "@/lib/numberToWords";
+import { amountInWordsLac } from "@/lib/numberToWords";
 import { downloadExcel } from "@/lib/exportExcel";
 import GuardedAction from "@/app/dashboard/GuardedAction";
 
@@ -328,9 +328,9 @@ export default function SalarySheetView({
                 </tr>
               );
             })}
-          </tbody>
-          <tfoot className="bg-gray-100 font-semibold">
-            <tr>
+            {/* মোট — tfoot নয়: প্রিন্টে tfoot প্রতি পাতায় রিপিট হয়, তাই প্রথম পাতার নিচেও
+                পুরো শিটের মোট বসে যেত। সাধারণ শেষ সারি হলে শুধু শেষ পাতায় একবার আসে। */}
+            <tr className="break-inside-avoid bg-gray-100 font-semibold">
               <td colSpan={4} className="text-right">Total Amount</td>
               <td className="text-right">{money(totals.basic)}</td>
               <td className="text-right">{totals.absH || ""}</td>
@@ -343,12 +343,12 @@ export default function SalarySheetView({
               <td className="print:hidden" />
               <td className="hidden print:table-cell" />
             </tr>
-          </tfoot>
+          </tbody>
         </table>
       </div>
 
       <p className="mt-2 text-xs">
-        <span className="font-semibold">Amount (In words):</span> {amountInWords(Math.round(totals.payable), "BDT")}
+        <span className="font-semibold">Amount (In words):</span> {amountInWordsLac(totals.payable)}
       </p>
 
       <div className="mt-14 hidden grid-cols-4 gap-8 text-center text-xs print:grid">
