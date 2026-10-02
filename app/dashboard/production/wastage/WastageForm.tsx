@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { postWastageJv } from "@/lib/inventoryCost";
 import { getCurrentUserId } from "@/lib/currentUser";
 import { money } from "@/lib/format";
+import { adjustRawStock } from "@/lib/stockAdjust";
 
 type ProductionOrder = {
   id: string; production_no: string; stage: string;
@@ -60,18 +61,7 @@ export default function WastageForm({
         .from("raw_materials").select("id").eq("material_name", "Recycled Chips").single();
 
       if (recycledMaterial) {
-        const { data: stock } = await supabase
-          .from("raw_material_stock").select("*")
-          .eq("material_id", recycledMaterial.id).eq("warehouse_id", warehouseId).maybeSingle();
-
-        if (stock) {
-          await supabase.from("raw_material_stock")
-            .update({ quantity_lbs: stock.quantity_lbs + qty, updated_at: new Date().toISOString() })
-            .eq("id", stock.id);
-        } else {
-          await supabase.from("raw_material_stock")
-            .insert({ material_id: recycledMaterial.id, warehouse_id: warehouseId, quantity_lbs: qty });
-        }
+        await adjustRawStock(supabase, recycledMaterial.id, warehouseId, qty);
 
         await supabase.from("stock_ledger").insert({
           item_type: "raw_material", item_id: recycledMaterial.id, warehouse_id: warehouseId,

@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { money } from "@/lib/format";
+import { adjustRawStock } from "@/lib/stockAdjust";
 
 const LBS_PER_BAG = 55;
 
@@ -56,15 +57,8 @@ export default function EditTransferForm({
       .from("stock_ledger").select("*").eq("reference_type", oldReferenceType).eq("reference_id", transfer.id);
 
     for (const entry of oldLedgerEntries ?? []) {
-      const { data: stock } = await supabase
-        .from("raw_material_stock").select("*")
-        .eq("material_id", entry.item_id).eq("warehouse_id", entry.warehouse_id).maybeSingle();
-      if (stock) {
-        const delta = entry.txn_type === "in" ? -entry.quantity : entry.quantity;
-        await supabase.from("raw_material_stock")
-          .update({ quantity_lbs: stock.quantity_lbs + delta, updated_at: new Date().toISOString() })
-          .eq("id", stock.id);
-      }
+      const delta = entry.txn_type === "in" ? -entry.quantity : entry.quantity;
+      await adjustRawStock(supabase, entry.item_id, entry.warehouse_id, delta);
     }
     await supabase.from("stock_ledger").delete().eq("reference_type", oldReferenceType).eq("reference_id", transfer.id);
 
@@ -91,29 +85,9 @@ export default function EditTransferForm({
     }
 
     // ৩. নতুন effect প্রয়োগ করা
-    const { data: fromStock } = await supabase
-      .from("raw_material_stock").select("*")
-      .eq("material_id", materialId).eq("warehouse_id", fromWarehouseId).maybeSingle();
-    if (fromStock) {
-      await supabase.from("raw_material_stock")
-        .update({ quantity_lbs: fromStock.quantity_lbs - quantityLbs, updated_at: new Date().toISOString() })
-        .eq("id", fromStock.id);
-    } else {
-      await supabase.from("raw_material_stock")
-        .insert({ material_id: materialId, warehouse_id: fromWarehouseId, quantity_lbs: -quantityLbs });
-    }
+    await adjustRawStock(supabase, materialId, fromWarehouseId, -quantityLbs);
 
-    const { data: toStock } = await supabase
-      .from("raw_material_stock").select("*")
-      .eq("material_id", materialId).eq("warehouse_id", toWarehouseId).maybeSingle();
-    if (toStock) {
-      await supabase.from("raw_material_stock")
-        .update({ quantity_lbs: toStock.quantity_lbs + quantityLbs, updated_at: new Date().toISOString() })
-        .eq("id", toStock.id);
-    } else {
-      await supabase.from("raw_material_stock")
-        .insert({ material_id: materialId, warehouse_id: toWarehouseId, quantity_lbs: quantityLbs });
-    }
+    await adjustRawStock(supabase, materialId, toWarehouseId, quantityLbs);
 
     const newReferenceType = transferType === "wastage" ? "wastage_transfer" : "stock_transfer";
     await supabase.from("stock_ledger").insert([

@@ -3,6 +3,8 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { money } from "@/lib/format";
+import { adjustRawStock } from "@/lib/stockAdjust";
+import { todayLocal } from "@/lib/payroll";
 
 type Material = { id: string; material_name: string; unit?: string | null };
 type Warehouse = { id: string; name: string };
@@ -19,6 +21,7 @@ export default function StockAdjustmentForm({
   const [txnType, setTxnType] = useState<"in" | "out">("in");
   const [quantity, setQuantity] = useState("");
   const [reason, setReason] = useState("Opening Stock");
+  const [txnDate, setTxnDate] = useState(todayLocal());
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const router = useRouter();
@@ -56,25 +59,12 @@ export default function StockAdjustmentForm({
       return;
     }
 
-    if (existing) {
-      const { error: updateError } = await supabase
-        .from("raw_material_stock")
-        .update({ quantity_lbs: newQty, updated_at: new Date().toISOString() })
-        .eq("id", existing.id);
-      if (updateError) {
-        setLoading(false);
-        setError(updateError.message);
-        return;
-      }
-    } else {
-      const { error: insertError } = await supabase
-        .from("raw_material_stock")
-        .insert({ material_id: materialId, warehouse_id: warehouseId, quantity_lbs: newQty });
-      if (insertError) {
-        setLoading(false);
-        setError(insertError.message);
-        return;
-      }
+    // এক ধাপে বাড়ানো/কমানো — উপরের newQty শুধু যাচাইয়ের জন্য, লেখা হয় পরিবর্তনটুকু
+    const adj = await adjustRawStock(supabase, materialId, warehouseId, txnType === "in" ? qty : -qty);
+    if (!adj.ok) {
+      setLoading(false);
+      setError(adj.error ?? "স্টক আপডেট ব্যর্থ হয়েছে।");
+      return;
     }
 
     // Stock Ledger-এ এন্ট্রি লিখুন (audit trail)
@@ -85,7 +75,7 @@ export default function StockAdjustmentForm({
       txn_type: txnType,
       quantity: qty,
       reference_type: "manual_adjustment",
-      txn_date: new Date().toISOString().slice(0, 10),
+      txn_date: txnDate || todayLocal(),
     });
 
     setLoading(false);
@@ -128,6 +118,15 @@ export default function StockAdjustmentForm({
               <option key={w.id} value={w.id}>{w.name}</option>
             ))}
           </select>
+        </div>
+        <div>
+          <label className="block text-xs text-gray-500 mb-1">তারিখ</label>
+          <input
+            type="date"
+            value={txnDate}
+            onChange={(e) => setTxnDate(e.target.value)}
+            className="rounded-lg border px-3 py-2 text-sm"
+          />
         </div>
         <div>
           <label className="block text-xs text-gray-500 mb-1">Type</label>

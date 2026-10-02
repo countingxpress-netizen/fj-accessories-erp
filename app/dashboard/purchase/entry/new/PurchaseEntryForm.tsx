@@ -7,6 +7,7 @@ import { recomputeRawAvgCost } from "@/lib/inventoryCost";
 import { postFreightJv, deleteWithPurchaseFreight, repostFreightForEntry } from "@/lib/purchaseFreight";
 import { getCurrentUserId } from "@/lib/currentUser";
 import { money } from "@/lib/format";
+import { adjustRawStock } from "@/lib/stockAdjust";
 
 const LBS_PER_BAG = 55;
 
@@ -168,15 +169,7 @@ export default function PurchaseEntryForm({
       const touchedMaterialIds = new Set<string>();
       for (const led of oldLedger ?? []) {
         touchedMaterialIds.add(led.item_id);
-        const { data: stock } = await supabase
-          .from("raw_material_stock").select("*")
-          .eq("material_id", led.item_id).eq("warehouse_id", led.warehouse_id).maybeSingle();
-        if (stock) {
-          await supabase
-            .from("raw_material_stock")
-            .update({ quantity_lbs: stock.quantity_lbs - led.quantity, updated_at: new Date().toISOString() })
-            .eq("id", stock.id);
-        }
+        await adjustRawStock(supabase, led.item_id, led.warehouse_id, -led.quantity);
       }
       await supabase.from("stock_ledger").delete().eq("reference_type", "purchase").eq("reference_id", entryId);
       await supabase.from("purchase_entry_items").delete().eq("entry_id", entryId);
@@ -227,23 +220,7 @@ export default function PurchaseEntryForm({
         touchedMaterialIds.add(l.material_id);
         const qty = lineQuantityLbs(l);
 
-        const { data: existingStock } = await supabase
-          .from("raw_material_stock")
-          .select("*")
-          .eq("material_id", l.material_id)
-          .eq("warehouse_id", warehouseId)
-          .maybeSingle();
-
-        if (existingStock) {
-          await supabase
-            .from("raw_material_stock")
-            .update({ quantity_lbs: existingStock.quantity_lbs + qty, updated_at: new Date().toISOString() })
-            .eq("id", existingStock.id);
-        } else {
-          await supabase
-            .from("raw_material_stock")
-            .insert({ material_id: l.material_id, warehouse_id: warehouseId, quantity_lbs: qty });
-        }
+        await adjustRawStock(supabase, l.material_id, warehouseId, qty);
 
         await supabase.from("stock_ledger").insert({
           item_type: "raw_material",
@@ -399,23 +376,7 @@ export default function PurchaseEntryForm({
     for (const l of validLines) {
       const qty = lineQuantityLbs(l);
 
-      const { data: existingStock } = await supabase
-        .from("raw_material_stock")
-        .select("*")
-        .eq("material_id", l.material_id)
-        .eq("warehouse_id", warehouseId)
-        .maybeSingle();
-
-      if (existingStock) {
-        await supabase
-          .from("raw_material_stock")
-          .update({ quantity_lbs: existingStock.quantity_lbs + qty, updated_at: new Date().toISOString() })
-          .eq("id", existingStock.id);
-      } else {
-        await supabase
-          .from("raw_material_stock")
-          .insert({ material_id: l.material_id, warehouse_id: warehouseId, quantity_lbs: qty });
-      }
+      await adjustRawStock(supabase, l.material_id, warehouseId, qty);
 
       await supabase.from("stock_ledger").insert({
         item_type: "raw_material",

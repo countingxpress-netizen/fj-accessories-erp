@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/client";
 import { postFgReceiveJv, reverseInventoryJv } from "@/lib/inventoryCost";
+import { adjustFgStock } from "@/lib/stockAdjust";
 
 type SupabaseClient = ReturnType<typeof createClient>;
 
@@ -107,17 +108,7 @@ export async function fulfilBookingForChallan(
   }
 
   // ── finished_goods_stock ↑ + ledger ──────────────────────────────
-  const { data: stock } = await supabase
-    .from("finished_goods_stock").select("*")
-    .eq("product_id", productId).eq("warehouse_id", warehouseId).maybeSingle();
-  if (stock) {
-    await supabase.from("finished_goods_stock")
-      .update({ quantity_pcs: Number(stock.quantity_pcs) + receivePcs, updated_at: now })
-      .eq("id", stock.id);
-  } else {
-    await supabase.from("finished_goods_stock")
-      .insert({ product_id: productId, warehouse_id: warehouseId, quantity_pcs: receivePcs });
-  }
+  await adjustFgStock(supabase, productId, warehouseId, receivePcs);
 
   await supabase.from("stock_ledger").insert({
     item_type: "finished_goods", item_id: productId, warehouse_id: warehouseId,
@@ -189,14 +180,7 @@ export async function reverseChallanFulfilment(
     .from("stock_ledger").select("*")
     .eq("reference_type", "challan_receive").eq("reference_id", challanId);
   for (const le of ledgerEntries ?? []) {
-    const { data: st } = await supabase
-      .from("finished_goods_stock").select("*")
-      .eq("product_id", le.item_id).eq("warehouse_id", le.warehouse_id).maybeSingle();
-    if (st) {
-      await supabase.from("finished_goods_stock")
-        .update({ quantity_pcs: Number(st.quantity_pcs) - Number(le.quantity), updated_at: new Date().toISOString() })
-        .eq("id", st.id);
-    }
+    await adjustFgStock(supabase, le.item_id, le.warehouse_id, -Number(le.quantity));
   }
 
   await supabase.from("stock_ledger").delete()

@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/client";
 import { DeleteResult, friendlyDeleteError } from "@/lib/deleteResult";
 import { reverseInventoryJv } from "@/lib/inventoryCost";
 import { syncAutoInvoiceForGroup } from "@/lib/autoInvoiceFromBooking";
+import { adjustRawStock, adjustFgStock } from "@/lib/stockAdjust";
 
 type SupabaseClient = ReturnType<typeof createClient>;
 
@@ -56,22 +57,15 @@ export async function deleteBookingCascade(
 
   const { data: prodOrders } = await supabase.from("production_orders").select("id").eq("booking_id", bookingId);
   for (const po of prodOrders ?? []) {
-    const { data: consumptions } = await supabase.from("material_consumption").select("*").eq("production_id", po.id);
-    for (const c of consumptions ?? []) {
-      const { data: ledgerEntry } = await supabase
-        .from("stock_ledger").select("*")
-        .eq("reference_type", "production").eq("reference_id", po.id).eq("item_id", c.material_id).maybeSingle();
-      if (ledgerEntry) {
-        const { data: stock } = await supabase
-          .from("raw_material_stock").select("*")
-          .eq("material_id", c.material_id).eq("warehouse_id", ledgerEntry.warehouse_id).maybeSingle();
-        if (stock) {
-          await supabase.from("raw_material_stock")
-            .update({ quantity_lbs: stock.quantity_lbs + c.quantity_lbs, updated_at: new Date().toISOString() })
-            .eq("id", stock.id);
-        }
-        await supabase.from("stock_ledger").delete().eq("id", ledgerEntry.id);
-      }
+    // কাঁচামাল ফেরত — ledger-এর প্রতিটা "out" সারি ধরে (consumption-এর পরিমাণ দিয়ে নয়, যাতে স্টক আর
+    // ledger সবসময় একই পরিমাণে বদলায়; একই material-এর একাধিক সারি থাকলেও সব ফেরত হয়)
+    const { data: issueLedgers } = await supabase
+      .from("stock_ledger").select("*")
+      .eq("reference_type", "production").eq("reference_id", po.id)
+      .eq("item_type", "raw_material").eq("txn_type", "out");
+    for (const l of issueLedgers ?? []) {
+      await adjustRawStock(supabase, l.item_id, l.warehouse_id, Number(l.quantity));
+      await supabase.from("stock_ledger").delete().eq("id", l.id);
     }
     await supabase.from("material_consumption").delete().eq("production_id", po.id);
 
@@ -85,14 +79,7 @@ export async function deleteBookingCascade(
         .eq("reference_type", "production").eq("reference_id", po.id)
         .eq("item_type", "finished_goods").eq("item_id", r.product_id).maybeSingle();
       if (ledgerEntry) {
-        const { data: stock } = await supabase
-          .from("finished_goods_stock").select("*")
-          .eq("product_id", r.product_id).eq("warehouse_id", ledgerEntry.warehouse_id).maybeSingle();
-        if (stock) {
-          await supabase.from("finished_goods_stock")
-            .update({ quantity_pcs: stock.quantity_pcs - r.quantity_pcs, updated_at: new Date().toISOString() })
-            .eq("id", stock.id);
-        }
+        await adjustFgStock(supabase, r.product_id, ledgerEntry.warehouse_id, -Number(ledgerEntry.quantity));
         await supabase.from("stock_ledger").delete().eq("id", ledgerEntry.id);
       }
     }
@@ -110,15 +97,8 @@ export async function deleteBookingCascade(
           .from("stock_ledger").select("*")
           .eq("reference_type", "wastage").eq("reference_id", w.id);
         for (const l of ledgers ?? []) {
-          const { data: stock } = await supabase
-            .from("raw_material_stock").select("*")
-            .eq("material_id", l.item_id).eq("warehouse_id", l.warehouse_id).maybeSingle();
-          if (stock) {
-            const delta = l.txn_type === "out" ? Number(l.quantity) : -Number(l.quantity);
-            await supabase.from("raw_material_stock")
-              .update({ quantity_lbs: stock.quantity_lbs + delta, updated_at: new Date().toISOString() })
-              .eq("id", stock.id);
-          }
+          const delta = l.txn_type === "out" ? Number(l.quantity) : -Number(l.quantity);
+          await adjustRawStock(supabase, l.item_id, l.warehouse_id, delta);
           await supabase.from("stock_ledger").delete().eq("id", l.id);
         }
       } else if (w.recycled) {
@@ -126,14 +106,7 @@ export async function deleteBookingCascade(
           .from("stock_ledger").select("*")
           .eq("reference_type", "wastage").eq("reference_id", po.id).maybeSingle();
         if (ledgerEntry) {
-          const { data: stock } = await supabase
-            .from("raw_material_stock").select("*")
-            .eq("material_id", ledgerEntry.item_id).eq("warehouse_id", ledgerEntry.warehouse_id).maybeSingle();
-          if (stock) {
-            await supabase.from("raw_material_stock")
-              .update({ quantity_lbs: stock.quantity_lbs - ledgerEntry.quantity, updated_at: new Date().toISOString() })
-              .eq("id", stock.id);
-          }
+          await adjustRawStock(supabase, ledgerEntry.item_id, ledgerEntry.warehouse_id, -Number(ledgerEntry.quantity));
           await supabase.from("stock_ledger").delete().eq("id", ledgerEntry.id);
         }
       }

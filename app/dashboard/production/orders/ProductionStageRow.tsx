@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import type { StageRow } from "@/lib/productionStageRows";
 import { postFgReceiveJv } from "@/lib/inventoryCost";
+import { adjustFgStock } from "@/lib/stockAdjust";
 
 function stageColumn(stageType: string) {
   if (stageType === "blowing") return "blowing_produced_lbs";
@@ -105,18 +106,7 @@ export default function ProductionStageRow({ row, isAdmin }: { row: StageRow; is
           }).eq("id", receiveRow.id);
         }
 
-        const { data: stock } = await supabase
-          .from("finished_goods_stock").select("*")
-          .eq("product_id", row.productId).eq("warehouse_id", targetWarehouseId).maybeSingle();
-
-        if (stock) {
-          await supabase.from("finished_goods_stock")
-            .update({ quantity_pcs: stock.quantity_pcs + row.target, updated_at: new Date().toISOString() })
-            .eq("id", stock.id);
-        } else {
-          await supabase.from("finished_goods_stock")
-            .insert({ product_id: row.productId, warehouse_id: targetWarehouseId, quantity_pcs: row.target });
-        }
+        await adjustFgStock(supabase, row.productId, targetWarehouseId, row.target);
 
         await supabase.from("stock_ledger").insert({
           item_type: "finished_goods", item_id: row.productId, warehouse_id: targetWarehouseId,

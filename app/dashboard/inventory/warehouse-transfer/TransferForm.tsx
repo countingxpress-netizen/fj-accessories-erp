@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { generateNextDocNo } from "@/lib/docNumber";
 import { getCurrentUserId } from "@/lib/currentUser";
 import { money } from "@/lib/format";
+import { adjustRawStock } from "@/lib/stockAdjust";
 
 const LBS_PER_BAG = 55;
 
@@ -79,30 +80,10 @@ export default function TransferForm({
     }
 
     // উৎস গুদাম থেকে কমানো
-    const { data: fromStock } = await supabase
-      .from("raw_material_stock").select("*")
-      .eq("material_id", materialId).eq("warehouse_id", fromWarehouseId).maybeSingle();
-    if (fromStock) {
-      await supabase.from("raw_material_stock")
-        .update({ quantity_lbs: fromStock.quantity_lbs - quantityLbs, updated_at: new Date().toISOString() })
-        .eq("id", fromStock.id);
-    } else {
-      await supabase.from("raw_material_stock")
-        .insert({ material_id: materialId, warehouse_id: fromWarehouseId, quantity_lbs: -quantityLbs });
-    }
+    await adjustRawStock(supabase, materialId, fromWarehouseId, -quantityLbs);
 
     // গন্তব্য গুদামে যোগ করা
-    const { data: toStock } = await supabase
-      .from("raw_material_stock").select("*")
-      .eq("material_id", materialId).eq("warehouse_id", toWarehouseId).maybeSingle();
-    if (toStock) {
-      await supabase.from("raw_material_stock")
-        .update({ quantity_lbs: toStock.quantity_lbs + quantityLbs, updated_at: new Date().toISOString() })
-        .eq("id", toStock.id);
-    } else {
-      await supabase.from("raw_material_stock")
-        .insert({ material_id: materialId, warehouse_id: toWarehouseId, quantity_lbs: quantityLbs });
-    }
+    await adjustRawStock(supabase, materialId, toWarehouseId, quantityLbs);
 
     await supabase.from("stock_ledger").insert([
       {

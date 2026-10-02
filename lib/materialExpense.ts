@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/client";
 import { accountIdByCode, makeVoucher, reverseInventoryJv } from "@/lib/inventoryCost";
+import { adjustRawStock } from "@/lib/stockAdjust";
 
 // Material খরচ (consumption → Expense) — যেমন মাস শেষে এডহেসিভ কত কার্টন খরচ হলো।
 //   স্টক      : raw_material_stock কমে + stock_ledger "out" (reference_type='material_expense',
@@ -43,17 +44,7 @@ export async function createMaterialExpense(
   ], MATERIAL_EXPENSE_SOURCE);
   if (!voucherId) return { ok: false, error: "JV বানানো যায়নি।" };
 
-  const { data: stock } = await supabase
-    .from("raw_material_stock").select("*")
-    .eq("material_id", input.materialId).eq("warehouse_id", input.warehouseId).maybeSingle();
-  if (stock) {
-    await supabase.from("raw_material_stock")
-      .update({ quantity_lbs: Number(stock.quantity_lbs) - input.quantity, updated_at: new Date().toISOString() })
-      .eq("id", stock.id);
-  } else {
-    await supabase.from("raw_material_stock")
-      .insert({ material_id: input.materialId, warehouse_id: input.warehouseId, quantity_lbs: -input.quantity });
-  }
+  await adjustRawStock(supabase, input.materialId, input.warehouseId, -input.quantity);
   const { error } = await supabase.from("stock_ledger").insert({
     item_type: "raw_material", item_id: input.materialId, warehouse_id: input.warehouseId,
     txn_type: "out", quantity: input.quantity,
@@ -69,14 +60,7 @@ export async function deleteMaterialExpense(supabase: Client, voucherId: string)
     .from("stock_ledger").select("*")
     .eq("reference_type", MATERIAL_EXPENSE_SOURCE).eq("reference_id", voucherId);
   for (const l of ledgers ?? []) {
-    const { data: stock } = await supabase
-      .from("raw_material_stock").select("*")
-      .eq("material_id", l.item_id).eq("warehouse_id", l.warehouse_id).maybeSingle();
-    if (stock) {
-      await supabase.from("raw_material_stock")
-        .update({ quantity_lbs: Number(stock.quantity_lbs) + Number(l.quantity), updated_at: new Date().toISOString() })
-        .eq("id", stock.id);
-    }
+    await adjustRawStock(supabase, l.item_id, l.warehouse_id, Number(l.quantity));
     await supabase.from("stock_ledger").delete().eq("id", l.id);
   }
   await reverseInventoryJv(supabase, voucherId);

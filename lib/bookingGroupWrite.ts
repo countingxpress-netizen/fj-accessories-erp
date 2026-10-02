@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/client";
 import { generateNextDocNo } from "@/lib/docNumber";
+import { adjustRawStock } from "@/lib/stockAdjust";
 import { postBookingConsumptionJv, reverseInventoryJv } from "@/lib/inventoryCost";
 import { syncAutoInvoiceForGroup } from "@/lib/autoInvoiceFromBooking";
 import { syncPiLinesForBookings, deletePiLinesForBookings } from "@/lib/bookingPiSync";
@@ -155,19 +156,8 @@ async function issueMaterials(
       booking_id: args.bookingId, material_id: materialId, quantity_lbs: m.qty,
     });
 
-    const { data: stock } = await supabase
-      .from("raw_material_stock").select("*")
-      .eq("material_id", materialId).eq("warehouse_id", args.warehouseId).maybeSingle();
-    if (stock) {
-      await supabase.from("raw_material_stock")
-        .update({ quantity_lbs: stock.quantity_lbs - m.qty, updated_at: new Date().toISOString() })
-        .eq("id", stock.id);
-    } else {
-      // স্টক রো আগে থেকে না থাকলেও তৈরি করুন — ঘাটতি (negative) হলেও যেন দেখা যায়
-      await supabase.from("raw_material_stock").insert({
-        material_id: materialId, warehouse_id: args.warehouseId, quantity_lbs: -m.qty,
-      });
-    }
+    // স্টক রো না থাকলেও তৈরি হয় — ঘাটতি (negative) হলেও যেন দেখা যায়
+    await adjustRawStock(supabase, materialId, args.warehouseId, -m.qty);
 
     await supabase.from("stock_ledger").insert({
       item_type: "raw_material", item_id: materialId, warehouse_id: args.warehouseId,
@@ -236,14 +226,7 @@ async function undoMaterialIssue(
       .eq("reference_type", "production").eq("reference_id", productionOrderId)
       .eq("item_type", "raw_material").eq("txn_type", "out");
     for (const l of ledgers ?? []) {
-      const { data: stock } = await supabase
-        .from("raw_material_stock").select("*")
-        .eq("material_id", l.item_id).eq("warehouse_id", l.warehouse_id).maybeSingle();
-      if (stock) {
-        await supabase.from("raw_material_stock")
-          .update({ quantity_lbs: Number(stock.quantity_lbs) + Number(l.quantity), updated_at: new Date().toISOString() })
-          .eq("id", stock.id);
-      }
+      await adjustRawStock(supabase, l.item_id, l.warehouse_id, Number(l.quantity));
       await supabase.from("stock_ledger").delete().eq("id", l.id);
     }
     await supabase.from("material_consumption").delete().eq("production_id", productionOrderId);
@@ -270,17 +253,30 @@ async function insertBookingItem(
     return { ok: false, error: `"${item.style || item.productDetails || "একটি প্রোডাক্ট"}" সেভ করতে ব্যর্থ হয়েছে: ${bookingError?.message ?? "অজানা কারণ"}` };
   }
 
-  const productionNo = await generateNextDocNo(supabase, "production_orders", "production_no", "PROD", "order_date", input.bookingDate);
-  const { data: productionOrder } = await supabase
-    .from("production_orders")
-    .insert({
-      production_no: productionNo, booking_id: booking.id, product_id: productId,
-      quantity_pcs: item.quantity, stage: "blowing", required_lbs: item.finalLbs, order_date: input.bookingDate,
-    })
-    .select().single();
+  // Production Order ছাড়া কাঁচামাল কাটা যাবে না — PO না হলে ledger-এ রেফারেন্সহীন সারি থেকে যায় আর পরে
+  // বুকিং এডিট/ডিলিটে কাঁচামাল ফেরত হয় না (১৩/৯/২০২৬ BK-2026-0060)। দুজন একসাথে সেভ করলে production_no
+  // একই হয়ে যেতে পারে → নতুন নম্বর নিয়ে আবার চেষ্টা; শেষ পর্যন্ত না হলে এই booking মুছে ত্রুটি দেখাও।
+  let productionOrder: { id: string } | null = null;
+  let poError = "";
+  for (let attempt = 0; attempt < 4 && !productionOrder; attempt++) {
+    const productionNo = await generateNextDocNo(supabase, "production_orders", "production_no", "PROD", "order_date", input.bookingDate);
+    const { data, error } = await supabase
+      .from("production_orders")
+      .insert({
+        production_no: productionNo, booking_id: booking.id, product_id: productId,
+        quantity_pcs: item.quantity, stage: "blowing", required_lbs: item.finalLbs, order_date: input.bookingDate,
+      })
+      .select("id").single();
+    if (data) productionOrder = data;
+    else poError = error?.message ?? "অজানা কারণ";
+  }
+  if (!productionOrder) {
+    await supabase.from("bookings").delete().eq("id", booking.id);
+    return { ok: false, error: `"${item.style || item.productDetails || "একটি প্রোডাক্ট"}"-এর Production Order তৈরি হয়নি, তাই সেভ হয়নি — আবার চেষ্টা করুন (${poError})` };
+  }
 
   await issueMaterials(supabase, {
-    bookingId: booking.id, bookingNo: input.bookingNo, productionOrderId: productionOrder?.id ?? null,
+    bookingId: booking.id, bookingNo: input.bookingNo, productionOrderId: productionOrder.id,
     date: input.bookingDate, warehouseId: item.warehouseId, materialsNeeded: item.materialsNeeded,
     materialMap, wipBase: 0,
   });

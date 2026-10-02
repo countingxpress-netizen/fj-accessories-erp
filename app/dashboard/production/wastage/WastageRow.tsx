@@ -7,6 +7,7 @@ import { postWastageJv, reverseInventoryJv } from "@/lib/inventoryCost";
 import { reverseBookingWastage } from "@/lib/bookingWastage";
 import GuardedAction from "@/app/dashboard/GuardedAction";
 import { money } from "@/lib/format";
+import { adjustRawStock } from "@/lib/stockAdjust";
 
 const stageLabels: Record<string, string> = { blowing: "Blowing", printing: "Printing", cutting: "Cutting" };
 
@@ -34,14 +35,7 @@ export default function WastageRow({ wastage, warehouses }: { wastage: any; ware
       .maybeSingle();
 
     if (ledgerEntry) {
-      const { data: stock } = await supabase
-        .from("raw_material_stock").select("*")
-        .eq("material_id", ledgerEntry.item_id).eq("warehouse_id", ledgerEntry.warehouse_id).maybeSingle();
-      if (stock) {
-        await supabase.from("raw_material_stock")
-          .update({ quantity_lbs: stock.quantity_lbs - wastage.quantity_lbs, updated_at: new Date().toISOString() })
-          .eq("id", stock.id);
-      }
+      await adjustRawStock(supabase, ledgerEntry.item_id, ledgerEntry.warehouse_id, -wastage.quantity_lbs);
       await supabase.from("stock_ledger").delete().eq("id", ledgerEntry.id);
     }
   }
@@ -68,16 +62,7 @@ export default function WastageRow({ wastage, warehouses }: { wastage: any; ware
       const { data: recycledMaterial } = await supabase.from("raw_materials").select("id").eq("material_name", "Recycled Chips").single();
       const targetWarehouseId = warehouseId || null;
       if (recycledMaterial && targetWarehouseId) {
-        const { data: stock } = await supabase
-          .from("raw_material_stock").select("*")
-          .eq("material_id", recycledMaterial.id).eq("warehouse_id", targetWarehouseId).maybeSingle();
-        if (stock) {
-          await supabase.from("raw_material_stock")
-            .update({ quantity_lbs: stock.quantity_lbs + qty, updated_at: new Date().toISOString() })
-            .eq("id", stock.id);
-        } else {
-          await supabase.from("raw_material_stock").insert({ material_id: recycledMaterial.id, warehouse_id: targetWarehouseId, quantity_lbs: qty });
-        }
+        await adjustRawStock(supabase, recycledMaterial.id, targetWarehouseId, qty);
         await supabase.from("stock_ledger").insert({
           item_type: "raw_material", item_id: recycledMaterial.id, warehouse_id: targetWarehouseId,
           txn_type: "in", quantity: qty, reference_type: "wastage", reference_id: wastage.production_id, txn_date: wastage.wastage_date,

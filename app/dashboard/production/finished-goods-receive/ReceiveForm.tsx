@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { postFgReceiveJv } from "@/lib/inventoryCost";
+import { adjustFgStock } from "@/lib/stockAdjust";
 
 type ProductionOrder = {
   id: string;
@@ -91,23 +92,7 @@ export default function ReceiveForm({
     }
 
     // ৪. finished_goods_stock আপডেট
-    const { data: existingStock } = await supabase
-      .from("finished_goods_stock")
-      .select("*")
-      .eq("product_id", productId)
-      .eq("warehouse_id", warehouseId)
-      .maybeSingle();
-
-    if (existingStock) {
-      await supabase
-        .from("finished_goods_stock")
-        .update({ quantity_pcs: existingStock.quantity_pcs + qty, updated_at: new Date().toISOString() })
-        .eq("id", existingStock.id);
-    } else {
-      await supabase
-        .from("finished_goods_stock")
-        .insert({ product_id: productId, warehouse_id: warehouseId, quantity_pcs: qty });
-    }
+    await adjustFgStock(supabase, productId, warehouseId, qty);
 
     // ৫. stock_ledger এন্ট্রি
     await supabase.from("stock_ledger").insert({

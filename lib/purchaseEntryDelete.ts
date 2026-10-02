@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/client";
 import { DeleteResult, friendlyDeleteError } from "@/lib/deleteResult";
 import { recomputeRawAvgCost } from "@/lib/inventoryCost";
 import { reverseFreightVouchersForEntry } from "@/lib/purchaseFreight";
+import { adjustRawStock } from "@/lib/stockAdjust";
 
 type SupabaseClient = ReturnType<typeof createClient>;
 
@@ -29,14 +30,7 @@ export async function deletePurchaseEntryCascade(
     .from("stock_ledger").select("*").eq("reference_type", "purchase").eq("reference_id", entryId);
 
   for (const ledgerEntry of ledgerEntries ?? []) {
-    const { data: stock } = await supabase
-      .from("raw_material_stock").select("*")
-      .eq("material_id", ledgerEntry.item_id).eq("warehouse_id", ledgerEntry.warehouse_id).maybeSingle();
-    if (stock) {
-      await supabase.from("raw_material_stock")
-        .update({ quantity_lbs: stock.quantity_lbs - ledgerEntry.quantity, updated_at: new Date().toISOString() })
-        .eq("id", stock.id);
-    }
+    await adjustRawStock(supabase, ledgerEntry.item_id, ledgerEntry.warehouse_id, -ledgerEntry.quantity);
   }
   await supabase.from("stock_ledger").delete().eq("reference_type", "purchase").eq("reference_id", entryId);
   await supabase.from("purchase_entry_items").delete().eq("entry_id", entryId);

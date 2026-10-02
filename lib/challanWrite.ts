@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/client";
 import { recalcBookingStatus } from "@/lib/recalcBookingStatus";
 import { reverseInventoryJv } from "@/lib/inventoryCost";
 import { fulfilBookingForChallan, reverseChallanFulfilment } from "@/lib/challanProduction";
+import { adjustFgStock } from "@/lib/stockAdjust";
 
 type SupabaseClient = ReturnType<typeof createClient>;
 
@@ -50,18 +51,7 @@ export async function reverseChallanDerived(
     .from("stock_ledger").select("*")
     .eq("reference_type", "delivery").eq("reference_id", challanId);
   for (const entry of ledgerEntries ?? []) {
-    const { data: stock } = await supabase
-      .from("finished_goods_stock").select("*")
-      .eq("product_id", entry.item_id).eq("warehouse_id", entry.warehouse_id).maybeSingle();
-    if (stock) {
-      await supabase.from("finished_goods_stock")
-        .update({ quantity_pcs: Number(stock.quantity_pcs) + Number(entry.quantity), updated_at: new Date().toISOString() })
-        .eq("id", stock.id);
-    } else {
-      await supabase.from("finished_goods_stock").insert({
-        product_id: entry.item_id, warehouse_id: entry.warehouse_id, quantity_pcs: entry.quantity,
-      });
-    }
+    await adjustFgStock(supabase, entry.item_id, entry.warehouse_id, Number(entry.quantity));
   }
   await supabase.from("stock_ledger").delete()
     .eq("reference_type", "delivery").eq("reference_id", challanId);
@@ -112,17 +102,7 @@ export async function applyChallanLines(
       challanId, challanNo, qtyPcs: li.qtyPcs, date: challanDate,
     });
 
-    const { data: stock } = await supabase
-      .from("finished_goods_stock").select("*")
-      .eq("product_id", li.productId).eq("warehouse_id", li.warehouseId).maybeSingle();
-    if (stock) {
-      await supabase.from("finished_goods_stock")
-        .update({ quantity_pcs: Number(stock.quantity_pcs) - li.qtyPcs, updated_at: new Date().toISOString() })
-        .eq("id", stock.id);
-    } else {
-      await supabase.from("finished_goods_stock")
-        .insert({ product_id: li.productId, warehouse_id: li.warehouseId, quantity_pcs: -li.qtyPcs });
-    }
+    await adjustFgStock(supabase, li.productId, li.warehouseId, -li.qtyPcs);
 
     await supabase.from("stock_ledger").insert({
       item_type: "finished_goods", item_id: li.productId, warehouse_id: li.warehouseId,

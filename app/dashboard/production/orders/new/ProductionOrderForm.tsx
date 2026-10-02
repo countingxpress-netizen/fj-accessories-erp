@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { generateNextDocNo } from "@/lib/docNumber";
 import { postBookingConsumptionJv } from "@/lib/inventoryCost";
 import { money } from "@/lib/format";
+import { adjustRawStock } from "@/lib/stockAdjust";
 
 
 
@@ -96,13 +97,8 @@ export default function ProductionOrderForm({
       return;
     }
 
-    // ২. Stock কমান
-    if (stock) {
-      await supabase
-        .from("raw_material_stock")
-        .update({ quantity_lbs: currentQty - qty, updated_at: new Date().toISOString() })
-        .eq("id", stock.id);
-    }
+    // ২. Stock কমান (এক ধাপে — একসাথে অন্য কেউ সেভ করলেও হারায় না)
+    await adjustRawStock(supabase, materialId, warehouseId, -qty);
 
     // ৩. Stock Ledger এন্ট্রি
     await supabase.from("stock_ledger").insert({

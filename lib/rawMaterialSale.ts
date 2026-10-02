@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/client";
 import { generateNextDocNo } from "@/lib/docNumber";
 import { accountIdByCode, makeVoucher, reverseInventoryJv, COGS_CODE } from "@/lib/inventoryCost";
+import { adjustRawStock } from "@/lib/stockAdjust";
 
 type Client = ReturnType<typeof createClient>;
 
@@ -47,15 +48,8 @@ async function undoRawMaterialSaleEffects(supabase: Client, sale: any): Promise<
     .from("stock_ledger").select("*")
     .eq("reference_type", "raw_material_sale").eq("reference_id", sale.id);
   for (const l of ledgers ?? []) {
-    const { data: stock } = await supabase
-      .from("raw_material_stock").select("*")
-      .eq("material_id", l.item_id).eq("warehouse_id", l.warehouse_id).maybeSingle();
-    if (stock) {
-      const delta = l.txn_type === "out" ? Number(l.quantity) : -Number(l.quantity);
-      await supabase.from("raw_material_stock")
-        .update({ quantity_lbs: Number(stock.quantity_lbs) + delta, updated_at: new Date().toISOString() })
-        .eq("id", stock.id);
-    }
+    const delta = l.txn_type === "out" ? Number(l.quantity) : -Number(l.quantity);
+    await adjustRawStock(supabase, l.item_id, l.warehouse_id, delta);
     await supabase.from("stock_ledger").delete().eq("id", l.id);
   }
 }
@@ -85,17 +79,7 @@ async function applyRawMaterialSaleEffects(
   }).eq("id", saleId);
 
   // Raw Material স্টক কর্তন + ledger — Lbs-এ
-  const { data: stock } = await supabase
-    .from("raw_material_stock").select("*")
-    .eq("material_id", input.materialId).eq("warehouse_id", input.warehouseId).maybeSingle();
-  if (stock) {
-    await supabase.from("raw_material_stock")
-      .update({ quantity_lbs: Number(stock.quantity_lbs) - qtyLbs, updated_at: new Date().toISOString() })
-      .eq("id", stock.id);
-  } else {
-    await supabase.from("raw_material_stock")
-      .insert({ material_id: input.materialId, warehouse_id: input.warehouseId, quantity_lbs: -qtyLbs });
-  }
+  await adjustRawStock(supabase, input.materialId, input.warehouseId, -qtyLbs);
   await supabase.from("stock_ledger").insert({
     item_type: "raw_material", item_id: input.materialId, warehouse_id: input.warehouseId,
     txn_type: "out", quantity: qtyLbs,
