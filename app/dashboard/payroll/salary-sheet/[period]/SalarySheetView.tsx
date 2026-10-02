@@ -52,6 +52,8 @@ export default function SalarySheetView({
   const [payAccountId, setPayAccountId] = useState(cashBankAccounts[0]?.id ?? "");
   const [payDate, setPayDate] = useState(todayLocal());
   const [busyId, setBusyId] = useState<string | null>(null);
+  // বাছাই করা সারি (একসাথে Paid / Unpaid করার জন্য)
+  const [selected, setSelected] = useState<Set<string>>(new Set());
 
   const initEdit = (r: Row): Edit => ({
     basic: String(num(r.basic)), absH: String(num(r.absent_hours)), otH: String(num(r.ot_hours)),
@@ -179,6 +181,26 @@ export default function SalarySheetView({
       if (voucherId) await supabase.from("salary_sheet").update({ paid: true, voucher_id: voucherId }).eq("id", r.id);
     }
     setBusyId(null);
+    setSelected(new Set());
+    router.refresh();
+  }
+
+  // ভুলে Paid হয়ে গেলে: পরিশোধের JV (Dr 2200 / Cr Cash-Bank) মুছে সারি আবার Unpaid।
+  // Accrual JV (বেতন খরচ) যেমন আছে থাকে।
+  async function undoPaid(list: Row[]) {
+    if (list.length === 0) return;
+    const total = list.reduce((s, r) => s + num(r.net_salary), 0);
+    const who = list.length === 1 ? `${list[0].employees?.name}-এর` : `${list.length} জনের মোট`;
+    if (!window.confirm(`${who} ${money(total)} টাকার পরিশোধ বাতিল করবেন? পরিশোধের JV মুছে যাবে, সারি আবার Unpaid হবে।`)) return;
+    setBusyId(list.length === 1 ? list[0].id : "all");
+    setError("");
+    for (const r of list) {
+      await reversePayrollJv(supabase, r.voucher_id, { table: "salary_sheet", column: "voucher_id", id: r.id });
+      const { error: upErr } = await supabase.from("salary_sheet").update({ paid: false, voucher_id: null }).eq("id", r.id);
+      if (upErr) { setError(`${r.employees?.name}: ${upErr.message}`); break; }
+    }
+    setBusyId(null);
+    setSelected(new Set());
     router.refresh();
   }
 
@@ -204,6 +226,17 @@ export default function SalarySheetView({
   }
 
   const unpaid = rows.filter((r) => !r.paid);
+  const selRows = rows.filter((r) => selected.has(r.id));
+  const selUnpaid = selRows.filter((r) => !r.paid);
+  const selPaid = selRows.filter((r) => r.paid);
+  const sumNet = (list: Row[]) => list.reduce((t, r) => t + num(r.net_salary), 0);
+  const allSelected = rows.length > 0 && selected.size === rows.length;
+  const toggle = (id: string) => setSelected((prev) => {
+    const n = new Set(prev);
+    if (n.has(id)) n.delete(id); else n.add(id);
+    return n;
+  });
+  const toggleAll = () => setSelected(allSelected ? new Set() : new Set(rows.map((r) => r.id)));
   const inp = "w-16 rounded border px-1 py-0.5 text-right text-xs";
 
   return (
@@ -218,26 +251,41 @@ export default function SalarySheetView({
               {saving ? "সেভ হচ্ছে..." : `সেভ করুন${dirtyCount ? ` (${dirtyCount})` : ""}`}
             </button>
             <button onClick={cancelEdit} className="rounded-lg border px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50">বাতিল</button>
-            <span className="text-xs text-gray-500">Paid সারি এডিট করা যায় না। "অন্যান্য" ঘরে হাজিরা বোনাস ইত্যাদি বসান। Production কর্মীর Basic/Absent/OT বদলালে OT/সমন্বয় নিজে হিসাব হয় (Total ১০ টাকায় রাউন্ড) — চাইলে হাতে বদলাতে পারবেন।</span>
+            <span className="text-xs text-gray-500">Paid সারি এডিট করা যায় না (আগে "↩ Unpaid" করে নিন)। "অন্যান্য" ঘরে হাজিরা বোনাস ইত্যাদি বসান। Production কর্মীর Basic/Absent/OT বদলালে OT/সমন্বয় নিজে হিসাব হয় (Total ১০ টাকায় রাউন্ড) — চাইলে হাতে বদলাতে পারবেন।</span>
           </>
         ) : (
           <>
             <button onClick={startEdit} className="rounded-lg bg-blue-600 px-4 py-1.5 text-sm text-white">Edit</button>
             <button onClick={() => window.print()} className="rounded-lg bg-gray-900 px-4 py-1.5 text-sm text-white">🖨 Print</button>
             <button onClick={exportExcel} className="rounded-lg bg-green-700 px-4 py-1.5 text-sm text-white">📊 Excel</button>
-            {unpaid.length > 0 && (
-              <span className="ml-auto flex items-center gap-1 text-xs">
-                পরিশোধ:
-                <select value={payAccountId} onChange={(e) => setPayAccountId(e.target.value)} className="rounded border px-1 py-1 text-xs">
-                  {cashBankAccounts.map((a) => <option key={a.id} value={a.id}>{a.account_name}</option>)}
-                </select>
-                <input type="date" value={payDate} onChange={(e) => setPayDate(e.target.value)} className="rounded border px-1 py-1 text-xs" />
+            <span className="ml-auto flex flex-wrap items-center gap-1 text-xs">
+              পরিশোধ:
+              <select value={payAccountId} onChange={(e) => setPayAccountId(e.target.value)} className="rounded border px-1 py-1 text-xs">
+                {cashBankAccounts.map((a) => <option key={a.id} value={a.id}>{a.account_name}</option>)}
+              </select>
+              <input type="date" value={payDate} onChange={(e) => setPayDate(e.target.value)} className="rounded border px-1 py-1 text-xs" />
+              {selected.size > 0 ? (
+                <>
+                  <span className="text-gray-500">বাছাই {selected.size} জন:</span>
+                  <button onClick={() => markPaid(selUnpaid)} disabled={!!busyId || !payAccountId || selUnpaid.length === 0}
+                    className="rounded bg-green-50 px-2 py-1 text-center leading-tight text-green-700 hover:bg-green-100 disabled:opacity-40">
+                    Paid করুন ({selUnpaid.length})
+                    <span className="block text-[11px] font-semibold">৳ {money(sumNet(selUnpaid))}</span>
+                  </button>
+                  <button onClick={() => undoPaid(selPaid)} disabled={!!busyId || selPaid.length === 0}
+                    className="rounded bg-orange-50 px-2 py-1 text-center leading-tight text-orange-700 hover:bg-orange-100 disabled:opacity-40">
+                    ↩ Unpaid করুন ({selPaid.length})
+                    <span className="block text-[11px] font-semibold">৳ {money(sumNet(selPaid))}</span>
+                  </button>
+                  <button onClick={() => setSelected(new Set())} className="rounded border px-2 py-1 text-gray-600 hover:bg-gray-50">বাছাই মুছুন</button>
+                </>
+              ) : unpaid.length > 0 ? (
                 <button onClick={() => markPaid(unpaid)} disabled={!!busyId || !payAccountId}
                   className="rounded bg-green-50 px-2 py-1 text-green-700 hover:bg-green-100 disabled:opacity-40">
                   সব Unpaid Paid করুন ({unpaid.length})
                 </button>
-              </span>
-            )}
+              ) : <span className="text-gray-400">সবাই Paid — বাছাই করে Unpaid করা যায়</span>}
+            </span>
           </>
         )}
       </div>
@@ -261,6 +309,11 @@ export default function SalarySheetView({
         <table className="w-full border-collapse text-xs [&_td]:border [&_td]:px-1.5 [&_td]:py-1 [&_th]:border [&_th]:px-1.5 [&_th]:py-1">
           <thead className="bg-gray-100 text-gray-700">
             <tr>
+              {!editing && (
+                <th rowSpan={2} className="w-6 print:hidden">
+                  <input type="checkbox" checked={allSelected} onChange={toggleAll} title="সব বাছুন" />
+                </th>
+              )}
               <th rowSpan={2}>Sl.</th>
               <th rowSpan={2} className="text-left">Name</th>
               <th rowSpan={2}>Joining Date</th>
@@ -288,6 +341,11 @@ export default function SalarySheetView({
               const e = edits[r.id];
               return (
                 <tr key={r.id} className={editing && isDirty(r) ? "bg-amber-50" : ""}>
+                  {!editing && (
+                    <td className="text-center print:hidden">
+                      <input type="checkbox" checked={selected.has(r.id)} onChange={() => toggle(r.id)} />
+                    </td>
+                  )}
                   <td className="text-center">{i + 1}</td>
                   <td className="whitespace-nowrap">{r.employees?.name}</td>
                   <td className="text-center whitespace-nowrap">{r.employees?.join_date ? formatDate(r.employees.join_date) : ""}</td>
@@ -314,7 +372,13 @@ export default function SalarySheetView({
                   <td className="text-right font-semibold">{money(v.payable)}</td>
                   <td className="whitespace-nowrap text-center print:hidden">
                     {r.paid ? (
-                      <span className="rounded-full bg-green-100 px-2 py-0.5 text-[11px] text-green-700">Paid</span>
+                      <span className="inline-flex items-center gap-1">
+                        <span className="rounded-full bg-green-100 px-2 py-0.5 text-[11px] text-green-700">Paid</span>
+                        {!editing && (
+                          <button onClick={() => undoPaid([r])} disabled={!!busyId} title="ভুলে Paid হলে — পরিশোধ বাতিল করে আবার Unpaid"
+                            className="rounded bg-orange-50 px-1.5 py-0.5 text-[11px] text-orange-700 hover:bg-orange-100 disabled:opacity-40">↩ Unpaid</button>
+                        )}
+                      </span>
                     ) : editing ? (
                       <GuardedAction table="salary_sheet" recordId={r.id} recordLabel={`${r.employees?.name ?? ""} ${label}`} action="delete"
                         onAllowed={() => deleteRow(r)} disabled={!!busyId}
@@ -331,6 +395,7 @@ export default function SalarySheetView({
             {/* মোট — tfoot নয়: প্রিন্টে tfoot প্রতি পাতায় রিপিট হয়, তাই প্রথম পাতার নিচেও
                 পুরো শিটের মোট বসে যেত। সাধারণ শেষ সারি হলে শুধু শেষ পাতায় একবার আসে। */}
             <tr className="break-inside-avoid bg-gray-100 font-semibold">
+              {!editing && <td className="print:hidden" />}
               <td colSpan={4} className="text-right">Total Amount</td>
               <td className="text-right">{money(totals.basic)}</td>
               <td className="text-right">{totals.absH || ""}</td>

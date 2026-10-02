@@ -16,11 +16,11 @@ export default async function SalarySheetPeriodPage({ params }: { params: Promis
     .select("*, employees(name, employee_code, designation, department, join_date)")
     .eq("year", year).eq("month", month);
   const { data: company } = await supabase.from("company_profile").select("name, address, phone, email, logo_url").single();
+  // বেতন পরিশোধ হয় Cash in Hand (1000, ডিফল্ট) থেকে, মাঝে মাঝে আবু জাফর (3000) দেন
   const { data: cashBankAccounts } = await supabase
     .from("chart_of_accounts")
     .select("id, account_code, account_name")
-    .eq("account_type", "asset")
-    .gte("account_code", "1000").lt("account_code", "1100")
+    .in("account_code", ["1000", "3000"])
     .order("account_code");
 
   const sorted = (rows ?? []).sort((a: any, b: any) =>
