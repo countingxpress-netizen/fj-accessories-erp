@@ -6,6 +6,7 @@ import DateRangeFields from "@/components/DateRangeFields";
 import PrintButton from "@/app/dashboard/PrintButton";
 import { buildDayBook, type DbRow } from "@/lib/daybook";
 import type { ExcelSheet } from "@/lib/exportExcel";
+import SealingEntry from "./SealingEntry";
 
 // PDF-এর মতো: হাজার-গ্রুপিং (1,163,440.00), ঋণাত্মক প্যারেন্থেসিসে (133,268.00)
 function fmt(n: number): string {
@@ -86,9 +87,11 @@ export default async function DayBookPage({
   const to = period.to || from;
 
   const supabase = await createClient();
-  const [{ data: company }, data] = await Promise.all([
+  const [{ data: company }, data, { data: sealRow }] = await Promise.all([
     supabase.from("company_profile").select("name, address, phone, email").maybeSingle(),
     buildDayBook(supabase, from, to),
+    // একদিনের DayBook-এ সিলিং এন্ট্রি বক্স — ঐ দিনের আগের এন্ট্রি থাকলে আগে থেকে ভরা
+    supabase.from("daybook_sealing").select("side_pcs, bottom_pcs").eq("seal_date", from).maybeSingle(),
   ]);
 
   const dateText = data.singleDay ? dot(from) : `${dot(from)} - ${dot(to)}`;
@@ -142,6 +145,14 @@ export default async function DayBookPage({
             <Link href="/dashboard/reports/daybook" className="text-sm text-gray-500 hover:underline">রিসেট</Link>
           )}
         </form>
+        {data.singleDay && (
+          <SealingEntry
+            key={from}
+            date={from}
+            side={sealRow ? Number(sealRow.side_pcs) : null}
+            bottom={sealRow ? Number(sealRow.bottom_pcs) : null}
+          />
+        )}
         <PrintButton excelFilename={`DayBook-${from}${to !== from ? `_to_${to}` : ""}`} excelSheets={[{ name: "DayBook", rows: excelRows }]} />
         <p className="mb-4 text-xs text-gray-400">
           নগদ (Cash in Hand) বই। Bank, আবু জাফর (3000), রিপন থিনার (1500) ও এম কে এক্সেসোরিজ (2600) দিয়ে করা লেনদেন pass-through
@@ -276,7 +287,7 @@ export default async function DayBookPage({
             </table>
 
             <p className="text-[10px] text-gray-400 leading-snug">
-              সিলিং = ঐ দিনে cutting-সম্পন্ন Pcs · simple/gusset → বটম, বাকি → সাইড।
+              সিলিং = হাতে দেওয়া এন্ট্রি (থাকলে), নইলে ঐ দিনে cutting-সম্পন্ন Pcs · simple/gusset → বটম, বাকি → সাইড।
               বিবরন-এ "+" মানে একাধিক এন্ট্রির যোগফল।
             </p>
           </div>

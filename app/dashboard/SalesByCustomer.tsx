@@ -46,7 +46,7 @@ export default function SalesByCustomer({ customers, groupMap }: { customers: Cu
       setLoading(true);
       setErr("");
       const q = fetchAllRows<any>(
-        supabase, "sales_invoices", "customer_id, sales_invoice_items(amount, required_lbs, bookings(required_lbs))",
+        supabase, "sales_invoices", "customer_id, daybook_lbs, sales_invoice_items(amount, required_lbs, bookings(required_lbs))",
         (qq) => { if (from) qq = qq.gte("invoice_date", from); if (to) qq = qq.lte("invoice_date", to); return qq; }
       ).then((data) => ({ data, error: null as { message: string } | null }));
       let rmsQ = supabase.from("raw_material_sales").select("customer_id, amount, quantity_lbs");

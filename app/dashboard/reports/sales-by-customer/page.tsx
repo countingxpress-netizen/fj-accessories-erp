@@ -32,7 +32,7 @@ export default async function SalesByCustomerReportPage({
   const groupMap = await loadGroupMap(supabase);
 
   const invoices = await fetchAllRows<any>(
-    supabase, "sales_invoices", "customer_id, sales_invoice_items(amount, required_lbs, bookings(required_lbs))",
+    supabase, "sales_invoices", "customer_id, daybook_lbs, sales_invoice_items(amount, required_lbs, bookings(required_lbs))",
     (q) => { if (from) q = q.gte("invoice_date", from); if (to) q = q.lte("invoice_date", to); return q; }
   );
 

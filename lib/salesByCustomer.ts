@@ -1,6 +1,6 @@
 // "Sales by Customer" রিপোর্টের শেয়ার্ড লজিক — Dashboard widget ও Reports পেজ দুটোই ব্যবহার করে।
 //
-//   Production LBS = ইনভয়েস লাইনের Required Lbs-এর যোগফল
+//   Production LBS = ইনভয়েসে খাতার Lbs (sales_invoices.daybook_lbs) থাকলে সেটা, নইলে লাইনের Required Lbs-এর যোগফল
 //                    (LBS invoice হলে item.required_lbs, নইলে booking.required_lbs)
 //                    + কোনো কাস্টমারের নামে থাকা Raw Material সরাসরি বিক্রির quantity_lbs।
 //   Sales Amount   = Σ sales_invoice_items.amount (standard / lbs / other — সব ধরনের invoice)
@@ -26,6 +26,7 @@ export type SalesByCustomerRow = {
 // তাই ইনপুট আলগা (any) রেখে ভেতরে normalize করা হয় (কোডবেসের বাকি রিপোর্টের মতো)।
 type InvoiceRow = {
   customer_id: string;
+  daybook_lbs?: number | null;
   sales_invoice_items?:
     | {
         amount?: number | null;
@@ -52,7 +53,7 @@ export function aggregateSalesByCustomer(
   invoices.forEach((inv) => {
     const items = inv.sales_invoice_items ?? [];
     const amount = items.reduce((s, i) => s + (i.amount || 0), 0);
-    const lbs = items.reduce((s, i) => {
+    const lbs = inv.daybook_lbs != null ? Number(inv.daybook_lbs) : items.reduce((s, i) => {
       const bk = Array.isArray(i.bookings) ? i.bookings[0] : i.bookings;
       return s + (i.required_lbs ?? bk?.required_lbs ?? 0);
     }, 0);

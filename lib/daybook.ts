@@ -26,6 +26,7 @@ const RIPON_THINAR_CODE = "1500"; // "Paid Via" পার্টি (Expense form
 const MK_ACCESSORIES_CODE = "2600";
 const AR_CODE = "1100";
 const AP_CODE = "2000";
+const ADHESIVE_CODE = "1204"; // কার্টুনে গোনা কাঁচামাল — Lbs স্টক ব্লকে ধরা হয় না
 
 const BOTTOM_SEAL_MTYPES = new Set(["simple", "gusset"]);
 
@@ -326,12 +327,13 @@ export async function buildDayBook(
   // ── Sales invoices (বিক্রি ব্লক + "বিল" + AR + sold Lbs) ──
   const invoices = await fetchAllRows<any>(
     supabase, "sales_invoices",
-    "customer_id, invoice_date, payment_type, customers(name), sales_invoice_items(amount, required_lbs, bookings(required_lbs))",
+    "customer_id, invoice_date, payment_type, daybook_lbs, customers(name), sales_invoice_items(amount, required_lbs, bookings(required_lbs))",
     (q) => q.lte("invoice_date", to)
   );
 
   const invAmt = (inv: any) => (inv.sales_invoice_items ?? []).reduce((s: number, i: any) => s + num(i.amount), 0);
-  const invLbs = (inv: any) =>
+  // খাতার Lbs (daybook_lbs) থাকলে সেটা, নইলে বুকিং/লাইনের Required Lbs
+  const invLbs = (inv: any) => inv.daybook_lbs != null ? num(inv.daybook_lbs) :
     (inv.sales_invoice_items ?? []).reduce((s: number, i: any) => {
       const bk = one<any>(i.bookings);
       return s + num(i.required_lbs ?? bk?.required_lbs ?? 0);
@@ -481,33 +483,45 @@ export async function buildDayBook(
   const arClosing = arOpening + arBikri - arPartyJama;
 
   // ── Raw material stock ব্লক ──
+  // শুধু Lbs-এর কাঁচামাল — এডহেসিভ (1204) কার্টুনে গোনা, তাকে Lbs স্টকে যোগ করলে স্টক বেশি দেখায়
+  const { data: adhesiveMats } = await supabase
+    .from("raw_materials").select("id").eq("inventory_account_code", ADHESIVE_CODE);
+  const nonLbsIds = new Set((adhesiveMats ?? []).map((m: any) => m.id));
+
   const { data: purchRaw } = await supabase
     .from("purchase_entries")
-    .select("entry_date, purchase_entry_items(quantity_lbs)")
+    .select("entry_date, purchase_entry_items(material_id, quantity_lbs)")
     .lte("entry_date", to);
   let purchBefore = 0;
   let stockPurchaseLbs = 0;
   for (const pe of (purchRaw ?? []) as any[]) {
-    const lbs = (pe.purchase_entry_items ?? []).reduce((s: number, i: any) => s + num(i.quantity_lbs), 0);
+    const lbs = (pe.purchase_entry_items ?? [])
+      .filter((i: any) => !nonLbsIds.has(i.material_id))
+      .reduce((s: number, i: any) => s + num(i.quantity_lbs), 0);
     if ((pe.entry_date ?? "") < from) purchBefore += lbs;
     else if ((pe.entry_date ?? "") <= to) stockPurchaseLbs += lbs;
   }
 
-  // opening anchor = ERP opening-inventory (stock_ledger manual_adjustment net)
+  // opening anchor = ERP opening-inventory (stock_ledger manual_adjustment net) — শুধু from-তারিখের আগের
+  // এডজাস্টমেন্ট; মাস-শেষের গোনা-এডজাস্টমেন্ট (যেমন ৩০/৯) পরের দিন থেকে স্টকে ধরা হয়, ঐ মাসের খাতায় নয়
   const ledgerRaw = await fetchAllRows<any>(
-    supabase, "stock_ledger", "txn_type, quantity, reference_type",
-    (q) => q.eq("item_type", "raw_material").eq("reference_type", "manual_adjustment")
+    supabase, "stock_ledger", "item_id, txn_type, quantity, reference_type",
+    (q) => q.eq("item_type", "raw_material").eq("reference_type", "manual_adjustment").lt("txn_date", from)
   );
-  const stockAnchor = (ledgerRaw ?? []).reduce(
-    (s: number, e: any) => s + (e.txn_type === "in" ? num(e.quantity) : -num(e.quantity)),
-    0,
-  );
+  const stockAnchor = (ledgerRaw ?? [])
+    .filter((e: any) => !nonLbsIds.has(e.item_id))
+    .reduce((s: number, e: any) => s + (e.txn_type === "in" ? num(e.quantity) : -num(e.quantity)), 0);
 
   const stockOpening = stockAnchor + purchBefore - soldLbsBefore;
   const stockSoldLbs = bikriLbs;
   const stockClosing = stockOpening + stockPurchaseLbs - stockSoldLbs;
 
-  // ── সাইড / বটম সিলিং (ঐ দিনে cutting-সম্পন্ন pcs) ──
+  // ── সাইড / বটম সিলিং ──
+  //   খাতায় হাতে গোনা সিলিং (daybook_sealing) — রেঞ্জের কোনো দিনের এন্ট্রি থাকলে সেগুলোর যোগফলই দেখায়;
+  //   না থাকলে আগের মতো ঐ দিনে cutting-সম্পন্ন pcs (simple/gusset → বটম, বাকি → সাইড)।
+  const { data: sealRows } = await supabase
+    .from("daybook_sealing").select("side_pcs, bottom_pcs")
+    .gte("seal_date", from).lte("seal_date", to);
   const { data: prodRaw } = await supabase
     .from("production_orders")
     .select("cutting_completed_at, cutting_produced_pcs, quantity_pcs, bookings(measurement_type)")
@@ -521,6 +535,10 @@ export async function buildDayBook(
     const pcs = num(o.cutting_produced_pcs) || num(o.quantity_pcs);
     if (BOTTOM_SEAL_MTYPES.has(mtype)) bottomSealPcs += pcs;
     else sideSealPcs += pcs;
+  }
+  if ((sealRows ?? []).length > 0) {
+    sideSealPcs = (sealRows ?? []).reduce((s: number, r: any) => s + num(r.side_pcs), 0);
+    bottomSealPcs = (sealRows ?? []).reduce((s: number, r: any) => s + num(r.bottom_pcs), 0);
   }
 
   // ── Totals ──
