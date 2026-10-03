@@ -4,6 +4,7 @@ import PrintButton from "@/app/dashboard/PrintButton";
 import { fetchAllRows } from "@/lib/fetchAll";
 import { resolveDatePreset, periodAsOf, formatLongDate } from "@/lib/datePresets";
 import DateRangeFields from "@/components/DateRangeFields";
+import AutoSubmitForm from "@/components/AutoSubmitForm";
 
 const LBS_PER_BAG = 55;
 const money = (n: number) => n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -120,10 +121,9 @@ export default async function StockReportPage({
       <p className="print:hidden text-sm text-gray-500 -mt-2 mb-3">
         {asOfText}{asOf && " — পরিমাণ Stock Ledger অনুযায়ী, প্রতি একক খরচ বর্তমান গড় খরচ"}
       </p>
-      <form className="print:hidden mb-4 flex flex-wrap items-end gap-3">
+      <AutoSubmitForm className="print:hidden mb-4 flex flex-wrap items-end gap-3">
         <DateRangeFields preset={period.preset} from={period.from} to={period.to} includeAll hideFrom toLabel="As of Date" />
-        <button type="submit" className="rounded-lg bg-gray-900 px-4 py-2 text-sm text-white">দেখুন</button>
-      </form>
+      </AutoSubmitForm>
       <PrintButton excelFilename={`Stock-Report${asOf ? `-${asOf}` : ""}`} excelSheets={[{ name: "Stock", rows: excelRows }]} />
 
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mb-6">

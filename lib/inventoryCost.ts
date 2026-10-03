@@ -1,5 +1,6 @@
 import { generateNextDocNo } from "@/lib/docNumber";
 import { getCurrentUserId } from "@/lib/currentUser";
+import { rawRateFor } from "@/lib/rawCost";
 
 // Perpetual inventory & COGS — Booking (কাঁচামাল issue), FG Receive, Delivery
 // Challan, Wastage — সব জায়গায় এই শেয়ার্ড লজিক ব্যবহার হয়।
@@ -9,8 +10,8 @@ import { getCurrentUserId } from "@/lib/currentUser";
 //   Delivery       Dr 5050 COGS          / Cr 1210 FG Inventory
 //   Wastage        Dr 5600 Wastage Loss (+Dr 1203 recycled) / Cr 1220 WIP
 //
-// খরচ: raw material — সব purchase-এর weighted average per lb, ক্রয়ের ভাগ করা
-//      freight/labour সহ (raw_materials.avg_cost_per_lbs; দেখুন lib/purchaseFreight.ts);
+// খরচ: raw material — মাসিক টপশীটের নিয়মে দিনের মিশ্র দর (lib/rawCost.ts → rawRateFor; 2026-10 থেকে),
+//      নিয়মের আগের খোলা মাসে raw_materials.avg_cost_per_lbs;
 //      finished good — issue করা WIP cost ÷ pcs, moving average (finished_goods.avg_cost_per_pc)।
 
 export const WIP_CODE = "1220";          // Work-in-Process Inventory
@@ -65,56 +66,6 @@ export async function makeVoucher(
 }
 
 /**
- * সব purchase history থেকে material-টার weighted average খরচ আবার হিসাব করে বসায়।
- *
- *   avg_cost_per_lbs = ( Σ(qty×rate) + Σ ভাগ করা freight ) ÷ Σ qty
- *
- * ভাগ করা freight: এই material যেসব purchase entry-তে আছে, সেগুলোর প্রতিটা
- * freight charge ওই entry-র মোট Lbs-এর সাপেক্ষে এই material-এর Lbs-অনুপাতে।
- * (freight পরে যোগ/সরানো হলেও পুরো recompute বলে এমনিতেই ধরা পড়ে।)
- */
-export async function recomputeRawAvgCost(supabase: Client, materialId: string): Promise<number> {
-  const { data: myItems } = await supabase
-    .from("purchase_entry_items")
-    .select("entry_id, quantity_lbs, rate_per_lbs")
-    .eq("material_id", materialId);
-
-  let qty = 0, value = 0;
-  const myQtyByEntry = new Map<string, number>();
-  (myItems ?? []).forEach((it: any) => {
-    const q = Number(it.quantity_lbs) || 0;
-    qty += q;
-    value += q * (Number(it.rate_per_lbs) || 0);
-    if (it.entry_id) myQtyByEntry.set(it.entry_id, (myQtyByEntry.get(it.entry_id) ?? 0) + q);
-  });
-
-  let freightShare = 0;
-  const entryIds = [...myQtyByEntry.keys()];
-  if (entryIds.length > 0) {
-    const [{ data: freightRows }, { data: allItems }] = await Promise.all([
-      supabase.from("purchase_freight_charges").select("purchase_entry_id, amount").in("purchase_entry_id", entryIds),
-      supabase.from("purchase_entry_items").select("entry_id, quantity_lbs").in("entry_id", entryIds),
-    ]);
-    if ((freightRows ?? []).length > 0) {
-      const totalQtyByEntry = new Map<string, number>();
-      (allItems ?? []).forEach((it: any) => {
-        if (!it.entry_id) return;
-        totalQtyByEntry.set(it.entry_id, (totalQtyByEntry.get(it.entry_id) ?? 0) + (Number(it.quantity_lbs) || 0));
-      });
-      (freightRows ?? []).forEach((fr: any) => {
-        const totalQ = totalQtyByEntry.get(fr.purchase_entry_id) ?? 0;
-        const myQ = myQtyByEntry.get(fr.purchase_entry_id) ?? 0;
-        if (totalQ > 0) freightShare += (Number(fr.amount) || 0) * (myQ / totalQ);
-      });
-    }
-  }
-
-  const avg = qty > 0 ? round4((value + freightShare) / qty) : 0;
-  await supabase.from("raw_materials").update({ avg_cost_per_lbs: avg }).eq("id", materialId);
-  return avg;
-}
-
-/**
  * Booking — issue করা কাঁচামালের মূল্য WIP-এ তোলে।
  * Dr 1300 WIP (মোট) / Cr প্রতিটা material-এর inventory account (নিজ নিজ মূল্যে)।
  * production_orders.wip_cost = মোট মূল্য বসায়। voucher id ফেরত দেয় (কিছু না হলে null)।
@@ -130,6 +81,7 @@ export async function postBookingConsumptionJv(
 ): Promise<string | null> {
   const byAccount = new Map<string, number>();
   let total = 0;
+  const rateFor = await rawRateFor(supabase, args.date);
 
   for (const l of args.lines) {
     if (!l.materialId || !(l.qtyLbs > 0)) continue;
@@ -137,9 +89,9 @@ export async function postBookingConsumptionJv(
       .from("raw_materials")
       .select("avg_cost_per_lbs, inventory_account_code")
       .eq("id", l.materialId).maybeSingle();
-    const cost = round2(l.qtyLbs * (Number(mat?.avg_cost_per_lbs) || 0));
-    if (cost <= 0) continue;
     const code = mat?.inventory_account_code || "1299";
+    const cost = round2(l.qtyLbs * (rateFor(code) ?? (Number(mat?.avg_cost_per_lbs) || 0)));
+    if (cost <= 0) continue;
     byAccount.set(code, round2((byAccount.get(code) ?? 0) + cost));
     total = round2(total + cost);
   }
@@ -228,8 +180,23 @@ export async function postFgReceiveJv(
   return { voucherId, unitCost, totalCost: transfer };
 }
 
-/** production order-এ issue করা কাঁচামালের গড় খরচ প্রতি lb (consumption mix অনুযায়ী)। */
+/**
+ * production order-এ issue করা কাঁচামালের খরচ প্রতি lb — booking-এর issue JV-র মোট মূল্য ÷ issue করা Lbs
+ * (issue যে দরে হয়েছে সেটাই); JV না পেলে consumption mix × avg_cost_per_lbs।
+ */
 export async function poCostPerLb(supabase: Client, productionOrderId: string): Promise<number> {
+  const { data: po } = await supabase
+    .from("production_orders").select("bookings(inventory_voucher_id)").eq("id", productionOrderId).maybeSingle();
+  const bk = Array.isArray(po?.bookings) ? po.bookings[0] : po?.bookings;
+  if (bk?.inventory_voucher_id) {
+    const [{ data: jl }, { data: cons }] = await Promise.all([
+      supabase.from("journal_entry_lines").select("debit").eq("voucher_id", bk.inventory_voucher_id),
+      supabase.from("material_consumption").select("quantity_lbs").eq("production_id", productionOrderId),
+    ]);
+    const issued = (jl ?? []).reduce((s: number, l: any) => s + (Number(l.debit) || 0), 0);
+    const lbs = (cons ?? []).reduce((s: number, c: any) => s + (Number(c.quantity_lbs) || 0), 0);
+    if (issued > 0 && lbs > 0) return round4(issued / lbs);
+  }
   const { data: rows } = await supabase
     .from("material_consumption")
     .select("quantity_lbs, raw_materials(avg_cost_per_lbs)")
@@ -272,7 +239,8 @@ export async function postWastageJv(
   if (args.recycledQtyLbs > 0) {
     const { data: rec } = await supabase
       .from("raw_materials").select("avg_cost_per_lbs").eq("material_name", "Recycled Chips").maybeSingle();
-    recoveredValue = round2(Math.min(args.recycledQtyLbs, args.qtyLbs) * (Number(rec?.avg_cost_per_lbs) || 0));
+    const recRate = (await rawRateFor(supabase, args.date))(RECYCLED_INV_CODE) ?? (Number(rec?.avg_cost_per_lbs) || 0);
+    recoveredValue = round2(Math.min(args.recycledQtyLbs, args.qtyLbs) * recRate);
   }
 
   const [lossId, wipId, recId] = await Promise.all([

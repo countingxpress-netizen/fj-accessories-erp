@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import TransferRow from "./TransferRow";
 import { resolveDatePreset } from "@/lib/datePresets";
 import DateRangeFields from "@/components/DateRangeFields";
+import AutoSubmitForm from "@/components/AutoSubmitForm";
 
 export default async function WarehouseTransferPage({
   searchParams,
@@ -41,7 +42,7 @@ export default async function WarehouseTransferPage({
         </div>
       </div>
 
-      <form className="mb-4 flex items-end gap-3 flex-wrap">
+      <AutoSubmitForm className="mb-4 flex items-end gap-3 flex-wrap">
         <div>
           <label className="block text-xs text-gray-500 mb-1">Type</label>
           <select name="type" defaultValue={type} className="rounded-lg border px-3 py-2 text-sm">
@@ -51,15 +52,12 @@ export default async function WarehouseTransferPage({
           </select>
         </div>
         <DateRangeFields preset={period.preset} from={period.from} to={period.to} includeAll />
-        <button type="submit" className="rounded-lg bg-gray-900 px-4 py-2 text-sm text-white">
-          ফিল্টার করুন
-        </button>
         {(type || from || to) && (
           <Link href="/dashboard/inventory/warehouse-transfer" className="text-sm text-gray-500 hover:underline">
             রিসেট করুন
           </Link>
         )}
-      </form>
+      </AutoSubmitForm>
 
       <div className="overflow-x-auto rounded-xl border bg-white shadow-sm">
         <table className="w-full text-sm">

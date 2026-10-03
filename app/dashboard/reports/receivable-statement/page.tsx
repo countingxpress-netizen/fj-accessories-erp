@@ -7,6 +7,7 @@ import PrintButton from "@/app/dashboard/PrintButton";
 import { fetchAllRows } from "@/lib/fetchAll";
 import { resolveDatePreset, datePresetLabel } from "@/lib/datePresets";
 import DateRangeFields from "@/components/DateRangeFields";
+import AutoSubmitForm from "@/components/AutoSubmitForm";
 
 // Receivable Statement (কাস্টমার-ওয়াইজ) — সময়ভিত্তিক:
 //   সাবেক বাকি (from-এর আগে) + এই সময়ে বাকি-বিক্রি (Invoiced) − এই সময়ে জমা (Paid) = শেষ বাকি (Due)
@@ -125,10 +126,9 @@ export default async function ReceivableStatementPage({
       </div>
       <p className="text-sm text-gray-500 -mt-2 mb-3">{periodText}</p>
 
-      <form className="print:hidden mb-4 flex flex-wrap items-end gap-3">
+      <AutoSubmitForm className="print:hidden mb-4 flex flex-wrap items-end gap-3">
         <DateRangeFields preset={period.preset} from={period.from} to={period.to} includeAll />
-        <button type="submit" className="rounded-lg bg-gray-900 px-4 py-2 text-sm text-white">দেখুন</button>
-      </form>
+      </AutoSubmitForm>
 
       <PrintButton excelFilename="Receivable-Statement" excelSheets={[{ name: "Receivable", rows: excelRows }]} />
 

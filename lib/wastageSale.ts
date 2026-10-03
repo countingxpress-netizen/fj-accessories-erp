@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/client";
 import { generateNextDocNo } from "@/lib/docNumber";
 import { accountIdByCode, makeVoucher, reverseInventoryJv } from "@/lib/inventoryCost";
 import { adjustRawStock } from "@/lib/stockAdjust";
+import { rawRateFor } from "@/lib/rawCost";
 
 type Client = ReturnType<typeof createClient>;
 
@@ -73,7 +74,9 @@ async function applyWastageSaleEffects(
       .eq("material_name", RECYCLED_MATERIAL_NAME).maybeSingle();
     if (!mat) return { ok: false, error: `"${RECYCLED_MATERIAL_NAME}" material পাওয়া যায়নি।` };
     recycledMaterialId = mat.id;
-    cogs = round2(qtyLbs * (Number(mat.avg_cost_per_lbs) || 0));
+    // মাসিক দর (lib/rawCost.ts); নিয়মের আগের খোলা মাসে Recycled Chips-এর avg cost
+    const rate = (await rawRateFor(supabase, input.saleDate))(RECYCLED_INV_CODE) ?? (Number(mat.avg_cost_per_lbs) || 0);
+    cogs = round2(qtyLbs * rate);
   }
 
   await supabase.from("wastage_sales").update({

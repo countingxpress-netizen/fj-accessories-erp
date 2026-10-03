@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/client";
 import { generateNextDocNo } from "@/lib/docNumber";
 import { accountIdByCode, makeVoucher, reverseInventoryJv, COGS_CODE } from "@/lib/inventoryCost";
 import { adjustRawStock } from "@/lib/stockAdjust";
+import { rawRateFor } from "@/lib/rawCost";
 
 type Client = ReturnType<typeof createClient>;
 
@@ -65,8 +66,10 @@ async function applyRawMaterialSaleEffects(
     .eq("id", input.materialId).maybeSingle();
   if (!mat) return { ok: false, error: "Raw Material পাওয়া যায়নি।" };
 
-  const cogs = round2(qtyLbs * (Number(mat.avg_cost_per_lbs) || 0));
   const invCode = mat.inventory_account_code || FALLBACK_INV_CODE;
+  // মাসিক দর (lib/rawCost.ts); নিয়মের আগের খোলা মাসে material-এর avg cost
+  const rate = (await rawRateFor(supabase, input.saleDate))(invCode) ?? (Number(mat.avg_cost_per_lbs) || 0);
+  const cogs = round2(qtyLbs * rate);
 
   await supabase.from("raw_material_sales").update({
     sale_date: input.saleDate, material_id: input.materialId, warehouse_id: input.warehouseId,

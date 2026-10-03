@@ -4,6 +4,7 @@ import { fetchAllRows } from "@/lib/fetchAll";
 import { money } from "@/lib/format";
 import { resolveDatePreset, datePresetLabel } from "@/lib/datePresets";
 import DateRangeFields from "@/components/DateRangeFields";
+import AutoSubmitForm from "@/components/AutoSubmitForm";
 
 export default async function ProfitLossPage({
   searchParams,
@@ -75,12 +76,9 @@ export default async function ProfitLossPage({
         {datePresetLabel(period)}
       </p>
 
-      <form className="mb-6 flex flex-wrap items-end gap-3">
+      <AutoSubmitForm className="mb-6 flex flex-wrap items-end gap-3">
         <DateRangeFields preset={preset} from={from} to={to} includeAll />
-        <button type="submit" className="rounded-lg bg-gray-900 px-4 py-2 text-sm text-white">
-          ফিল্টার করুন
-        </button>
-      </form>
+      </AutoSubmitForm>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div className="overflow-x-auto rounded-xl border bg-white shadow-sm">

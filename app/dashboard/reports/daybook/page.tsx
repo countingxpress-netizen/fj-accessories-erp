@@ -7,6 +7,7 @@ import PrintButton from "@/app/dashboard/PrintButton";
 import { buildDayBook, type DbRow } from "@/lib/daybook";
 import type { ExcelSheet } from "@/lib/exportExcel";
 import SealingEntry from "./SealingEntry";
+import AutoSubmitForm from "@/components/AutoSubmitForm";
 
 // PDF-এর মতো: হাজার-গ্রুপিং (1,163,440.00), ঋণাত্মক প্যারেন্থেসিসে (133,268.00)
 function fmt(n: number): string {
@@ -138,13 +139,12 @@ export default async function DayBookPage({
             ← Reports-এ ফিরুন
           </Link>
         </div>
-        <form className="mb-4 flex flex-wrap items-end gap-3">
+        <AutoSubmitForm className="mb-4 flex flex-wrap items-end gap-3">
           <DateRangeFields preset={period.preset} from={from} to={to} fromLabel="তারিখ (From)" toLabel="To" />
-          <button type="submit" className="rounded-lg bg-gray-900 px-4 py-2 text-sm text-white">দেখুন</button>
           {(sp.range || sp.from || sp.to) && (
             <Link href="/dashboard/reports/daybook" className="text-sm text-gray-500 hover:underline">রিসেট</Link>
           )}
-        </form>
+        </AutoSubmitForm>
         {data.singleDay && (
           <SealingEntry
             key={from}

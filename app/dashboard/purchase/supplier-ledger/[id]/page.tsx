@@ -5,6 +5,7 @@ import { notFound } from "next/navigation";
 import { money } from "@/lib/format";
 import { resolveDatePreset, datePresetLabel } from "@/lib/datePresets";
 import DateRangeFields from "@/components/DateRangeFields";
+import AutoSubmitForm from "@/components/AutoSubmitForm";
 
 export default async function SupplierLedgerDetailPage({
   params, searchParams,
@@ -63,10 +64,9 @@ export default async function SupplierLedgerDetailPage({
       <h1 className="text-2xl font-semibold mt-2 mb-1">{supplier.name}</h1>
       <p className="text-sm text-gray-500 mb-4">{supplier.address} {supplier.phone && `· ${supplier.phone}`} · {datePresetLabel(period)}</p>
 
-      <form className="mb-4 flex flex-wrap items-end gap-3">
+      <AutoSubmitForm className="mb-4 flex flex-wrap items-end gap-3">
         <DateRangeFields preset={period.preset} from={period.from} to={period.to} includeAll />
-        <button type="submit" className="rounded-lg bg-gray-900 px-4 py-2 text-sm text-white">দেখুন</button>
-      </form>
+      </AutoSubmitForm>
 
       <div className="overflow-x-auto rounded-xl border bg-white shadow-sm">
         <table className="w-full text-sm">

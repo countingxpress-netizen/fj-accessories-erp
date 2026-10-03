@@ -3,13 +3,13 @@
 //   JV:  Dr <material inventory acct 1200-1203/1299 — entry-র Lbs-অনুপাতে ভাগ>
 //        Cr <paid via: Cash 1000 / Bank / Md Abu Jafor 3000 / রিপন থিনার 1500>
 //
-//   raw_materials.avg_cost_per_lbs-এ freight-এর অংশ যোগ হয় recomputeRawAvgCost
-//   (lib/inventoryCost.ts) — যেটা পুরো history নতুন করে হিসাব করে, তাই freight
-//   পরে যোগ/সরালেও এমনিতেই আপডেট হয়।
+//   Freight কাঁচামালের মাসিক দরে ঢোকে (charge_date-এর মাসে; lib/rawCost.ts) — যোগ/সরানোর পরে
+//   recomputeEntryMaterials খোলা মাসগুলো নতুন দরে recost করে।
 //
 //   source = 'with_purchase' (Purchase Entry ফর্ম থেকে) | 'separate' (আলাদা Freight ফর্ম)।
 
-import { accountIdByCode, makeVoucher, recomputeRawAvgCost } from "@/lib/inventoryCost";
+import { accountIdByCode, makeVoucher } from "@/lib/inventoryCost";
+import { recostOpenMonths } from "@/lib/rawCost";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type Client = any;
@@ -24,11 +24,10 @@ export async function materialsInEntry(supabase: Client, purchaseEntryId: string
   return Array.from(new Set((data ?? []).map((r: any) => r.material_id).filter(Boolean))) as string[];
 }
 
-/** entry-র সব material-এর weighted avg cost নতুন করে হিসাব করে। */
-export async function recomputeEntryMaterials(supabase: Client, purchaseEntryId: string): Promise<void> {
-  for (const mid of await materialsInEntry(supabase, purchaseEntryId)) {
-    await recomputeRawAvgCost(supabase, mid);
-  }
+/** Freight বদলানোর পরে — খোলা মাসগুলোর কাঁচামাল দর ও খরচ নতুন করে (entry-র মাস সহ)। */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export async function recomputeEntryMaterials(supabase: Client, _purchaseEntryId: string): Promise<void> {
+  await recostOpenMonths(supabase);
 }
 
 /** একটা freight charge-এর সাথে লিংক করা JV (থাকলে) মুছে দেয় ও voucher_id null করে।

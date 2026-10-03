@@ -3,7 +3,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { generateNextDocNo } from "@/lib/docNumber";
-import { recomputeRawAvgCost } from "@/lib/inventoryCost";
+import { recostOpenMonths } from "@/lib/rawCost";
 import { postFreightJv, deleteWithPurchaseFreight, repostFreightForEntry } from "@/lib/purchaseFreight";
 import { getCurrentUserId } from "@/lib/currentUser";
 import { money } from "@/lib/format";
@@ -166,9 +166,7 @@ export default function PurchaseEntryForm({
         .eq("reference_type", "purchase")
         .eq("reference_id", entryId);
 
-      const touchedMaterialIds = new Set<string>();
       for (const led of oldLedger ?? []) {
-        touchedMaterialIds.add(led.item_id);
         await adjustRawStock(supabase, led.item_id, led.warehouse_id, -led.quantity);
       }
       await supabase.from("stock_ledger").delete().eq("reference_type", "purchase").eq("reference_id", entryId);
@@ -217,7 +215,6 @@ export default function PurchaseEntryForm({
 
       // ৪. নতুন stock প্রভাব প্রয়োগ করুন
       for (const l of validLines) {
-        touchedMaterialIds.add(l.material_id);
         const qty = lineQuantityLbs(l);
 
         await adjustRawStock(supabase, l.material_id, warehouseId, qty);
@@ -250,11 +247,8 @@ export default function PurchaseEntryForm({
       }
       await repostFreightForEntry(supabase, entryId, initialEntryNo);
 
-      // ৬. পুরনো + নতুন — দুই দিকেই থাকা সব material-এর avg cost আবার হিসাব করুন
-      //    (freight যোগ হওয়ার পরে, যাতে ভাগ করা freight ধরা পড়ে)
-      for (const mid of touchedMaterialIds) {
-        await recomputeRawAvgCost(supabase, mid);
-      }
+      // ৬. খোলা মাসগুলোর কাঁচামাল দর ও খরচ নতুন করে (lib/rawCost.ts) — freight যোগ হওয়ার পরে
+      await recostOpenMonths(supabase);
 
       // ৭. Journal Voucher পুনর্গঠন করুন
       const code = creditAccountCode(paymentSource);
@@ -419,11 +413,8 @@ export default function PurchaseEntryForm({
       }
     }
 
-    // ৫. এই এন্ট্রিতে থাকা প্রতিটা material-এর weighted average খরচ নতুন করে
-    //    হিসাব করুন (freight যোগ হওয়ার পরে — perpetual costing)
-    for (const mid of new Set(validLines.map((l) => l.material_id))) {
-      await recomputeRawAvgCost(supabase, mid);
-    }
+    // ৫. খোলা মাসগুলোর কাঁচামাল দর ও খরচ নতুন করে (lib/rawCost.ts) — freight যোগ হওয়ার পরে
+    await recostOpenMonths(supabase);
 
     // ৬. Cash হলে Cash (1000), Md Abu Jafor থেকে হলে 3000, না হলে Accounts Payable (2000) অ্যাকাউন্ট খুঁজুন
     const code = creditAccountCode(paymentSource);

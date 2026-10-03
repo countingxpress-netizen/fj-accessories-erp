@@ -5,6 +5,7 @@ import { money } from "@/lib/format";
 import { resolveDatePreset, periodAsOf } from "@/lib/datePresets";
 import DateRangeFields from "@/components/DateRangeFields";
 import { formatLongDate } from "@/lib/datePresets";
+import AutoSubmitForm from "@/components/AutoSubmitForm";
 
 export default async function BalanceSheetPage({
   searchParams,
@@ -109,12 +110,9 @@ export default async function BalanceSheetPage({
         {asOf ? `${formatLongDate(asOf)} তারিখ পর্যন্ত` : "আজ পর্যন্ত (সব এন্ট্রি)"}
       </p>
 
-      <form className="mb-6 flex flex-wrap items-end gap-3">
+      <AutoSubmitForm className="mb-6 flex flex-wrap items-end gap-3">
         <DateRangeFields preset={period.preset} from={period.from} to={period.to} includeAll hideFrom toLabel="As of Date" />
-        <button type="submit" className="rounded-lg bg-gray-900 px-4 py-2 text-sm text-white">
-          দেখুন
-        </button>
-      </form>
+      </AutoSubmitForm>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* ASSETS */}

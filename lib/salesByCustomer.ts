@@ -1,7 +1,8 @@
 // "Sales by Customer" রিপোর্টের শেয়ার্ড লজিক — Dashboard widget ও Reports পেজ দুটোই ব্যবহার করে।
 //
-//   Production LBS = ইনভয়েসে খাতার Lbs (sales_invoices.daybook_lbs) থাকলে সেটা, নইলে লাইনের Required Lbs-এর যোগফল
-//                    (LBS invoice হলে item.required_lbs, নইলে booking.required_lbs)
+//   Production LBS = ইনভয়েসে খাতার Lbs (sales_invoices.daybook_lbs) থাকলে সেটা, নইলে লাইনের Production Lbs-এর যোগফল
+//                    = booking.required_lbs (যা স্টক থেকে কমে); booking না থাকলে item.required_lbs।
+//                    LBS invoice-এর item.required_lbs = বিল করা অর্ডার Lbs — স্টকের হিসাবে নয় (user 2026-10-04)
 //                    + কোনো কাস্টমারের নামে থাকা Raw Material সরাসরি বিক্রির quantity_lbs।
 //   Sales Amount   = Σ sales_invoice_items.amount (standard / lbs / other — সব ধরনের invoice)
 //                    + কাস্টমারের নামে Raw Material সরাসরি বিক্রি (lib/rawMaterialSale.ts)।
@@ -55,7 +56,7 @@ export function aggregateSalesByCustomer(
     const amount = items.reduce((s, i) => s + (i.amount || 0), 0);
     const lbs = inv.daybook_lbs != null ? Number(inv.daybook_lbs) : items.reduce((s, i) => {
       const bk = Array.isArray(i.bookings) ? i.bookings[0] : i.bookings;
-      return s + (i.required_lbs ?? bk?.required_lbs ?? 0);
+      return s + (bk?.required_lbs ?? i.required_lbs ?? 0);
     }, 0);
     const c = (perCust[inv.customer_id] ??= { amount: 0, lbs: 0, count: 0 });
     c.amount += amount;

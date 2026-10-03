@@ -5,6 +5,7 @@ import { money } from "@/lib/format";
 import { fetchAllRows } from "@/lib/fetchAll";
 import { resolveDatePreset, datePresetLabel } from "@/lib/datePresets";
 import DateRangeFields from "@/components/DateRangeFields";
+import AutoSubmitForm from "@/components/AutoSubmitForm";
 
 const LBS_PER_BAG = 55;
 
@@ -87,10 +88,9 @@ export default async function MaterialStatementPage({
         {" "}· {datePresetLabel(period)}
       </p>
 
-      <form className="mb-4 flex flex-wrap items-end gap-3">
+      <AutoSubmitForm className="mb-4 flex flex-wrap items-end gap-3">
         <DateRangeFields preset={period.preset} from={period.from} to={period.to} includeAll />
-        <button type="submit" className="rounded-lg bg-gray-900 px-4 py-2 text-sm text-white">দেখুন</button>
-      </form>
+      </AutoSubmitForm>
 
       <div className="overflow-x-auto rounded-xl border bg-white shadow-sm">
         <table className="w-full text-sm">

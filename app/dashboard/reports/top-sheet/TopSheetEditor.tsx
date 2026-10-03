@@ -13,6 +13,7 @@ import {
   type TsRow,
   type TsLbsRow,
 } from "@/lib/topSheet";
+import { planTopSheetConfirm, confirmTopSheet, unconfirmTopSheet, type ConfirmPlan } from "@/lib/topSheetConfirm";
 
 const BN_MONTHS = ["জানুয়ারি", "ফেব্রুয়ারি", "মার্চ", "এপ্রিল", "মে", "জুন", "জুলাই", "আগস্ট", "সেপ্টেম্বর", "অক্টোবর", "নভেম্বর", "ডিসেম্বর"];
 const bnDigits = (s: string | number) => String(s).replace(/\d/g, (d) => "০১২৩৪৫৬৭৮৯"[Number(d)]);
@@ -86,11 +87,16 @@ export default function TopSheetEditor({
   initial,
   savedAt,
   showingSaved,
+  confirmedAt,
+  isAdmin,
   company,
 }: {
   initial: TopSheetData;
   savedAt: string | null;
   showingSaved: boolean;
+  /** confirm করা মাস — শীট আর বদলানো যায় না (Admin খুলতে পারেন) */
+  confirmedAt: string | null;
+  isAdmin: boolean;
   company: { name?: string | null; address?: string | null; phone?: string | null; email?: string | null } | null;
 }) {
   const router = useRouter();
@@ -98,6 +104,9 @@ export default function TopSheetEditor({
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [plan, setPlan] = useState<ConfirmPlan | null>(null);
+  const [busy, setBusy] = useState<"" | "plan" | "confirm" | "unconfirm">("");
+  const confirmed = !!confirmedAt;
   const t = useMemo(() => topSheetTotals(d), [d]);
 
   const monthName = BN_MONTHS[d.month - 1];
@@ -130,6 +139,41 @@ export default function TopSheetEditor({
     setSaving(false);
     if (err) { setError(err.message); return; }
     setDirty(false);
+    router.replace(`/dashboard/reports/top-sheet?m=${monthParam}`);
+    router.refresh();
+  }
+
+  // Confirm — আগে কী পোস্ট হবে দেখায় (কিছু লেখে না), তারপর নিশ্চিত করলে confirm
+  async function openConfirm() {
+    setError("");
+    setBusy("plan");
+    try {
+      setPlan(await planTopSheetConfirm(createClient(), d));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+    setBusy("");
+  }
+
+  async function doConfirm() {
+    setError("");
+    setBusy("confirm");
+    const r = await confirmTopSheet(createClient(), d);
+    setBusy("");
+    if (!r.ok) { setError(r.error ?? "Confirm হয়নি।"); return; }
+    setPlan(null);
+    setDirty(false);
+    router.replace(`/dashboard/reports/top-sheet?m=${monthParam}`);
+    router.refresh();
+  }
+
+  async function doUnconfirm() {
+    if (!window.confirm("এই মাসের Confirm খুলবেন? স্টক মেলানোর JV ও Lbs সমন্বয় উল্টে যাবে, আর এই মাস ও পরের খোলা মাসগুলোর কাঁচামাল খরচ আবার নতুন দরে হিসাব হবে।")) return;
+    setError("");
+    setBusy("unconfirm");
+    const r = await unconfirmTopSheet(createClient(), d.year, d.month);
+    setBusy("");
+    if (!r.ok) { setError(r.error ?? "Confirm খোলা যায়নি।"); return; }
     router.replace(`/dashboard/reports/top-sheet?m=${monthParam}`);
     router.refresh();
   }
@@ -198,7 +242,11 @@ export default function TopSheetEditor({
     <div>
       {/* ── অবস্থা + বাটন (প্রিন্ট হয় না) ── */}
       <div className="print:hidden mb-3 flex flex-wrap items-center gap-3 text-sm">
-        {showingSaved ? (
+        {confirmed ? (
+          <span className="rounded-full bg-emerald-600 px-3 py-1 font-medium text-white">
+            🔒 Confirmed (চূড়ান্ত) — {new Date(confirmedAt!).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" })}
+          </span>
+        ) : showingSaved ? (
           <span className="rounded-full bg-green-100 px-3 py-1 text-green-800">
             ✔ সেভ করা শীট — {savedAt ? new Date(savedAt).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" }) : ""}
           </span>
@@ -209,19 +257,35 @@ export default function TopSheetEditor({
         )}
         {dirty && <span className="text-amber-700">● সেভ না করা পরিবর্তন আছে</span>}
         <div className="ml-auto flex gap-2">
-          <button type="button" onClick={reloadFromErp} className="rounded-lg border px-4 py-2 hover:bg-gray-50">↻ ERP থেকে নতুন করে</button>
-          <button type="button" onClick={save} disabled={saving} className="rounded-lg bg-blue-700 px-5 py-2 text-white disabled:opacity-50">
-            {saving ? "সেভ হচ্ছে..." : "💾 সেভ (মাস ক্লোজ)"}
-          </button>
+          {confirmed ? (
+            isAdmin && (
+              <button type="button" onClick={doUnconfirm} disabled={!!busy} className="rounded-lg border border-red-300 px-4 py-2 text-red-700 hover:bg-red-50 disabled:opacity-50">
+                {busy === "unconfirm" ? "খোলা হচ্ছে..." : "🔓 Un-confirm (Admin)"}
+              </button>
+            )
+          ) : (
+            <>
+              <button type="button" onClick={reloadFromErp} className="rounded-lg border px-4 py-2 hover:bg-gray-50">↻ ERP থেকে নতুন করে</button>
+              <button type="button" onClick={save} disabled={saving || !!busy} className="rounded-lg bg-blue-700 px-5 py-2 text-white disabled:opacity-50">
+                {saving ? "সেভ হচ্ছে..." : "💾 সেভ (খসড়া)"}
+              </button>
+              <button type="button" onClick={openConfirm} disabled={saving || !!busy} className="rounded-lg bg-emerald-700 px-5 py-2 text-white disabled:opacity-50">
+                {busy === "plan" ? "হিসাব হচ্ছে..." : "✔ Confirm (চূড়ান্ত)"}
+              </button>
+            </>
+          )}
         </div>
       </div>
       {error && <p className="print:hidden mb-3 rounded bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+      {plan && !confirmed && <ConfirmPanel plan={plan} busy={busy === "confirm"} onConfirm={doConfirm} onCancel={() => setPlan(null)} />}
       <p className="print:hidden mb-3 text-xs text-gray-500">
-        হলুদ হয়ে ওঠা যেকোনো ঘরে ক্লিক করে নাম/সংখ্যা বদলানো যায়। সেভ করলে পুরো শীট এই মাসের জন্য জমা থাকে, আর পরের মাসের
-        &quot;আগের মাসের স্টক&quot; এখান থেকে আসে।
+        {confirmed
+          ? "এই মাস Confirm করা — শীট আর বদলানো যায় না। পরের মাসের “আগের মাসের স্টক” ও কাঁচামালের দর এখান থেকে আসে।"
+          : "হলুদ হয়ে ওঠা যেকোনো ঘরে ক্লিক করে নাম/সংখ্যা বদলানো যায়। সেভ (খসড়া) যতবার খুশি; “Confirm” করলে মাস চূড়ান্ত হয় — ERP-র স্টক এই শীটে মেলে, আর পরের মাসের “আগের মাসের স্টক” ও কাঁচামালের দর এখান থেকে আসে।"}
       </p>
       <PrintButton excelFilename={`TopSheet-${monthParam}`} excelSheets={[{ name: "TopSheet", rows: excelRows }]} />
 
+      <fieldset disabled={confirmed} className="m-0 min-w-0 border-0 p-0">
       <div className="bg-white text-gray-900 text-[12px] leading-tight print:text-[10.5px]">
         {/* ══════════ পেজ ১ ══════════ */}
         <div className="text-center mb-1">
@@ -534,6 +598,74 @@ export default function TopSheetEditor({
             <span className="ml-2 font-normal text-[11px] text-gray-500">= (আগের স্টক + ক্রয়) টাকা ÷ (আগের স্টক + ক্রয়) এল বি এস</span>
           </p>
         </div>
+      </div>
+      </fieldset>
+    </div>
+  );
+}
+
+/** Confirm-এর আগে — কী পোস্ট হবে তার সারাংশ */
+function ConfirmPanel({ plan, busy, onConfirm, onCancel }: { plan: ConfirmPlan; busy: boolean; onConfirm: () => void; onCancel: () => void }) {
+  const row = "flex justify-between gap-4 py-1";
+  return (
+    <div className="print:hidden mb-4 rounded-xl border-2 border-emerald-600 bg-emerald-50/40 p-4 text-sm">
+      <h3 className="mb-2 text-base font-semibold text-emerald-800">Confirm — {plan.name}</h3>
+      <div className="grid gap-4 md:grid-cols-2">
+        <div className="rounded-lg border bg-white p-3">
+          <div className={row}><span className="text-gray-500">টপশীটের closing স্টক</span><span className="font-medium">{qty(plan.sheet.closingLbs)} Lbs · ৳{money(plan.sheet.closingValue)}</span></div>
+          <div className={row}><span className="text-gray-500">প্রতি Lbs দর</span><span>{money(plan.sheet.rate)}</span></div>
+          <div className={row}><span className="text-gray-500">Adhesive</span><span>{qty(plan.sheet.adhCartons)} ctn · ৳{money(plan.sheet.adhValue)}</span></div>
+          <div className={`${row} mt-1 border-t pt-2`}><span className="text-gray-500">ERP-তে এখন</span><span>{qty(plan.erp.polyLbs)} Lbs · ৳{money(plan.erp.polyValue)}</span></div>
+          <div className={row}><span className="text-gray-500">ERP Adhesive</span><span>{qty(plan.erp.adhQty)} ctn · ৳{money(plan.erp.adhValue)}</span></div>
+        </div>
+        <div className="rounded-lg border bg-white p-3">
+          <div className={row}><span className="text-gray-500">ERP-র লাভ/লস — এখন</span><span>{money(plan.erp.profit)}</span></div>
+          <div className={row}><span className="text-gray-500">Confirm-এর পরে</span><span className="font-semibold">{money(plan.profitAfter)}</span></div>
+          <div className={row}><span className="text-gray-500">টপশীটের লাভ/লস</span><span className="font-semibold">{money(plan.sheet.netProfit)}</span></div>
+          <div className={`${row} mt-1 border-t pt-2`}>
+            <span className="text-gray-500">স্টক Lbs সমন্বয়</span>
+            <span className="text-right">
+              {plan.adjustments.length === 0 ? "নেই" : plan.adjustments.map((a) => (
+                <div key={a.materialId}>{a.materialName} {a.qty > 0 ? "+" : ""}{qty(a.qty)} {a.unit} ({a.warehouseName})</div>
+              ))}
+            </span>
+          </div>
+        </div>
+      </div>
+      <div className="mt-3 overflow-x-auto rounded-lg border bg-white">
+        <div className="border-b px-3 py-2 text-gray-600">
+          স্টক মেলানোর Journal Voucher — {plan.end}{plan.lines.length === 0 && " (দরকার নেই — খাতা আগেই মিলে আছে)"}
+        </div>
+        {plan.lines.length > 0 && (
+          <table className="w-full">
+            <thead className="text-left text-gray-500">
+              <tr><th className="px-3 py-1 font-normal">Account</th><th className="px-3 py-1 text-right font-normal">Dr</th><th className="px-3 py-1 text-right font-normal">Cr</th></tr>
+            </thead>
+            <tbody>
+              {plan.lines.map((l) => (
+                <tr key={l.code} className="border-t">
+                  <td className="px-3 py-1">{l.code} - {l.name}</td>
+                  <td className="px-3 py-1 text-right">{l.debit ? money(l.debit) : ""}</td>
+                  <td className="px-3 py-1 text-right">{l.credit ? money(l.credit) : ""}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+      {plan.warnings.length > 0 && (
+        <ul className="mt-3 list-disc space-y-1 pl-5 text-amber-800">
+          {plan.warnings.map((w) => <li key={w}>{w}</li>)}
+        </ul>
+      )}
+      <p className="mt-3 text-xs text-gray-600">
+        Confirm করলে এই শীট সেভ হবে ও আর বদলানো যাবে না (Admin খুলতে পারবেন); এই মাসের কাঁচামাল দর lock হবে, আর পরের মাসগুলোর খরচ নতুন Opening ধরে আবার হিসাব হবে।
+      </p>
+      <div className="mt-3 flex gap-2">
+        <button type="button" onClick={onConfirm} disabled={busy} className="rounded-lg bg-emerald-700 px-5 py-2 text-white disabled:opacity-50">
+          {busy ? "Confirm হচ্ছে..." : "✔ নিশ্চিত — Confirm করুন"}
+        </button>
+        <button type="button" onClick={onCancel} disabled={busy} className="rounded-lg border px-4 py-2 hover:bg-gray-50">বাতিল</button>
       </div>
     </div>
   );

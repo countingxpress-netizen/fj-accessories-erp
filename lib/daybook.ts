@@ -332,11 +332,12 @@ export async function buildDayBook(
   );
 
   const invAmt = (inv: any) => (inv.sales_invoice_items ?? []).reduce((s: number, i: any) => s + num(i.amount), 0);
-  // খাতার Lbs (daybook_lbs) থাকলে সেটা, নইলে বুকিং/লাইনের Required Lbs
+  // খাতার Lbs (daybook_lbs) থাকলে সেটা, নইলে বুকিং-এর Production Lbs (স্টক থেকে যা কমে); বুকিং না থাকলে লাইনের Lbs
+  // — LBS invoice-এর লাইনের Lbs বিল করা অর্ডার Lbs, তাই বুকিং আগে
   const invLbs = (inv: any) => inv.daybook_lbs != null ? num(inv.daybook_lbs) :
     (inv.sales_invoice_items ?? []).reduce((s: number, i: any) => {
       const bk = one<any>(i.bookings);
-      return s + num(i.required_lbs ?? bk?.required_lbs ?? 0);
+      return s + num(bk?.required_lbs ?? i.required_lbs ?? 0);
     }, 0);
 
   // বিক্রি ব্লক = ঐ দিনের সব বিক্রি (নগদ + বাকি), Lbs/পার্টি-ভিত্তিক — sales-invoice

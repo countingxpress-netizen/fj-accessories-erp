@@ -5,6 +5,7 @@ import { money } from "@/lib/format";
 import { fetchAllRows, fetchAllRowsIn } from "@/lib/fetchAll";
 import { resolveDatePreset } from "@/lib/datePresets";
 import DateRangeFields from "@/components/DateRangeFields";
+import AutoSubmitForm from "@/components/AutoSubmitForm";
 
 const referenceLabels: Record<string, string> = {
   manual_adjustment: "Manual Adjustment",
@@ -66,7 +67,7 @@ export default async function StockLedgerPage({
         </Link>
       </div>
 
-      <form className="mb-4 flex items-end gap-3 flex-wrap">
+      <AutoSubmitForm className="mb-4 flex items-end gap-3 flex-wrap">
         <div>
           <label className="block text-xs text-gray-500 mb-1">Item Type</label>
           <select name="itemType" defaultValue={itemType} className="rounded-lg border px-3 py-2 text-sm">
@@ -76,15 +77,12 @@ export default async function StockLedgerPage({
           </select>
         </div>
         <DateRangeFields preset={period.preset} from={period.from} to={period.to} includeAll />
-        <button type="submit" className="rounded-lg bg-gray-900 px-4 py-2 text-sm text-white">
-          ফিল্টার করুন
-        </button>
         {(itemType || from || to) && (
           <Link href="/dashboard/inventory/stock-ledger" className="text-sm text-gray-500 hover:underline">
             রিসেট করুন
           </Link>
         )}
-      </form>
+      </AutoSubmitForm>
 
       <div className="overflow-x-auto rounded-xl border bg-white shadow-sm">
         <table className="w-full text-sm">

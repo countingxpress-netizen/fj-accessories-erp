@@ -6,6 +6,7 @@ import PrintButton from "@/app/dashboard/PrintButton";
 import { fetchAllRows } from "@/lib/fetchAll";
 import { resolveDatePreset } from "@/lib/datePresets";
 import DateRangeFields from "@/components/DateRangeFields";
+import AutoSubmitForm from "@/components/AutoSubmitForm";
 
 export default async function ProductionReportPage({
   searchParams,
@@ -59,10 +60,9 @@ export default async function ProductionReportPage({
 
       <PrintButton excelFilename="Production-Report" excelSheets={[{ name: "Production", rows: excelRows }]} />
 
-      <form className="print:hidden mb-4 flex flex-wrap items-end gap-3">
+      <AutoSubmitForm className="print:hidden mb-4 flex flex-wrap items-end gap-3">
         <DateRangeFields preset={period.preset} from={period.from} to={period.to} includeAll />
-        <button type="submit" className="rounded-lg bg-gray-900 px-4 py-2 text-sm text-white">ফিল্টার করুন</button>
-      </form>
+      </AutoSubmitForm>
 
       <div className="grid grid-cols-3 gap-4 mb-6">
         <div className="rounded-xl border bg-white p-4 shadow-sm">

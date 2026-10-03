@@ -62,15 +62,21 @@ Uses `Order Thickness` (not Production Thickness or PI Thickness — there are T
 
 Uses `pi\_thickness\_mm` (separate from order/production thickness). Buyer-level pricing rules stored on `buyers` table: `pricing\_rule` (manual/percentage/rate\_per\_lbs), `percentage\_value`, `rate\_per\_lbs\_value`.
 
-### Raw material weighted-average cost (`raw_materials.avg_cost_per_lbs`)
+### Raw material cost — monthly TopSheet rate (`lib/rawCost.ts`) — set by the user 2026-10-04, DO NOT CHANGE without confirmation
 
 ```
-avg_cost_per_lbs = ( Σ(qty × rate)  +  Σ allocated freight ) / Σ qty
+rate on day D = (month Opening value + purchases from the 1st up to D + freight)
+              ÷ (Opening Lbs + purchased Lbs up to D)                    (r2, like TopSheet "প্রতি Lbs ক্রয়মূল্য")
 ```
 
-* Recomputed from full purchase history every time by `recomputeRawAvgCost` (`lib/inventoryCost.ts`) — never incremental.
+* ONE blended rate for all raw materials (LLDPE/LDPE/PP/Chips/…); Adhesive (1204, cartons) uses the same formula with its own numbers.
+* Month Opening = previous month's **confirmed** TopSheet closing (Lbs/value, Adhesive cartons/value); if that month isn't confirmed, ERP stock_ledger Lbs + inventory GL at its month end.
+* Used for every raw-material outflow: booking issue (→ invoice COGS), Raw Material sale, Recycled-Chips wastage sale, booking extra wastage, Material expense. Posting code calls `rawRateFor(date)`; `null` (open month before `RAW_COST_RULE_START = "2026-10"`) → old `avg_cost_per_lbs`.
+* Not fixed until the month's TopSheet is **Confirmed**: purchase/freight save/edit/delete calls `recostOpenMonths`, which rewrites the open months' JV amounts in place (same voucher numbers) at the new rates. `raw_materials.avg_cost_per_lbs` now just mirrors today's rate (display/fallback).
+* Confirm (`lib/topSheetConfirm.ts`, TopSheet page; migration 20261004100000): saves the sheet, final recost, sets ERP closing stock = TopSheet closing — Lbs difference (only if ≥ 1 Lbs — smaller is the sheet's bag rounding, ERP keeps the physical count) into LLDPE (own warehouse) via stock_ledger `topsheet_confirm`, value difference via one true-up JV (each inventory account = Lbs × TopSheet rate, rounding to LLDPE, Adhesive = sheet value; contra 5050). Rates of a confirmed month are locked (new entries use the sheet's final rate); entries in that month can still be added/edited. Un-confirm = Admin only, reverses JV + Lbs adjustment. List: `/dashboard/reports/top-sheet/confirmed`.
+* Not recosted: WIP-based production wastage and FG receive JVs (no longer used in practice); the confirm true-up absorbs any drift.
 * **Freight is capitalised into inventory cost** (not a period expense). Each `purchase_freight_charges` row is split across that purchase entry's material lines **by Lbs proportion**; JV = Dr Raw Material Inventory (1200–1203/1299, per material) / Cr Cash-Bank / Md Abu Jafor (never credit/payable). Logic: `lib/purchaseFreight.ts`. Two entry points — a field on the Purchase Entry form (`source='with_purchase'`) and a standalone `/dashboard/purchase/freight` form (`source='separate'`); one purchase can carry many freight charges.
-* Adding/removing freight after material was already issued to production does NOT retroactively fix past WIP/COGS (normal moving-average limitation).
+* Freight counts in the rate of its `charge_date` month; adding/removing it re-costs that month only while it is still open.
 
 ### 1 Bag = 25 Kg = 55 Lbs (conversion constant, LBS\_PER\_BAG = 55)
 

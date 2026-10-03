@@ -5,6 +5,7 @@ import ExpensesTable from "./ExpensesTable";
 import { money } from "@/lib/format";
 import { resolveDatePreset } from "@/lib/datePresets";
 import DateRangeFields from "@/components/DateRangeFields";
+import AutoSubmitForm from "@/components/AutoSubmitForm";
 
 export default async function ExpensesPage({
   searchParams,
@@ -70,10 +71,9 @@ export default async function ExpensesPage({
         } : null}
       />
 
-      <form className="mt-6 mb-4 flex flex-wrap items-end gap-3">
+      <AutoSubmitForm className="mt-6 mb-4 flex flex-wrap items-end gap-3">
         <DateRangeFields preset={period.preset} from={period.from} to={period.to} includeAll />
-        <button type="submit" className="rounded-lg bg-gray-900 px-4 py-2 text-sm text-white">ফিল্টার করুন</button>
-      </form>
+      </AutoSubmitForm>
 
       <div className="rounded-xl border bg-white p-4 shadow-sm mb-4 max-w-xs">
         <p className="text-xs text-gray-500">Total Expense</p>

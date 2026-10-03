@@ -1,13 +1,15 @@
 import { createClient } from "@/lib/supabase/client";
 import { accountIdByCode, makeVoucher, reverseInventoryJv } from "@/lib/inventoryCost";
 import { adjustRawStock } from "@/lib/stockAdjust";
+import { rawRateFor } from "@/lib/rawCost";
 
 // Material খরচ (consumption → Expense) — যেমন মাস শেষে এডহেসিভ কত কার্টন খরচ হলো।
 //   স্টক      : raw_material_stock কমে + stock_ledger "out" (reference_type='material_expense',
 //               reference_id = JV-এর id)
 //   JV        : Dr বেছে নেওয়া Expense হেড (যেমন 5011 এডহেসিভ খরচ) / Cr material-এর inventory
 //               account (raw_materials.inventory_account_code, যেমন 1204 Adhesive)
-//   টাকা      : পরিমাণ × রেট (ডিফল্ট রেট = avg_cost_per_lbs; কার্টনের জন্যও এই কলামেই রেট থাকে)
+//   টাকা      : পরিমাণ × রেট — রেট = ঐ তারিখের মাসিক দর (lib/rawCost.ts; Adhesive-এর নিজের দর);
+//               নিয়মের আগের খোলা মাসে ফর্মে দেওয়া রেট (ডিফল্ট avg_cost_per_lbs)
 // আলাদা টেবিল নেই — এন্ট্রি = JV (source='material_expense') + তার stock_ledger লাইন।
 
 type Client = ReturnType<typeof createClient>;
@@ -31,7 +33,8 @@ export type MaterialExpenseInput = {
 export async function createMaterialExpense(
   supabase: Client, input: MaterialExpenseInput,
 ): Promise<{ ok: boolean; error?: string }> {
-  const amount = round2(input.quantity * input.rate);
+  const rate = (await rawRateFor(supabase, input.date))(input.inventoryAccountCode || "1299") ?? input.rate;
+  const amount = round2(input.quantity * rate);
   if (!(input.quantity > 0) || !(amount > 0)) return { ok: false, error: "পরিমাণ ও রেট শূন্যের বেশি হতে হবে।" };
 
   const invId = await accountIdByCode(supabase, input.inventoryAccountCode || "1299");

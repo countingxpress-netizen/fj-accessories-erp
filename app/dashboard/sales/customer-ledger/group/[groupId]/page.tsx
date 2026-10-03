@@ -7,6 +7,7 @@ import { fetchAllRowsIn } from "@/lib/fetchAll";
 import { adjustmentSigned } from "@/lib/customerAdjustment";
 import { resolveDatePreset } from "@/lib/datePresets";
 import DateRangeFields from "@/components/DateRangeFields";
+import AutoSubmitForm from "@/components/AutoSubmitForm";
 
 export default async function GroupLedgerPage({
   params, searchParams,
@@ -169,13 +170,12 @@ export default async function GroupLedgerPage({
         </p>
       ) : (
         <>
-          <form className="mb-4 flex flex-wrap items-end gap-3">
+          <AutoSubmitForm className="mb-4 flex flex-wrap items-end gap-3">
             <DateRangeFields preset={period.preset} from={period.from} to={period.to} includeAll />
-            <button type="submit" className="rounded-lg bg-gray-900 px-4 py-2 text-sm text-white">দেখুন</button>
             {range && (
               <Link href={`/dashboard/sales/customer-ledger/group/${group.id}`} className="text-sm text-gray-500 hover:underline">রিসেট করুন</Link>
             )}
-          </form>
+          </AutoSubmitForm>
 
           <div className="overflow-x-auto rounded-xl border bg-white shadow-sm mb-6">
             <table className="w-full text-sm">

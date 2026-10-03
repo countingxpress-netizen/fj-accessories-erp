@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/client";
 import { DeleteResult, friendlyDeleteError } from "@/lib/deleteResult";
-import { recomputeRawAvgCost } from "@/lib/inventoryCost";
+import { recostOpenMonths } from "@/lib/rawCost";
 import { reverseFreightVouchersForEntry } from "@/lib/purchaseFreight";
 import { adjustRawStock } from "@/lib/stockAdjust";
 
@@ -11,21 +11,14 @@ type SupabaseClient = ReturnType<typeof createClient>;
  * made (via its "purchase" stock_ledger entries), deletes those ledger
  * entries + purchase_entry_items, reverses any freight charge JVs, cleans up
  * the linked purchase Journal Voucher (voucherId), deletes the entry itself
- * (which cascade-deletes its purchase_freight_charges rows), then recomputes
- * the weighted-average cost of every material the entry touched.
+ * (which cascade-deletes its purchase_freight_charges rows), then re-costs the
+ * open (unconfirmed) months at the monthly raw-material rate (lib/rawCost.ts).
  */
 export async function deletePurchaseEntryCascade(
   supabase: SupabaseClient,
   entryId: string,
   voucherId?: string | null
 ): Promise<DeleteResult> {
-  // এই entry কোন কোন material ছুঁয়েছে — শেষে avg cost recompute করতে
-  const { data: entryItems } = await supabase
-    .from("purchase_entry_items").select("material_id").eq("entry_id", entryId);
-  const materialIds = Array.from(
-    new Set((entryItems ?? []).map((r) => r.material_id).filter(Boolean))
-  ) as string[];
-
   const { data: ledgerEntries } = await supabase
     .from("stock_ledger").select("*").eq("reference_type", "purchase").eq("reference_id", entryId);
 
@@ -48,6 +41,7 @@ export async function deletePurchaseEntryCascade(
     await supabase.from("journal_vouchers").delete().eq("id", voucherId);
   }
 
-  for (const mid of materialIds) await recomputeRawAvgCost(supabase, mid);
+  // ক্রয় সরলো — খোলা মাসগুলোর কাঁচামাল দর ও খরচ নতুন করে (lib/rawCost.ts)
+  await recostOpenMonths(supabase);
   return { ok: true };
 }

@@ -13,6 +13,7 @@ import {
 import { fetchAllRows } from "@/lib/fetchAll";
 import DateRangeFields from "@/components/DateRangeFields";
 import type { DatePreset } from "@/lib/datePresets";
+import AutoSubmitForm from "@/components/AutoSubmitForm";
 
 export default async function SalesByCustomerReportPage({
   searchParams,
@@ -77,7 +78,7 @@ export default async function SalesByCustomerReportPage({
           </Link>
         </div>
 
-        <form className="mb-4 flex flex-wrap items-end gap-3">
+        <AutoSubmitForm className="mb-4 flex flex-wrap items-end gap-3">
           <DateRangeFields preset={effectiveRange as DatePreset} from={customFrom ?? ""} to={customTo ?? ""} includeAll />
           <div>
             <label className="block text-xs text-gray-500 mb-1">Customer</label>
@@ -90,15 +91,12 @@ export default async function SalesByCustomerReportPage({
               ))}
             </select>
           </div>
-          <button type="submit" className="rounded-lg bg-gray-900 px-4 py-2 text-sm text-white">
-            Run Report
-          </button>
           {(range || customer || customFrom || customTo) && (
             <Link href="/dashboard/reports/sales-by-customer" className="text-sm text-gray-500 hover:underline">
               রিসেট
             </Link>
           )}
-        </form>
+        </AutoSubmitForm>
 
         <PrintButton excelFilename="Sales-by-Customer" excelSheets={[{ name: "Sales", rows: excelRows }]} />
       </div>

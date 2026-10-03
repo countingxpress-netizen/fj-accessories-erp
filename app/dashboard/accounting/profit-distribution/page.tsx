@@ -4,6 +4,7 @@ import { todayLocal } from "@/lib/payroll";
 import { money } from "@/lib/format";
 import { monthNetProfit, distributedVoucherNo, splitProfit, monthLabel } from "@/lib/profitDistribution";
 import DistributeForm from "./DistributeForm";
+import AutoSubmitForm from "@/components/AutoSubmitForm";
 
 export default async function ProfitDistributionPage({
   searchParams,
@@ -38,13 +39,12 @@ export default async function ProfitDistributionPage({
         এক মাসে একবার।
       </p>
 
-      <form className="mb-6 flex items-end gap-3">
+      <AutoSubmitForm className="mb-6 flex items-end gap-3">
         <div>
           <label className="block text-xs text-gray-500 mb-1">মাস</label>
           <input type="month" name="m" defaultValue={monthValue} className="rounded-lg border px-3 py-2 text-sm" />
         </div>
-        <button type="submit" className="rounded-lg bg-gray-900 px-4 py-2 text-sm text-white">দেখুন</button>
-      </form>
+      </AutoSubmitForm>
 
       <div className="rounded-xl border bg-white shadow-sm overflow-x-auto mb-4">
         <div className="bg-gray-50 px-4 py-2 text-sm font-semibold text-gray-700">{monthLabel(year, month)}</div>

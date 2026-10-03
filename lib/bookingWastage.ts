@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/client";
 import { accountIdByCode, makeVoucher, reverseInventoryJv } from "@/lib/inventoryCost";
 import { adjustRawStock } from "@/lib/stockAdjust";
+import { rawRateFor } from "@/lib/rawCost";
 
 type Client = ReturnType<typeof createClient>;
 
@@ -61,6 +62,8 @@ async function applyBookingWastageEffects(
 
   const byAccount = new Map<string, number>();
   let wastedValue = 0;
+  // মাসিক দর (lib/rawCost.ts); নিয়মের আগের খোলা মাসে material-এর avg cost
+  const rateFor = await rawRateFor(supabase, input.wastageDate);
   for (const m of input.materials) {
     const share = (m.bookingQtyLbs || 0) / totalBookingLbs;
     const wastedQty = round2(qty * share);
@@ -73,7 +76,7 @@ async function applyBookingWastageEffects(
       reference_type: "wastage", reference_id: wastageId, txn_date: input.wastageDate,
     });
 
-    const val = round2(wastedQty * (m.avgCost || 0));
+    const val = round2(wastedQty * (rateFor(m.code || "1299") ?? (m.avgCost || 0)));
     wastedValue = round2(wastedValue + val);
     const code = m.code || "1299";
     byAccount.set(code, round2((byAccount.get(code) ?? 0) + val));
@@ -84,7 +87,7 @@ async function applyBookingWastageEffects(
     const { data: rec } = await supabase
       .from("raw_materials").select("id, avg_cost_per_lbs").eq("material_name", RECYCLED_MATERIAL_NAME).maybeSingle();
     if (rec) {
-      recoveredValue = round2(qty * (Number(rec.avg_cost_per_lbs) || 0));
+      recoveredValue = round2(qty * (rateFor(RECYCLED_INV_CODE) ?? (Number(rec.avg_cost_per_lbs) || 0)));
       await adjustRawStock(supabase, rec.id, input.recycledWarehouseId, qty);
       await supabase.from("stock_ledger").insert({
         item_type: "raw_material", item_id: rec.id, warehouse_id: input.recycledWarehouseId,

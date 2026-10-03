@@ -1,129 +1,37 @@
-"use client";
-
 // Dashboard widget — "Sales by Customer" (Production LBS সহ)।
-// আগের "সাম্প্রতিক Sales Invoice" কার্ডের জায়গায় বসে।
+// Dashboard-এর উপরের ফিল্টার বার (Date Range / Customer) অনুযায়ী সার্ভারেই হিসাব হয়ে সারি আসে —
+// এই কম্পোনেন্ট শুধু টেবিল দেখায়, নিজের আলাদা ফিল্টার নেই।
 // পূর্ণ প্রিন্টযোগ্য রিপোর্ট: /dashboard/reports/sales-by-customer
 //
 // হিসাবের নিয়ম lib/salesByCustomer.ts-এ (Reports পেজের সাথে শেয়ার করা)।
 
-import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { createClient } from "@/lib/supabase/client";
 import { money, qty } from "@/lib/format";
-import { type GroupMap, ledgerHref } from "@/lib/customerGroups";
-import {
-  aggregateSalesByCustomer,
-  salesEntityOptions,
-  resolveSalesRange,
-  SALES_RANGE_OPTIONS,
-  type SalesByCustomerRow,
-} from "@/lib/salesByCustomer";
-import { fetchAllRows } from "@/lib/fetchAll";
+import { ledgerHref } from "@/lib/customerGroups";
+import type { SalesByCustomerRow } from "@/lib/salesByCustomer";
 
-type Cust = { id: string; name: string };
-
-export default function SalesByCustomer({ customers, groupMap }: { customers: Cust[]; groupMap: GroupMap }) {
-  const supabase = useMemo(() => createClient(), []);
-  const [range, setRange] = useState("this_month");
-  const [cf, setCf] = useState("");
-  const [ct, setCt] = useState("");
-  const [entityKey, setEntityKey] = useState("");
-  const [fetchedRows, setRows] = useState<SalesByCustomerRow[]>([]);
-  const [fetching, setLoading] = useState(true);
-  const [err, setErr] = useState("");
-
-  const { from, to } = resolveSalesRange(range, cf, ct);
-  const customIncomplete = range === "custom" && (!cf || !ct);
-
-  // Custom তারিখ অসম্পূর্ণ হলে লোড হয় না — খালি তালিকা দেখানো হয় (effect-এ state reset না করে derive)
-  const rows = customIncomplete ? [] : fetchedRows;
-  const loading = customIncomplete ? false : fetching;
-
-  useEffect(() => {
-    if (customIncomplete) return;
-    let cancelled = false;
-    (async () => {
-      setLoading(true);
-      setErr("");
-      const q = fetchAllRows<any>(
-        supabase, "sales_invoices", "customer_id, daybook_lbs, sales_invoice_items(amount, required_lbs, bookings(required_lbs))",
-        (qq) => { if (from) qq = qq.gte("invoice_date", from); if (to) qq = qq.lte("invoice_date", to); return qq; }
-      ).then((data) => ({ data, error: null as { message: string } | null }));
-      let rmsQ = supabase.from("raw_material_sales").select("customer_id, amount, quantity_lbs");
-      if (from) rmsQ = rmsQ.gte("sale_date", from);
-      if (to) rmsQ = rmsQ.lte("sale_date", to);
-      const [{ data, error }, { data: rms }] = await Promise.all([q, rmsQ]);
-      if (cancelled) return;
-      if (error) {
-        setErr(error.message);
-        setRows([]);
-        setLoading(false);
-        return;
-      }
-      const agg = aggregateSalesByCustomer((data as any) ?? [], customers, groupMap, (rms as any) ?? []).sort(
-        (a, b) => b.amount - a.amount,
-      );
-      setRows(agg);
-      setLoading(false);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [supabase, from, to, customIncomplete, customers, groupMap]);
-
-  const entityOptions = useMemo(() => salesEntityOptions(customers, groupMap), [customers, groupMap]);
-
-  const shown = entityKey ? rows.filter((r) => r.key === entityKey) : rows;
-  const totAmt = shown.reduce((s, r) => s + r.amount, 0);
-  const totLbs = shown.reduce((s, r) => s + r.lbs, 0);
+export default function SalesByCustomer({
+  rows, periodText, reportHref, ledgerQuery,
+}: {
+  rows: SalesByCustomerRow[];
+  periodText: string;
+  reportHref: string;
+  /** লেজার লিংকে একই তারিখ-সীমা পাঠাতে, যেমন "range=this_month" */
+  ledgerQuery: string;
+}) {
+  const totAmt = rows.reduce((s, r) => s + r.amount, 0);
+  const totLbs = rows.reduce((s, r) => s + r.lbs, 0);
 
   return (
     <div className="lg:col-span-2 rounded-xl border bg-white shadow-sm overflow-x-auto">
       <div className="flex items-center justify-between px-4 py-3 border-b">
-        <h2 className="text-sm font-semibold uppercase text-gray-500">Sales by Customer</h2>
-        <Link href="/dashboard/reports/sales-by-customer" className="text-xs text-blue-700 hover:underline">
+        <div>
+          <h2 className="text-sm font-semibold uppercase text-gray-500">Sales by Customer</h2>
+          <p className="text-[11px] text-gray-400">{periodText}</p>
+        </div>
+        <Link href={reportHref} className="text-xs text-blue-700 hover:underline">
           পূর্ণ রিপোর্ট / প্রিন্ট →
         </Link>
-      </div>
-
-      <div className="flex flex-wrap items-end gap-2 px-4 py-3 border-b bg-gray-50/60">
-        <div>
-          <label className="block text-[11px] text-gray-500 mb-1">Date Range</label>
-          <select value={range} onChange={(e) => setRange(e.target.value)} className="rounded-lg border px-2 py-1.5 text-sm">
-            {SALES_RANGE_OPTIONS.map((r) => (
-              <option key={r.value} value={r.value}>
-                {r.label}
-              </option>
-            ))}
-          </select>
-        </div>
-        {range === "custom" && (
-          <>
-            <div>
-              <label className="block text-[11px] text-gray-500 mb-1">From</label>
-              <input type="date" value={cf} onChange={(e) => setCf(e.target.value)} className="rounded-lg border px-2 py-1.5 text-sm" />
-            </div>
-            <div>
-              <label className="block text-[11px] text-gray-500 mb-1">To</label>
-              <input type="date" value={ct} onChange={(e) => setCt(e.target.value)} className="rounded-lg border px-2 py-1.5 text-sm" />
-            </div>
-          </>
-        )}
-        <div>
-          <label className="block text-[11px] text-gray-500 mb-1">Customer</label>
-          <select
-            value={entityKey}
-            onChange={(e) => setEntityKey(e.target.value)}
-            className="rounded-lg border px-2 py-1.5 text-sm max-w-[200px]"
-          >
-            <option value="">সব Customer</option>
-            {entityOptions.map((o) => (
-              <option key={o.key} value={o.key}>
-                {o.name}
-              </option>
-            ))}
-          </select>
-        </div>
       </div>
 
       <div className="overflow-x-auto">
@@ -137,22 +45,13 @@ export default function SalesByCustomer({ customers, groupMap }: { customers: Cu
             </tr>
           </thead>
           <tbody>
-            {loading && (
-              <tr><td colSpan={4} className="px-4 py-3 text-gray-400 italic">লোড হচ্ছে…</td></tr>
-            )}
-            {!loading && customIncomplete && (
-              <tr><td colSpan={4} className="px-4 py-3 text-gray-400 italic">From ও To তারিখ দিন</td></tr>
-            )}
-            {!loading && err && (
-              <tr><td colSpan={4} className="px-4 py-3 text-red-600">{err}</td></tr>
-            )}
-            {!loading && !err && !customIncomplete && shown.length === 0 && (
+            {rows.length === 0 && (
               <tr><td colSpan={4} className="px-4 py-3 text-gray-400 italic">এই সময়সীমায় কোনো বিক্রি নেই</td></tr>
             )}
-            {!loading && !err && shown.map((r) => (
+            {rows.map((r) => (
               <tr key={r.key} className="border-t">
                 <td className="px-4 py-2">
-                  <Link href={ledgerHref(r)} className="hover:underline hover:text-blue-700">{r.name}</Link>
+                  <Link href={`${ledgerHref(r)}?${ledgerQuery}`} className="hover:underline hover:text-blue-700">{r.name}</Link>
                   {r.isGroup && <span className="ml-2 rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-500">গ্রুপ</span>}
                 </td>
                 <td className="px-4 py-2 text-right text-gray-500">{r.count}</td>
@@ -161,7 +60,7 @@ export default function SalesByCustomer({ customers, groupMap }: { customers: Cu
               </tr>
             ))}
           </tbody>
-          {!loading && !err && shown.length > 0 && (
+          {rows.length > 0 && (
             <tfoot className="border-t-2 font-semibold bg-gray-50">
               <tr>
                 <td className="px-4 py-2 text-right" colSpan={2}>Total</td>

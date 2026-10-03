@@ -4,6 +4,7 @@ import { money } from "@/lib/format";
 import { fetchAllRows } from "@/lib/fetchAll";
 import { resolveDatePreset } from "@/lib/datePresets";
 import DateRangeFields from "@/components/DateRangeFields";
+import AutoSubmitForm from "@/components/AutoSubmitForm";
 
 export default async function BankBookPage({
   searchParams,
@@ -77,7 +78,7 @@ export default async function BankBookPage({
         </Link>
       </div>
 
-      <form className="mb-4 flex items-end gap-3 flex-wrap">
+      <AutoSubmitForm className="mb-4 flex items-end gap-3 flex-wrap">
         <div>
           <label className="block text-xs text-gray-500 mb-1">Bank Account</label>
           <select
@@ -93,10 +94,7 @@ export default async function BankBookPage({
           </select>
         </div>
         <DateRangeFields preset={period.preset} from={period.from} to={period.to} includeAll />
-        <button type="submit" className="rounded-lg bg-gray-900 px-4 py-2 text-sm text-white">
-          দেখুন / ফিল্টার করুন
-        </button>
-      </form>
+      </AutoSubmitForm>
 
       {!bankAccounts?.length && (
         <p className="text-sm text-gray-500">কোনো ব্যাংক অ্যাকাউন্ট Chart of Accounts-এ পাওয়া যায়নি।</p>
