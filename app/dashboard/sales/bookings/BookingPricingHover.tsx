@@ -47,24 +47,37 @@ export default function BookingPricingHover({
   const keyRef = useRef("");
   const cardHandlers = useRef<{ enter: () => void; leave: () => void } | null>(null);
 
-  // মাউসের ডানপাশে (জায়গা না থাকলে বামপাশে), একই উচ্চতায়; নিচে না আঁটলে উপরে সরিয়ে পুরোটা স্ক্রিনে রাখা।
-  // কোনো পাশেই পুরো চওড়া না আঁটলে যেদিকে বেশি জায়গা সেদিকে, সেই জায়গার মাপে চওড়া বেঁধে (ভেতরে পাশাপাশি
-  // scroll) — তাই কার্ড কখনো মাউসের ঠিক নিচে পড়ে না।
+  // কার্ড ডাটা অনুযায়ী পুরো চওড়া হয় (পাশাপাশি scroll নেই)। মাউসের ডানপাশে, জায়গা না থাকলে বামপাশে —
+  // একই উচ্চতায়। কোনো পাশেই না আঁটলে row-এর নিচে (বা উপরে, যেদিকে বেশি জায়গা) — কার্ড কখনো মাউস ঢাকে না।
+  // শুধু উচ্চতা স্ক্রিনে না আঁটলে কার্ডের ভেতরে উপর-নিচ scroll।
   function place() {
     const el = cardRef.current;
     if (!el) return;
     const { x, y } = pos.current;
-    const roomRight = window.innerWidth - (x + OFFSET) - 8;
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    el.style.maxHeight = `${vh - 16}px`;
+    const w = el.offsetWidth;
+    const roomRight = vw - (x + OFFSET) - 8;
     const roomLeft = x - OFFSET - 8;
-    el.style.maxWidth = "";
-    const naturalWidth = el.offsetWidth;
     let left: number;
-    if (naturalWidth <= roomRight) left = x + OFFSET;
-    else if (naturalWidth <= roomLeft) left = x - OFFSET - naturalWidth;
-    else if (roomRight >= roomLeft) { el.style.maxWidth = `${Math.max(240, roomRight)}px`; left = x + OFFSET; }
-    else { el.style.maxWidth = `${Math.max(240, roomLeft)}px`; left = Math.max(8, x - OFFSET - el.offsetWidth); }
-    let top = Math.max(8, y - LIFT);
-    if (top + el.offsetHeight > window.innerHeight - 8) top = Math.max(8, window.innerHeight - el.offsetHeight - 8);
+    let top: number;
+    if (w <= roomRight || w <= roomLeft) {
+      left = w <= roomRight ? x + OFFSET : x - OFFSET - w;
+      top = Math.max(8, y - LIFT);
+      if (top + el.offsetHeight > vh - 8) top = Math.max(8, vh - el.offsetHeight - 8);
+    } else {
+      left = Math.min(Math.max(8, x - w / 2), Math.max(8, vw - w - 8));
+      const below = vh - (y + OFFSET) - 8;
+      const above = y - OFFSET - 8;
+      if (below >= above) {
+        el.style.maxHeight = `${below}px`;
+        top = y + OFFSET;
+      } else {
+        el.style.maxHeight = `${above}px`;
+        top = y - OFFSET - el.offsetHeight;
+      }
+    }
     el.style.left = `${left}px`;
     el.style.top = `${top}px`;
     // তালিকা কার্ডে না আঁটলে হেডারে "scroll" হিন্ট
@@ -152,7 +165,8 @@ export default function BookingPricingHover({
   if (!bookings || bookings.length === 0) return null;
   const multi = bookings.length > 1;
   const first = bookings[0];
-  const th = "sticky top-0 bg-white px-2 py-1 text-right font-medium whitespace-nowrap";
+  // কলামের নাম দুই লাইনে — কার্ড কম চওড়া হয়, পাশে আঁটে
+  const th = "sticky top-0 bg-white px-2 py-1 text-right font-medium leading-tight align-bottom";
   const td = "px-2 py-1 text-right whitespace-nowrap";
 
   return (
@@ -160,7 +174,7 @@ export default function BookingPricingHover({
       ref={cardRef}
       onMouseEnter={() => cardHandlers.current?.enter()}
       onMouseLeave={() => cardHandlers.current?.leave()}
-      className="print:hidden fixed z-50 flex flex-col max-h-[calc(100vh-16px)] rounded-lg border border-gray-300 bg-white shadow-xl text-xs"
+      className="print:hidden fixed z-50 flex flex-col max-h-[calc(100vh-16px)] max-w-[calc(100vw-16px)] rounded-lg border border-gray-300 bg-white shadow-xl text-xs"
       style={{ left: -9999, top: -9999 }}
     >
       <div className="shrink-0 border-b bg-gray-50 px-3 py-1.5 rounded-t-lg">
@@ -172,19 +186,19 @@ export default function BookingPricingHover({
         <span ref={hintRef} className="ml-2 text-[11px] text-blue-600" style={{ display: "none" }}>↕ মাউস wheel দিয়ে scroll করুন</span>
       </div>
       {/* লম্বা তালিকা এখানে scroll হয় — overscroll-contain: শেষে পৌঁছালেও পেছনের পেজ scroll হয় না */}
-      <div ref={scrollerRef} className="min-h-0 overflow-auto overscroll-contain px-1 pb-1">
+      <div ref={scrollerRef} className="min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain px-1 pb-1">
         <table>
           <thead className="text-gray-500">
             <tr>
-              {multi && <th className="sticky top-0 bg-white px-2 py-1 text-left font-medium">Product</th>}
-              <th className={th}>Price/Lbs</th>
-              <th className={th}>Order Th. (mm)</th>
-              <th className={th}>Prod. Th. (mm)</th>
-              <th className={th}>PI Th. (mm)</th>
+              {multi && <th className="sticky top-0 bg-white px-2 py-1 text-left font-medium align-bottom">Product</th>}
+              <th className={th}>Price/<br />Lbs</th>
+              <th className={th}>Order Th.<br />(mm)</th>
+              <th className={th}>Prod. Th.<br />(mm)</th>
+              <th className={th}>PI Th.<br />(mm)</th>
               <th className={th}>Colors</th>
-              <th className={th}>Rate/Color</th>
-              <th className={th}>Rate/Inch</th>
-              <th className={th}>Adjust/Pc (±)</th>
+              <th className={th}>Rate/<br />Color</th>
+              <th className={th}>Rate/<br />Inch</th>
+              <th className={th}>Adjust/<br />Pc (±)</th>
             </tr>
           </thead>
           <tbody className="text-gray-800">
@@ -194,7 +208,7 @@ export default function BookingPricingHover({
               const label = [b.style ? formatStyle(b.style) : "", formatMeasurement(b)].filter(Boolean).join(" · ");
               return (
                 <tr key={b.id} className="border-t">
-                  {multi && <td className="px-2 py-1 text-left text-gray-600 min-w-[140px] max-w-[220px]">{label}</td>}
+                  {multi && <td className="px-2 py-1 text-left text-gray-600 min-w-[130px] max-w-[200px]">{label}</td>}
                   <td className={td + " font-semibold"}>{p.pricePerLbs > 0 ? money(p.pricePerLbs) : "-"}</td>
                   <td className={td}>{num(p.orderThicknessMm)}</td>
                   <td className={td}>{num(p.productionThicknessMm)}</td>
