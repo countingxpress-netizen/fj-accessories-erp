@@ -1075,6 +1075,10 @@ export default function BookingForm({
     }
 
     setLoading(false);
+    // Booking সেভ হয়েছে, কিন্তু কোনো Journal Voucher হয়নি — চুপচাপ চলে না গিয়ে জানিয়ে দেওয়া
+    if (result.warnings && result.warnings.length > 0) {
+      window.alert(["⚠ Booking সেভ হয়েছে, কিন্তু:", "", ...result.warnings].join("\n"));
+    }
     router.push(editContext ? `/dashboard/sales/bookings/${result.firstBookingId ?? ""}` : "/dashboard/sales/bookings");
     router.refresh();
   }

@@ -49,13 +49,18 @@ export async function makeVoucher(
     supabase, "journal_vouchers", "voucher_no", "JV", "voucher_date", date
   );
   const createdBy = await getCurrentUserId(supabase);
-  const { data: voucher } = await supabase
+  const { data: voucher, error: vErr } = await supabase
     .from("journal_vouchers")
     .insert({ voucher_no: voucherNo, voucher_date: date, narration, created_by: createdBy, source })
     .select("id").single();
-  if (!voucher) return null;
+  if (vErr || !voucher) return null;
 
-  await supabase.from("journal_entry_lines").insert(clean.map((l) => ({ voucher_id: voucher.id, ...l })));
+  const { error: lErr } = await supabase.from("journal_entry_lines").insert(clean.map((l) => ({ voucher_id: voucher.id, ...l })));
+  if (lErr) {
+    // লাইনহীন অর্ধেক voucher রেখে দেওয়া যাবে না
+    await supabase.from("journal_vouchers").delete().eq("id", voucher.id);
+    return null;
+  }
   return voucher.id;
 }
 

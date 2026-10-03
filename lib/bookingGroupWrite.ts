@@ -81,7 +81,8 @@ export type BookingGroupInput = {
 };
 
 export type BookingGroupWriteResult =
-  | { ok: true; firstBookingId: string | null }
+  // warnings: booking সেভ হয়েছে কিন্তু কোনো Journal Voucher হয়নি — ফর্ম ব্যবহারকারীকে দেখায়
+  | { ok: true; firstBookingId: string | null; warnings?: string[] }
   | { ok: false; error: string };
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
@@ -160,7 +161,7 @@ async function issueMaterials(
     warehouseId: string; materialsNeeded: { name: string; qty: number }[];
     materialMap: Record<string, string>; wipBase: number;
   },
-): Promise<void> {
+): Promise<string | null> { // JV না হলে সতর্কবার্তা, নইলে null
   for (const m of args.materialsNeeded) {
     const materialId = args.materialMap[m.name];
     if (!materialId || m.qty <= 0) continue;
@@ -188,14 +189,23 @@ async function issueMaterials(
 
   // Perpetual inventory — issue করা কাঁচামালের মূল্য WIP-এ তোলা (Dr 1220 / Cr material inv)
   if (args.productionOrderId) {
+    const jvLines = args.materialsNeeded
+      .map((m) => ({ materialId: args.materialMap[m.name], qtyLbs: m.qty }))
+      .filter((l) => l.materialId && l.qtyLbs > 0);
     const invVoucherId = await postBookingConsumptionJv(supabase, {
       date: args.date,
       bookingNo: args.bookingNo,
       productionOrderId: args.productionOrderId,
-      lines: args.materialsNeeded
-        .map((m) => ({ materialId: args.materialMap[m.name], qtyLbs: m.qty }))
-        .filter((l) => l.materialId && l.qtyLbs > 0),
+      lines: jvLines,
     });
+    if (!invVoucherId && jvLines.length > 0) {
+      // মূল্য শূন্য হলে (avg cost 0) JV না হওয়াই স্বাভাবিক — দাম থাকা সত্ত্বেও না হলে সেটা ব্যর্থতা
+      const { data: priced } = await supabase.from("raw_materials").select("id")
+        .in("id", jvLines.map((l) => l.materialId)).gt("avg_cost_per_lbs", 0).limit(1);
+      if ((priced ?? []).length > 0) {
+        return `${args.bookingNo}: কাঁচামাল issue-এর Journal Voucher (WIP) তৈরি হয়নি — স্টক কমেছে কিন্তু হিসাব-খাতায় ওঠেনি।`;
+      }
+    }
     if (invVoucherId) {
       await supabase.from("bookings").update({ inventory_voucher_id: invVoucherId }).eq("id", args.bookingId);
       // postBookingConsumptionJv wip_cost = এই issue-এর মূল্য বসায় — আগের বাকি WIP (wipBase) যোগ করি
@@ -207,6 +217,7 @@ async function issueMaterials(
       }
     }
   }
+  return null;
 }
 
 /**
@@ -250,7 +261,7 @@ async function undoMaterialIssue(
 /** নতুন একটা প্রোডাক্ট (booking + PO + কাঁচামাল issue) লেখে — New Booking ও Edit-এ নতুন প্রোডাক্ট। */
 async function insertBookingItem(
   supabase: SupabaseClient, input: BookingGroupInput, item: BookingGroupItemInput, materialMap: Record<string, string>,
-): Promise<{ ok: true; bookingId: string | null } | { ok: false; error: string }> {
+): Promise<{ ok: true; bookingId: string | null; warning?: string | null } | { ok: false; error: string }> {
   const productId = await findOrCreateProduct(supabase, item);
   if (!productId) return { ok: true, bookingId: null };
 
@@ -288,12 +299,12 @@ async function insertBookingItem(
     return { ok: false, error: `"${item.style || item.productDetails || "একটি প্রোডাক্ট"}"-এর Production Order তৈরি হয়নি, তাই সেভ হয়নি — আবার চেষ্টা করুন (${poError})` };
   }
 
-  await issueMaterials(supabase, {
+  const warning = await issueMaterials(supabase, {
     bookingId: booking.id, bookingNo: input.bookingNo, productionOrderId: productionOrder.id,
     date: input.bookingDate, warehouseId: item.warehouseId, materialsNeeded: item.materialsNeeded,
     materialMap, wipBase: 0,
   });
-  return { ok: true, bookingId: booking.id };
+  return { ok: true, bookingId: booking.id, warning };
 }
 
 export async function writeBookingGroup(
@@ -302,10 +313,12 @@ export async function writeBookingGroup(
 ): Promise<BookingGroupWriteResult> {
   const materialMap = await loadMaterialMap(supabase);
   let firstBookingId: string | null = null;
+  const warnings: string[] = [];
 
   for (const item of input.items) {
     const r = await insertBookingItem(supabase, input, item, materialMap);
     if (!r.ok) return r;
+    if (r.warning) warnings.push(r.warning);
     if (!firstBookingId && r.bookingId) firstBookingId = r.bookingId;
   }
 
@@ -317,8 +330,9 @@ export async function writeBookingGroup(
   if (!invResult.ok) {
     return { ok: false, error: `Booking সেভ হয়েছে কিন্তু auto Sales Invoice আপডেটে সমস্যা: ${invResult.error}` };
   }
+  if (invResult.warning) warnings.push(invResult.warning);
 
-  return { ok: true, firstBookingId };
+  return { ok: true, firstBookingId, warnings };
 }
 
 // ── Booking Group Edit (in-place) ───────────────────────────────────────────
@@ -408,6 +422,7 @@ export async function updateBookingGroupInPlace(
 
   const materialMap = await loadMaterialMap(supabase);
   let firstBookingId: string | null = null;
+  const warnings: string[] = [];
 
   // ── ২. বিদ্যমান প্রোডাক্ট আপডেট / নতুন প্রোডাক্ট যোগ ──
   for (const item of input.items) {
@@ -415,6 +430,7 @@ export async function updateBookingGroupInPlace(
     if (!old) {
       const r = await insertBookingItem(supabase, input, item, materialMap);
       if (!r.ok) return r;
+      if (r.warning) warnings.push(r.warning);
       if (!firstBookingId && r.bookingId) firstBookingId = r.bookingId;
       continue;
     }
@@ -458,11 +474,12 @@ export async function updateBookingGroupInPlace(
       const { data: poNow } = po
         ? await supabase.from("production_orders").select("wip_cost").eq("id", po.id).maybeSingle()
         : { data: null };
-      await issueMaterials(supabase, {
+      const w = await issueMaterials(supabase, {
         bookingId: old.id, bookingNo: input.bookingNo, productionOrderId: po?.id ?? null,
         date: input.bookingDate, warehouseId: item.warehouseId, materialsNeeded: item.materialsNeeded,
         materialMap, wipBase: Number(poNow?.wip_cost) || 0,
       });
+      if (w) warnings.push(w);
     }
   }
 
@@ -488,8 +505,10 @@ export async function updateBookingGroupInPlace(
     return { ok: false, error: `Booking সেভ হয়েছে কিন্তু auto Sales Invoice আপডেটে সমস্যা: ${invResult.error}` };
   }
 
+  if (invResult.warning) warnings.push(invResult.warning);
+
   const keptList = [...keptIds];
   if (keptList.length > 0) await syncPiLinesForBookings(supabase, keptList);
 
-  return { ok: true, firstBookingId };
+  return { ok: true, firstBookingId, warnings };
 }

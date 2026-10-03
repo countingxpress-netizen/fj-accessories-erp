@@ -105,6 +105,7 @@ export default function OtherSalesInvoiceForm({ customers }: { customers: Custom
     const { data: debitAccount } = await supabase.from("chart_of_accounts").select("id").eq("account_code", debitAccountCode).single();
     const { data: salesAccount } = await supabase.from("chart_of_accounts").select("id").eq("account_code", "4000").single();
 
+    let jvOk = false;
     if (debitAccount && salesAccount) {
       const voucherNo = await generateNextDocNo(supabase, "journal_vouchers", "voucher_no", "JV", "voucher_date", invoiceDate);
       const { data: voucher } = await supabase
@@ -120,15 +121,22 @@ export default function OtherSalesInvoiceForm({ customers }: { customers: Custom
         .single();
 
       if (voucher) {
-        await supabase.from("journal_entry_lines").insert([
+        const { error: lErr } = await supabase.from("journal_entry_lines").insert([
           { voucher_id: voucher.id, account_id: debitAccount.id, debit: total, credit: 0, memo: `Invoice ${invoiceNo}` },
           { voucher_id: voucher.id, account_id: salesAccount.id, debit: 0, credit: total, memo: `Invoice ${invoiceNo}` },
         ]);
-        await supabase.from("sales_invoices").update({ voucher_id: voucher.id }).eq("id", invoice.id);
+        if (lErr) {
+          await supabase.from("journal_vouchers").delete().eq("id", voucher.id);
+        } else {
+          await supabase.from("sales_invoices").update({ voucher_id: voucher.id }).eq("id", invoice.id);
+          jvOk = true;
+        }
       }
     }
 
     setLoading(false);
+    // আগে JV ব্যর্থ হলে চুপচাপ চলে যেত (29 Sep 2026-এ INV-2026-0209 JV ছাড়া থেকে গিয়েছিল)
+    if (!jvOk) window.alert(`⚠ ${invoiceNo} সেভ হয়েছে, কিন্তু Journal Voucher তৈরি হয়নি — হিসাব-খাতায় এই বিক্রি ওঠেনি। জানান।`);
     router.push("/dashboard/sales/invoices");
     router.refresh();
   }

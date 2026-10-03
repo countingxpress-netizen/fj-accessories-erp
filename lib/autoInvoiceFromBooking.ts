@@ -29,7 +29,8 @@ export type AutoInvoiceOpts = {
 };
 
 export type AutoInvoiceResult =
-  | { ok: true; invoiceId: string | null; invoiceNo?: string }
+  // warning: invoice ঠিকমতো সেভ হয়েছে কিন্তু Journal Voucher হয়নি — ব্যবহারকারীকে জানাতে হবে
+  | { ok: true; invoiceId: string | null; invoiceNo?: string; warning?: string }
   | { ok: false; error: string };
 
 async function clearInvoiceJv(supabase: SupabaseClient, invoiceId: string, voucherId: string | null) {
@@ -53,7 +54,7 @@ async function postInvoiceJv(
   if (!debitAccount || !salesAccount) return null;
 
   const voucherNo = await generateNextDocNo(supabase, "journal_vouchers", "voucher_no", "JV", "voucher_date", args.invoiceDate);
-  const { data: voucher } = await supabase
+  const { data: voucher, error: vErr } = await supabase
     .from("journal_vouchers")
     .insert({
       voucher_no: voucherNo, voucher_date: args.invoiceDate,
@@ -61,12 +62,16 @@ async function postInvoiceJv(
       created_by: args.createdBy, source: "sales_invoice",
     })
     .select().single();
-  if (!voucher) return null;
+  if (vErr || !voucher) return null;
 
-  await supabase.from("journal_entry_lines").insert([
+  const { error: lErr } = await supabase.from("journal_entry_lines").insert([
     { voucher_id: voucher.id, account_id: debitAccount.id, debit: args.totalAmount, credit: 0, memo: `Invoice ${args.invoiceNo}` },
     { voucher_id: voucher.id, account_id: salesAccount.id, debit: 0, credit: args.totalAmount, memo: `Invoice ${args.invoiceNo}` },
   ]);
+  if (lErr) {
+    await supabase.from("journal_vouchers").delete().eq("id", voucher.id);
+    return null;
+  }
   return voucher.id as string;
 }
 
@@ -224,8 +229,9 @@ export async function syncAutoInvoiceForGroup(
       })),
     ];
   } else {
+    // toFixed(6): 1234.4999999 (float) → 1234.5 → DB-এর round-এর মতোই উপরে
     totalAmount = rows.reduce(
-      (s: number, r: any) => s + Math.round((r.quantity_pcs || 0) * (r.quoted_unit_price || 0)),
+      (s: number, r: any) => s + Math.round(Number(((r.quantity_pcs || 0) * (r.quoted_unit_price || 0)).toFixed(6))),
       0,
     );
     makeItems = (invoiceId) =>
@@ -266,21 +272,16 @@ export async function syncAutoInvoiceForGroup(
   // ── invoice তৈরি / আপডেট ────────────────────────────────────────────────
   let invoiceId: string;
   let invoiceNo: string;
-  let repostJv = true;
+  let oldTotal: number | null = null;
 
   if (existing) {
     invoiceId = existing.id;
     invoiceNo = existing.invoice_no;
 
     const { data: oldItems } = await supabase.from("sales_invoice_items").select("amount").eq("invoice_id", invoiceId);
-    const oldTotal = (oldItems ?? []).reduce((s: number, i: any) => s + Number(i.amount || 0), 0);
-    repostJv = !existing.voucher_id
-      || oldTotal !== totalAmount
-      || Boolean(existing.payment_received) !== paymentReceived
-      || (existing.invoice_date ?? null) !== invoiceDate; // তারিখ বদলালে JV-ও নতুন তারিখে
+    oldTotal = (oldItems ?? []).reduce((s: number, i: any) => s + Number(i.amount || 0), 0);
 
     await supabase.from("sales_invoices").update(header).eq("id", invoiceId);
-    if (repostJv) await clearInvoiceJv(supabase, invoiceId, existing.voucher_id);
     await supabase.from("sales_invoice_items").delete().eq("invoice_id", invoiceId);
   } else {
     invoiceNo = await generateNextDocNo(supabase, "sales_invoices", "invoice_no", "INV", "invoice_date", invoiceDate);
@@ -295,16 +296,30 @@ export async function syncAutoInvoiceForGroup(
   const { error: itemsError } = await supabase.from("sales_invoice_items").insert(makeItems(invoiceId));
   if (itemsError) return { ok: false, error: itemsError.message };
 
+  // JV-র অঙ্ক = DB-তে বসা লাইনের আসল মোট (amount generated column) — JS-এর হিসাব থেকে নয়, যাতে
+  // invoice আর JV কখনো ১ টাকাও না সরে
+  const { data: newItems } = await supabase.from("sales_invoice_items").select("amount").eq("invoice_id", invoiceId);
+  const dbTotal = (newItems ?? []).reduce((s: number, i: any) => s + Number(i.amount || 0), 0);
+  const repostJv = !existing
+    || !existing.voucher_id
+    || oldTotal !== dbTotal
+    || Boolean(existing.payment_received) !== paymentReceived
+    || (existing.invoice_date ?? null) !== invoiceDate; // তারিখ বদলালে JV-ও নতুন তারিখে
+
+  let warning: string | undefined;
   if (repostJv) {
+    if (existing) await clearInvoiceJv(supabase, invoiceId, existing.voucher_id);
     const voucherId = await postInvoiceJv(supabase, {
       invoiceNo, invoiceDate, customerName: customer?.name ?? "",
-      paymentReceived, totalAmount, createdBy,
+      paymentReceived, totalAmount: dbTotal, createdBy,
     });
     if (voucherId) await supabase.from("sales_invoices").update({ voucher_id: voucherId }).eq("id", invoiceId);
+    // আগে এখানে চুপচাপ এগিয়ে যেত (29 Sep 2026-এ JV নম্বর bug-এ ১২টা invoice JV ছাড়া থেকে গিয়েছিল)
+    else warning = `${invoiceNo}-এর Journal Voucher তৈরি হয়নি — হিসাব-খাতায় এই বিক্রি ওঠেনি। Booking আবার সেভ করুন, না হলে জানান।`;
   }
 
   // লাইন নতুন করে লেখা হয়েছে — বিক্রির COGS (Dr 5050 / Cr WIP) নতুন করে (lib/invoiceCogs.ts)
   await syncInvoiceCogs(supabase, invoiceId);
 
-  return { ok: true, invoiceId, invoiceNo };
+  return { ok: true, invoiceId, invoiceNo, warning };
 }
