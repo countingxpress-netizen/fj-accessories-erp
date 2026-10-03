@@ -1,5 +1,5 @@
 "use client";
-import { createContext, useContext, useEffect, useState, useCallback } from "react";
+import { createContext, useContext, useEffect, useMemo, useState, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
 
 // Staff (role='full_no_edit') এর জন্য Edit/Delete গেট করার সিস্টেম।
@@ -66,10 +66,11 @@ export default function PermissionProvider({
   isAdmin, userId, children,
 }: { isAdmin: boolean; userId: string; children: React.ReactNode }) {
   const [requests, setRequests] = useState<ReqMap>({});
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
 
-  const load = useCallback(async () => {
-    if (isAdmin || !userId) return;
+  // শুধু ডাটা আনে (state বদলায় না) — effect আর refresh দুই জায়গা থেকেই ব্যবহার
+  const fetchRequests = useCallback(async (): Promise<ReqMap | null> => {
+    if (isAdmin || !userId) return null;
     const { data } = await supabase
       .from("permission_requests")
       .select("id, table_name, record_id, action, status")
@@ -79,10 +80,19 @@ export default function PermissionProvider({
     (data ?? []).forEach((r: any) => {
       map[`${r.table_name}:${r.record_id}:${r.action}`] = { id: r.id, status: r.status };
     });
-    setRequests(map);
-  }, [isAdmin, userId]);
+    return map;
+  }, [supabase, isAdmin, userId]);
 
-  useEffect(() => { load(); }, [load]);
+  const load = useCallback(async () => {
+    const map = await fetchRequests();
+    if (map) setRequests(map);
+  }, [fetchRequests]);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchRequests().then((map) => { if (map && !cancelled) setRequests(map); });
+    return () => { cancelled = true; };
+  }, [fetchRequests]);
 
   return (
     <PermissionContext.Provider value={{ isAdmin, userId, requests, refresh: load }}>

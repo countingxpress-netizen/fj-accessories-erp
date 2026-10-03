@@ -47,11 +47,13 @@ export default async function MaterialStatementPage({
   const openingBalance = from ? sorted.filter((e: any) => e.txn_date < from).reduce((s: number, e: any) => s + signed(e), 0) : 0;
   const inRange = sorted.filter((e: any) => (!from || e.txn_date >= from) && (!to || e.txn_date <= to));
 
+  // চলতি ব্যালেন্স — সাধারণ loop-এ (map-এর callback-এর ভেতরে বাইরের variable বদলালে React-এর নিয়ম ভাঙে)
   let runningBalance = openingBalance;
-  const rows = inRange.map((e: any) => {
+  const rows: any[] = [];
+  for (const e of inRange as any[]) {
     runningBalance += signed(e);
-    return { ...e, runningBalance };
-  });
+    rows.push({ ...e, runningBalance });
+  }
 
   const totalIn = inRange.reduce((sum: number, e: any) => sum + (e.txn_type === "in" ? Number(e.quantity) : 0), 0);
   const totalOut = inRange.reduce((sum: number, e: any) => sum + (e.txn_type === "out" ? Number(e.quantity) : 0), 0);

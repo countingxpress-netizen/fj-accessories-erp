@@ -8,6 +8,8 @@ export const AT_DEFAULT_MARKUP_PERCENTAGE = 2;
 export const AT_FREIGHT_PER_PIECE = 0.05;
 // পুরনো Excel-এর "LBS Munna" ফর্মুলা — Order Lbs / 116 = Commission Lbs
 export const AT_COMMISSION_LBS_DIVISOR = 116;
+// "Submit to Customer" invoice-এর LBS view — Total Order Lbs = Invoice Total (customer amount) / 117
+export const AT_CUSTOMER_LBS_DIVISOR = 117;
 
 export function calcAtCustomerLine(
   actualPrice: number,

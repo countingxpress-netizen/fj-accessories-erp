@@ -5,6 +5,22 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { formatDate } from "@/lib/formatDate";
 
+// কম্পোনেন্টের বাইরে — ভেতরে রাখলে প্রতি render-এ নতুন component তৈরি হয় (state হারায়, অকারণে পুরো DOM নতুন করে বসে)
+function StepRow({ label, done, dateStr, children }: { label: string; done: boolean; dateStr?: string | null; children?: React.ReactNode }) {
+  return (
+    <div className="flex items-center justify-between border-t py-3">
+      <div>
+        <span className={`inline-block w-5 h-5 rounded-full text-xs text-center leading-5 mr-2 ${done ? "bg-green-600 text-white" : "bg-gray-200 text-gray-500"}`}>
+          {done ? "✓" : ""}
+        </span>
+        <span className="text-sm font-medium">{label}</span>
+        {dateStr && <span className="text-xs text-gray-400 ml-2">({formatDate(dateStr)})</span>}
+      </div>
+      <div className="flex gap-2">{children}</div>
+    </div>
+  );
+}
+
 export default function StatusTracker({
   productionOrder, hasPrint, bookingCreatedAt,
 }: { productionOrder: any; hasPrint: boolean; bookingCreatedAt: string }) {
@@ -46,21 +62,6 @@ export default function StatusTracker({
   const printingDone = !!productionOrder.printing_completed_at;
   const cuttingDone = !!productionOrder.cutting_completed_at;
   const finishedDone = productionOrder.stage === "finished";
-
-  function StepRow({ label, done, dateStr, children }: { label: string; done: boolean; dateStr?: string | null; children?: React.ReactNode }) {
-    return (
-      <div className="flex items-center justify-between border-t py-3">
-        <div>
-          <span className={`inline-block w-5 h-5 rounded-full text-xs text-center leading-5 mr-2 ${done ? "bg-green-600 text-white" : "bg-gray-200 text-gray-500"}`}>
-            {done ? "✓" : ""}
-          </span>
-          <span className="text-sm font-medium">{label}</span>
-          {dateStr && <span className="text-xs text-gray-400 ml-2">({formatDate(dateStr)})</span>}
-        </div>
-        <div className="flex gap-2">{children}</div>
-      </div>
-    );
-  }
 
   return (
     <div className="rounded-xl border bg-white shadow-sm px-4 divide-y">

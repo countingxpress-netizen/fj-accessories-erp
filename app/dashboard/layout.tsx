@@ -2,6 +2,7 @@
 import { redirect } from "next/navigation";
 import { getCurrentAppUser } from "@/lib/supabase/getCurrentAppUser";
 import LogoutButton from "./LogoutButton";
+import DownloadFolderButton from "./DownloadFolderButton";
 import SidebarMenu from "./SidebarMenu";
 import PermissionProvider from "./PermissionProvider";
 import NavIcon from "./NavIcon";
@@ -60,6 +61,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
               </Link>
             </>
           )}
+          <DownloadFolderButton />
           <Link href="/dashboard/settings/change-password" className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-gray-300 hover:bg-gray-800 hover:text-white transition-colors">
             <NavIcon name="lock" />
             <span>Change Password</span>

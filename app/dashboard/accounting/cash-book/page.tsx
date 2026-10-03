@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
-import { formatDate } from "@/lib/formatDate";
 import { money } from "@/lib/format";
 import { fetchAllRows } from "@/lib/fetchAll";
 import { resolveDatePreset } from "@/lib/datePresets";
@@ -54,11 +53,13 @@ export default async function CashBookPage({
     );
   }
 
+  // চলতি ব্যালেন্স — সাধারণ loop-এ (map-এর callback-এর ভেতরে বাইরের variable বদলালে React-এর নিয়ম ভাঙে)
   let runningBalance = openingBalance;
-  const rows = sorted.map((l: any) => {
+  const rows: any[] = [];
+  for (const l of sorted as any[]) {
     runningBalance += (l.debit || 0) - (l.credit || 0);
-    return { ...l, runningBalance };
-  });
+    rows.push({ ...l, runningBalance });
+  }
 
   const totalReceipt = sorted.reduce((sum: number, l: any) => sum + (l.debit || 0), 0);
   const totalPayment = sorted.reduce((sum: number, l: any) => sum + (l.credit || 0), 0);

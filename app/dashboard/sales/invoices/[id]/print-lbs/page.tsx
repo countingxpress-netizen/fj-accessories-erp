@@ -6,6 +6,7 @@ import { amountInWords } from "@/lib/numberToWords";
 import { lbsFormatMeasurement } from "@/lib/lbsInvoice";
 import { buildPdfFilename } from "@/lib/saveAsPdf";
 import { fetchAllRows } from "@/lib/fetchAll";
+import { isDiscountLine } from "@/lib/bookingDiscount";
 
 function fmt(n: number) {
   return n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -48,6 +49,10 @@ export default async function LbsInvoicePrintPage({ params }: { params: Promise<
     .sort((a, b) => (a.bookings?.created_at ?? "").localeCompare(b.bookings?.created_at ?? ""));
   const chargeRows = items.filter((i) => String(i.line_type).startsWith("lbs_") && i.line_type !== "lbs_product");
   const total = items.reduce((s: number, i: any) => s + (Number(i.amount) || 0), 0);
+  // Booking Discount লাইন — চার্জ সারির পরে "(−) Discount" হিসেবে (total-এ আগেই বিয়োগ হয়ে আছে)
+  const discountLines = items.filter(isDiscountLine);
+  const discountAmount = -discountLines.reduce((s: number, i: any) => s + (Number(i.amount) || 0), 0);
+  const discountText = discountLines[0]?.line_label || "Discount";
 
   // ── Previous Bill / This Bill / Running Due (স্ট্যান্ডার্ড print page-এর মতোই) ──
   const allInvoices = await fetchAllRows<any>(
@@ -112,6 +117,7 @@ export default async function LbsInvoicePrintPage({ params }: { params: Promise<
     ...chargeRows.map((r: any, i: number) => [
       PRODUCT_SLOTS + i + 1, "", r.line_label, Number(r.quantity_pcs) ? `${Math.round(r.quantity_pcs)} ${chargeUnit(r.line_type)}` : "", Number(r.unit_price) || 0, Number(r.amount) || 0,
     ]),
+    ...(discountAmount !== 0 ? [["", "", `(−) ${discountText}`, "", "", Number(discountAmount.toFixed(2))]] : []),
     ["Total", "", "", "", "", Number(total.toFixed(2))],
     [],
     ["Amount In Word (BDT) ="],
@@ -215,6 +221,16 @@ export default async function LbsInvoicePrintPage({ params }: { params: Promise<
               <td className={cellCls + " text-right"}>{Number(r.amount) ? fmt(Number(r.amount)) : "-"}</td>
             </tr>
           ))}
+          {discountAmount !== 0 && (
+            <tr>
+              <td className={cellCls} />
+              <td className={cellCls} />
+              <td className={cellCls + " font-medium"}>(−) {discountText}</td>
+              <td className={cellCls} />
+              <td className={cellCls} />
+              <td className={cellCls + " text-right"}>{fmt(discountAmount)}</td>
+            </tr>
+          )}
         </tbody>
         <tfoot>
           <tr className="font-bold">

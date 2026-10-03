@@ -9,6 +9,7 @@ import type { BookingItemProgress } from "@/lib/bookingEditContext";
 import { getCurrentUserId } from "@/lib/currentUser";
 import { resolveRate, type RateHistoryRow } from "@/lib/rateHistory";
 import { money, qty as qtyFmt } from "@/lib/format";
+import { calcBookingDiscount, normalizeDiscountType, type DiscountType } from "@/lib/bookingDiscount";
 
 type Customer = { id: string; name: string; address: string | null; default_print_rate: number | null; default_adhesive_rate: number | null; price_per_lbs_pe: number | null; price_per_lbs_pp: number | null; plain_cm_conversion?: boolean | null };
 type PriceHistoryRow = RateHistoryRow & { customer_id: string; material_type: "pe" | "pp" | null };
@@ -258,6 +259,9 @@ export type BookingEditContext = {
   deliveryPoint: string;
   paymentReceived: boolean;
   priceOverride: string;
+  /** পুরো Booking-এর মোট মূল্যের উপর Discount (PI-এর মতো) */
+  discountType?: DiscountType;
+  discountValue?: number;
   items: PendingItem[];
   /** কাজ এগিয়ে থাকলে সেভের আগে confirm-এ দেখানো সতর্কবার্তা */
   warnings?: string[];
@@ -296,6 +300,9 @@ export default function BookingForm({
   const [deliveryPoint, setDeliveryPoint] = useState(seed?.deliveryPoint ?? "");
   // Booking সেভ করলে অটো Sales Invoice তৈরি হয় — টিক থাকলে Cash Sale, না থাকলে বাকিতে বিক্রি
   const [paymentReceived, setPaymentReceived] = useState(seed?.paymentReceived ?? false);
+  // PI-এর মতো — পুরো Booking-এর মোট মূল্যের উপর Discount; auto Sales Invoice-এ "Discount" লাইন হয়
+  const [discountType, setDiscountType] = useState<DiscountType>(normalizeDiscountType(seed?.discountType));
+  const [discountValue, setDiscountValue] = useState(seed?.discountValue ? String(seed.discountValue) : "");
 
   // Style Info — এক স্টাইলের সব মাপের জন্য কমন। "এই স্টাইল বুকিং-এ যোগ করুন" চাপলে রিসেট হবে।
   const [style, setStyle] = useState("");
@@ -967,6 +974,12 @@ export default function BookingForm({
       return;
     }
 
+    const discountNum = parseFloat(discountValue) || 0;
+    if (discountType !== "none" && (discountNum < 0 || (discountType === "percentage" && discountNum > 100))) {
+      setError("Discount ঠিক নয় — Percentage ০ থেকে ১০০-এর মধ্যে, Fixed টাকা ঋণাত্মক হবে না।");
+      return;
+    }
+
     // কাজ এগিয়ে থাকা বুকিং — সেভের আগে প্রতিবার সতর্ক করি (ডেলিভারির চেয়ে কম Qty হলে আলাদা করে)
     if (editContext) {
       const shortQty = allItems
@@ -1049,6 +1062,9 @@ export default function BookingForm({
       paymentReceived,
       createdBy,
       createInvoiceIfMissing: !editContext,
+      discountType,
+      discountValue: discountType === "none" ? 0 : discountNum,
+      hadDiscount: normalizeDiscountType(editContext?.discountType) !== "none",
       items,
     });
 
@@ -1074,6 +1090,9 @@ export default function BookingForm({
   const styleTotalAmount = validRowCalcs.reduce((s, c) => s + c.amount, 0);
   const currentStyleItemCount = rows.filter((r) => (parseFloat(r.quantity) || 0) > 0).length;
   const finalSubmitCount = pendingItems.length + validRowCalcs.length;
+  // সেভ হলে auto Sales Invoice-এর মোট = যোগ করা প্রোডাক্ট + এখনো "যোগ" না চাপা Row (submit-এ যোগ হয়)
+  const bookingSubtotal = pendingItems.reduce((s, it) => s + (it.amount || 0), 0) + styleTotalAmount;
+  const bookingDiscount = calcBookingDiscount(bookingSubtotal, discountType, discountValue);
 
   return (
     <form onSubmit={handleSubmit} className="rounded-xl border bg-white p-6 shadow-sm space-y-4 max-w-[1700px]">
@@ -1537,6 +1556,37 @@ export default function BookingForm({
         <input type="checkbox" checked={paymentReceived} onChange={(e) => setPaymentReceived(e.target.checked)} />
         Payment Received (টিক থাকলে Cash Sale, না থাকলে বাকিতে বিক্রি) — auto Sales Invoice-এর জন্য
       </label>
+
+      <div className="flex flex-wrap items-end gap-4 rounded-lg border bg-gray-50 px-3 py-2">
+        <div>
+          <label className="block text-sm text-gray-600 mb-1">Discount Type</label>
+          <select value={discountType} onChange={(e) => setDiscountType(e.target.value as DiscountType)} className="rounded-lg border px-3 py-2 text-sm">
+            <option value="none">None</option>
+            <option value="percentage">Percentage (%)</option>
+            <option value="fixed">Fixed (৳)</option>
+          </select>
+        </div>
+        {discountType !== "none" && (
+          <div>
+            <label className="block text-sm text-gray-600 mb-1">Discount Value {discountType === "percentage" ? "(%)" : "(৳)"}</label>
+            <input
+              type="number" step="0.01" min="0" max={discountType === "percentage" ? 100 : undefined}
+              value={discountValue} onChange={(e) => setDiscountValue(e.target.value)}
+              className="rounded-lg border px-3 py-2 text-sm w-32" placeholder="0"
+            />
+          </div>
+        )}
+        <div className="text-sm text-gray-700 space-y-0.5 pb-1">
+          <p>মোট Booking মূল্য: <strong>{money(bookingSubtotal)}</strong></p>
+          {bookingDiscount > 0 && (
+            <>
+              <p className="text-red-700">(−) Discount: <strong>{money(bookingDiscount)}</strong></p>
+              <p className="text-green-800">Net (Sales Invoice-এ): <strong>{money(bookingSubtotal - bookingDiscount)}</strong></p>
+            </>
+          )}
+        </div>
+        <p className="w-full text-[11px] text-gray-400">পুরো Booking-এর মোট মূল্যের উপর (PI-এর মতো) — auto Sales Invoice-এ আলাদা &quot;Discount&quot; লাইন হিসেবে বসবে, পূর্ণ টাকায় রাউন্ড। পরে Booking Edit থেকে বদলানো যাবে।</p>
+      </div>
 
       {error && <p className="text-sm text-red-600">{error}</p>}
 

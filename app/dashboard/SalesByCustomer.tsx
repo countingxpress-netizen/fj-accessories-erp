@@ -28,19 +28,19 @@ export default function SalesByCustomer({ customers, groupMap }: { customers: Cu
   const [cf, setCf] = useState("");
   const [ct, setCt] = useState("");
   const [entityKey, setEntityKey] = useState("");
-  const [rows, setRows] = useState<SalesByCustomerRow[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [fetchedRows, setRows] = useState<SalesByCustomerRow[]>([]);
+  const [fetching, setLoading] = useState(true);
   const [err, setErr] = useState("");
 
   const { from, to } = resolveSalesRange(range, cf, ct);
   const customIncomplete = range === "custom" && (!cf || !ct);
 
+  // Custom তারিখ অসম্পূর্ণ হলে লোড হয় না — খালি তালিকা দেখানো হয় (effect-এ state reset না করে derive)
+  const rows = customIncomplete ? [] : fetchedRows;
+  const loading = customIncomplete ? false : fetching;
+
   useEffect(() => {
-    if (customIncomplete) {
-      setRows([]);
-      setLoading(false);
-      return;
-    }
+    if (customIncomplete) return;
     let cancelled = false;
     (async () => {
       setLoading(true);

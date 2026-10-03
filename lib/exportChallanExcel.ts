@@ -1,4 +1,5 @@
 import ExcelJS from "exceljs";
+import { prepareErpFolder, saveErpFile } from "@/lib/erpDownload";
 import { groupChallanItemsByProduct } from "./challanProductGroups";
 
 type CompanyInfo = { name?: string | null; address?: string | null; phone?: string | null; email?: string | null } | null;
@@ -165,17 +166,11 @@ export async function downloadChallanExcel(params: {
   challanDateLabel: string;
   measurementByItem: Record<string, string>;
 }) {
+  const folder = await prepareErpFolder();
   const wb = buildChallanWorkbook(params);
   const buffer = await wb.xlsx.writeBuffer();
   const blob = new Blob([buffer], {
     type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `Challan-${params.challan.challan_no}.xlsx`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+  await saveErpFile(blob, `Challan-${params.challan.challan_no}.xlsx`, folder);
 }

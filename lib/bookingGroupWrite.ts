@@ -4,6 +4,7 @@ import { adjustRawStock } from "@/lib/stockAdjust";
 import { postBookingConsumptionJv, reverseInventoryJv } from "@/lib/inventoryCost";
 import { syncAutoInvoiceForGroup } from "@/lib/autoInvoiceFromBooking";
 import { syncPiLinesForBookings, deletePiLinesForBookings } from "@/lib/bookingPiSync";
+import type { DiscountType } from "@/lib/bookingDiscount";
 
 type SupabaseClient = ReturnType<typeof createClient>;
 
@@ -71,6 +72,11 @@ export type BookingGroupInput = {
   createdBy: string | null;
   /** New Booking সেভে true — auto Sales Invoice না থাকলে তৈরি হবে। */
   createInvoiceIfMissing: boolean;
+  /** পুরো group-এর মোট মূল্যের উপর Discount (PI-এর মতো) — auto Sales Invoice-এ "Discount" লাইন হয় */
+  discountType?: DiscountType;
+  discountValue?: number;
+  /** এডিটে group-এ আগে Discount ছিল কিনা — থাকলে "None" করলেও কলাম রিসেট লিখতে হবে */
+  hadDiscount?: boolean;
   items: BookingGroupItemInput[];
 };
 
@@ -107,7 +113,14 @@ async function findOrCreateProduct(supabase: SupabaseClient, item: BookingGroupI
 
 // booking row-এর যে ফিল্ডগুলো ফর্ম থেকে আসে (insert ও in-place update — দুটোতেই একই)
 function bookingFields(input: BookingGroupInput, item: BookingGroupItemInput) {
+  // Discount কলাম শুধু দরকার হলেই লেখা হয় — discount_* মাইগ্রেশন push হওয়ার আগেও Discount ছাড়া
+  // সাধারণ booking সেভ যেন না ভাঙে
+  const discountType = input.discountType ?? "none";
+  const discountFields = discountType !== "none" || input.hadDiscount
+    ? { discount_type: discountType, discount_value: discountType === "none" ? 0 : Number(input.discountValue) || 0 }
+    : {};
   return {
+    ...discountFields,
     customer_id: input.customerId, buyer_id: input.buyerId, merchant_id: input.merchantId,
     style: item.style, product_details: item.productDetails,
     measurement_type: item.measurementType, measurement_unit: item.unit,

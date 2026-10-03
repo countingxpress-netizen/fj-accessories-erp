@@ -11,7 +11,7 @@ import { money } from "@/lib/format";
 import { formatMeasurement } from "@/lib/formatMeasurement";
 
 export default function BookingRow({
-  booking, serial, groupPiNo, deliveredQty, challanNos, selected, onToggleSelect, variant = "full",
+  booking, serial, groupPiNo, deliveredQty, challanNos, selected, onToggleSelect, variant = "full", rowHoverProps,
 }: {
   booking: any; serial?: number; groupPiNo: string;
   deliveredQty: number; challanNos: string[];
@@ -20,6 +20,8 @@ export default function BookingRow({
    * Customer/Buyer/Garments আলাদা করে না দেখিয়ে একটাই ইনডেন্ট করা লেবেল সেলে দেখায় (ওগুলো
    * ইতিমধ্যে BookingGroupSummaryRow-তে আছে)। */
   variant?: "full" | "detail";
+  /** মাউস রাখলে Pricing System কার্ড দেখানোর হ্যান্ডলার (BookingsTable থেকে) */
+  rowHoverProps?: React.HTMLAttributes<HTMLTableRowElement>;
 }) {
   const router = useRouter();
   const supabase = createClient();
@@ -42,8 +44,8 @@ export default function BookingRow({
     const label = [booking.style ? formatStyle(booking.style) : "", booking.product_details || booking.customer_booking_ref]
       .filter(Boolean).join(" — ");
     return (
-      <tr className="border-t bg-blue-50/10">
-        <td className={`px-4 ${rowPad}`}>
+      <tr className="border-t bg-blue-50/10" {...rowHoverProps}>
+        <td className={`px-4 ${rowPad}`} data-no-pricing-hover>
           <input type="checkbox" checked={!!selected} onChange={onToggleSelect} aria-label={`Select booking ${booking.booking_no}`} />
         </td>
         <td className={`px-4 ${rowPad} text-xs text-gray-400`} colSpan={6}>
@@ -56,14 +58,13 @@ export default function BookingRow({
           <span className={`rounded-full px-2 py-0.5 text-xs ${status.color}`}>{status.label}</span>
         </td>
         <td className={`px-4 ${rowPad}`}></td>
-        <td className={`px-4 ${rowPad} text-right`}>
+        <td className={`px-4 ${rowPad} text-right`} data-no-pricing-hover>
           <details className="relative inline-block text-left">
             <summary className="cursor-pointer list-none rounded bg-gray-100 px-3 py-1 text-xs text-gray-700 hover:bg-gray-200 select-none">
               Action ▾
             </summary>
             <div className="absolute right-0 z-20 mt-1 w-40 rounded-lg border bg-white shadow-lg py-1 text-left">
               <Link href={`/dashboard/sales/bookings/${booking.id}`} className="block px-3 py-1.5 text-xs hover:bg-gray-50">View</Link>
-            <Link href={`/dashboard/sales/bookings/new?clone=${booking.id}`} className="block px-3 py-1.5 text-xs hover:bg-gray-50">Clone</Link>
               <Link href={`/dashboard/sales/bookings/new?clone=${booking.id}`} className="block px-3 py-1.5 text-xs hover:bg-gray-50">Clone</Link>
               <GuardedAction
                 table="bookings" recordId={booking.id} recordLabel={booking.booking_no} action="edit"
@@ -87,8 +88,8 @@ export default function BookingRow({
   }
 
   return (
-    <tr className="border-t">
-      <td className={`px-4 ${rowPad}`}>
+    <tr className="border-t" {...rowHoverProps}>
+      <td className={`px-4 ${rowPad}`} data-no-pricing-hover>
         <input
           type="checkbox"
           checked={!!selected}
@@ -118,7 +119,7 @@ export default function BookingRow({
           <span className="text-gray-400">-</span>
         )}
       </td>
-      <td className={`px-4 ${rowPad} text-right`}>
+      <td className={`px-4 ${rowPad} text-right`} data-no-pricing-hover>
         <details className="relative inline-block text-left">
           <summary className="cursor-pointer list-none rounded bg-gray-100 px-3 py-1 text-xs text-gray-700 hover:bg-gray-200 select-none">
             Action ▾

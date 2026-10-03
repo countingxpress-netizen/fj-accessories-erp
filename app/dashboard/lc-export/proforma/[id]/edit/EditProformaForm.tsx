@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useRef, useState, Fragment } from "react";
+import { useState, Fragment } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { amountInWords, currencySymbol } from "@/lib/numberToWords";
@@ -144,7 +144,8 @@ export default function EditProformaForm({
   // প্রতি লাইনের effective Rate/Lbs — mount-এ সেভ করা ডেটা থেকে ডেরাইভ করার চেষ্টা করে (নতুন
   // PI-তে Tube/Cutting থাকলে সাথে সাথেই কাজ করে); পুরনো PI Item-এ না থাকলে updateLine()
   // পরে লাইভ বসিয়ে দেয় (নিচে দেখুন)।
-  const lineRatesRef = useRef(items.map((it) =>
+  // state (ref নয়) — "✓ Auto-recalc সক্রিয়" হিন্ট render-এ এটা পড়ে, আর render-এ ref পড়া React-এর নিয়মে নিষেধ
+  const [lineRates, setLineRates] = useState<number[]>(() => items.map((it) =>
     deriveEffectiveRatePerLbs(
       parseFloat(it.price_unit) || 0, it.price_basis, parseFloat(it.pi_thickness_mm) || 0,
       parseFloat(it.tube_inch) || 0, parseFloat(it.cutting_inch) || 0,
@@ -152,6 +153,9 @@ export default function EditProformaForm({
       currencyDivisorFor(pi.currency, parseFloat(pi.exchange_rate_to_bdt) || 107)
     )
   ));
+  function setLineRate(i: number, rate: number) {
+    setLineRates((prev) => { const next = [...prev]; next[i] = rate; return next; });
+  }
 
   function initialAutoWeightKg() {
     return items.reduce((s, it) => {
@@ -164,7 +168,7 @@ export default function EditProformaForm({
     }, 0);
   }
 
-  const [totalWeightKg, setTotalWeightKg] = useState(pi.total_weight_kg ? String(pi.total_weight_kg) : "");
+  const [totalWeightInput, setTotalWeightKg] = useState(pi.total_weight_kg ? String(pi.total_weight_kg) : "");
   // সেভ করা Total Weight যদি অটো-ক্যালকুলেশনের সাথে ইতিমধ্যে মিলে যায় (নতুন PI, বা এখনো এডিট হয়নি),
   // তাহলে touched=false রেখে Tube/Cutting/Thickness বদলালে অটো-রিক্যালকুলেট চালু থাকবে।
   // ম্যানুয়ালি ভিন্ন একটা ওজন সেভ করা থাকলে (touched=true) সেটা এখানে না ছুঁয়ে রেখে দেওয়া হয়।
@@ -202,7 +206,7 @@ export default function EditProformaForm({
 
   const RECALC_FIELDS = new Set(["thickness", "printCharge", "adhesiveCharge", "tubeInch", "cuttingInch"]);
 
-  // rate একবার জানা হয়ে গেলে (lineRatesRef.current[i] > 0), তারপর Thickness/Print/
+  // rate একবার জানা হয়ে গেলে (lineRates[i] > 0), তারপর Thickness/Print/
   // Adhesive/Tube/Cutting যেকোনোটা বদলালেই Price/Unit সেই rate ধরে ফরওয়ার্ড
   // রিক্যালকুলেট হয়। rate এখনো অজানা থাকলে (পুরনো PI Item, Tube/Cutting সেভ করা নেই)
   // এখানে কিছু বদলায় না — বেসলাইন rate বসে শুধু commitLineGeometry()-তে, onBlur-এ
@@ -223,9 +227,9 @@ export default function EditProformaForm({
       const adhesiveCharge = parseFloat(updated.adhesiveCharge) || 0;
       const divisor = currencyDivisorFor(currency, parseFloat(exchangeRate) || 107);
       const newRate = deriveEffectiveRatePerLbs(parseFloat(value) || 0, updated.priceBasis, thickness, tubeInch, cuttingInch, printCharge, adhesiveCharge, divisor);
-      if (newRate > 0) lineRatesRef.current[i] = newRate;
+      if (newRate > 0) setLineRate(i, newRate);
     } else if (RECALC_FIELDS.has(field)) {
-      const existingRate = lineRatesRef.current[i] || 0;
+      const existingRate = lineRates[i] || 0;
       if (existingRate > 0) {
         const thickness = parseFloat(updated.thickness) || 0;
         const tubeInch = parseFloat(updated.tubeInch) || 0;
@@ -250,7 +254,7 @@ export default function EditProformaForm({
   // বদলায় না — পরের এডিট থেকে ফরওয়ার্ড রিক্যালকুলেট শুরু হবে।
   function commitLineGeometry(i: number) {
     const l = lines[i];
-    if ((lineRatesRef.current[i] || 0) > 0) return;
+    if ((lineRates[i] || 0) > 0) return;
     const thickness = parseFloat(l.thickness) || 0;
     const tubeInch = parseFloat(l.tubeInch) || 0;
     const cuttingInch = parseFloat(l.cuttingInch) || 0;
@@ -259,12 +263,7 @@ export default function EditProformaForm({
     const adhesiveCharge = parseFloat(l.adhesiveCharge) || 0;
     const divisor = currencyDivisorFor(currency, parseFloat(exchangeRate) || 107);
     const bootstrapped = deriveEffectiveRatePerLbs(parseFloat(l.priceUnit) || 0, l.priceBasis, thickness, tubeInch, cuttingInch, printCharge, adhesiveCharge, divisor);
-    if (bootstrapped > 0) {
-      lineRatesRef.current[i] = bootstrapped;
-      // ref বদলালে React নিজে থেকে রি-রেন্ডার করে না — হিন্ট টেক্সট ("✓ Auto-recalc
-      // সক্রিয়") আপডেট দেখাতে জোর করে একটা রি-রেন্ডার ট্রিগার করা হচ্ছে।
-      setLines((prev) => [...prev]);
-    }
+    if (bootstrapped > 0) setLineRate(i, bootstrapped);
   }
 
   // প্রতি লাইন আগে ২ দশমিকে রাউন্ড হয়ে তারপর যোগ হয় — ঠিক Excel-এর ROUND(D*F,2)-এর মতোই,
@@ -647,9 +646,8 @@ export default function EditProformaForm({
     return s + weightLbs / 2.2;
   }, 0) + newBookingLineItems.reduce((s, li) => s + (isAtAccessories ? calcPiWeightLbs(li.booking, lineThickness(li.booking)) : newLineWeightLbs(li.booking)) / 2.2, 0);
 
-  useEffect(() => {
-    if (!weightTouched && autoWeightKg > 0) setTotalWeightKg(String(Math.round(autoWeightKg)));
-  }, [autoWeightKg, weightTouched]);
+  // হাতে না বদলালে Total Weight অটো — effect দিয়ে state-এ বসানোর বদলে সরাসরি derive
+  const totalWeightKg = !weightTouched && autoWeightKg > 0 ? String(Math.round(autoWeightKg)) : totalWeightInput;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -873,7 +871,7 @@ export default function EditProformaForm({
                   <input type="number" step="0.0001" value={l.priceUnit} onChange={(e) => updateLine(i, "priceUnit", e.target.value)} className="w-full rounded border px-2 py-1 text-sm" />
                   {existingLineRememberedButton(i, (v) => updateLine(i, "priceUnit", v))}
                   <div className="mt-1 text-[10px] whitespace-nowrap">
-                    {(lineRatesRef.current[i] || 0) > 0
+                    {(lineRates[i] || 0) > 0
                       ? <span className="text-green-600">✓ Auto-recalc সক্রিয়</span>
                       : <span className="text-gray-400">Tube+Cutting দিন (২ ফিল্ড) → Auto চালু হবে</span>}
                   </div>

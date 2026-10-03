@@ -1,4 +1,5 @@
 import ExcelJS from "exceljs";
+import { prepareErpFolder, saveErpFile } from "@/lib/erpDownload";
 
 const GRAY = "FF6B7280";
 
@@ -24,6 +25,8 @@ export type InvoiceExcelParams = {
   isOther: boolean;
   items: InvoiceExcelItem[];
   total: number;
+  /** Booking Discount লাইন (items-এ থাকে না) — থাকলে Sub Total / (−) Discount / Total তিন সারি */
+  discount?: { label: string; amount: number } | null;
   amountInWordsText: string;
   summary: {
     previousLabel: string;
@@ -47,7 +50,7 @@ function fmtMoney(n: number) {
 // (lib/exportChallanExcel.ts) একই প্যাটার্ন। পরপর একই Style একাধিক লাইনে থাকলে
 // Style কলাম merge & center হয়।
 export function buildInvoiceWorkbook(params: InvoiceExcelParams): ExcelJS.Workbook {
-  const { company, invoiceNo, invoiceDateLabel, deliveryPoint, buyerName, merchantName, customerBookingRef, customer, isOther, items, total, amountInWordsText, summary, note } = params;
+  const { company, invoiceNo, invoiceDateLabel, deliveryPoint, buyerName, merchantName, customerBookingRef, customer, isOther, items, total, discount, amountInWordsText, summary, note } = params;
 
   const totalCols = isOther ? 5 : 7;
 
@@ -163,17 +166,26 @@ export function buildInvoiceWorkbook(params: InvoiceExcelParams): ExcelJS.Workbo
 
   const totalQty = items.reduce((s, i) => s + (Number(i.quantity_pcs) || 0), 0);
   const qtyCol = isOther ? 3 : 5;
-  const totalRow = ws.addRow(
-    isOther
-      ? ["Total", "", totalQty, "", fmtMoney(total)]
-      : ["Total", "", "", "", totalQty, "", fmtMoney(total)],
-  );
-  ws.mergeCells(totalRow.number, 1, totalRow.number, qtyCol - 1);
-  totalRow.eachCell((cell) => {
-    cell.font = { bold: true, size: 10.5 };
-    cell.alignment = { horizontal: "right", vertical: "middle" };
-    cell.border = gridBox;
-  });
+  function footRow(label: string, qtyValue: number | string, amount: number, bold: boolean) {
+    const row = ws.addRow(
+      isOther
+        ? [label, "", qtyValue, "", fmtMoney(amount)]
+        : [label, "", "", "", qtyValue, "", fmtMoney(amount)],
+    );
+    ws.mergeCells(row.number, 1, row.number, qtyCol - 1);
+    row.eachCell((cell) => {
+      cell.font = { bold, size: 10.5 };
+      cell.alignment = { horizontal: "right", vertical: "middle" };
+      cell.border = gridBox;
+    });
+  }
+  if (discount && discount.amount) {
+    footRow("Sub Total", totalQty, total + discount.amount, false);
+    footRow(`(−) ${discount.label}`, "", discount.amount, false);
+    footRow("Total", "", total, true);
+  } else {
+    footRow("Total", totalQty, total, true);
+  }
 
   ws.addRow([]);
   mergedRow("Amount In Word (BDT):", { bold: true, size: 10.5 }).getCell(1).alignment = { horizontal: "left" };
@@ -229,17 +241,11 @@ export function buildInvoiceWorkbook(params: InvoiceExcelParams): ExcelJS.Workbo
 }
 
 export async function downloadInvoiceExcel(params: InvoiceExcelParams & { filename: string }) {
+  const folder = await prepareErpFolder();
   const wb = buildInvoiceWorkbook(params);
   const buffer = await wb.xlsx.writeBuffer();
   const blob = new Blob([buffer], {
     type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = params.filename.endsWith(".xlsx") ? params.filename : `${params.filename}.xlsx`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+  await saveErpFile(blob, params.filename.endsWith(".xlsx") ? params.filename : `${params.filename}.xlsx`, folder);
 }

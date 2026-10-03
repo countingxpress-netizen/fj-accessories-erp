@@ -94,6 +94,7 @@ const PATHS: Record<string, ReactNode> = {
       <line x1="21" x2="9" y1="12" y2="12" />
     </>
   ),
+  folder: <path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z" />,
   dot: <circle cx="12" cy="12" r="3" />,
 };
 

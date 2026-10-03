@@ -14,6 +14,9 @@ const FG_CODE = "1210";
 const WIP_CODE = "1220";
 const money = (n: number) => n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const round2 = (n: number) => Math.round(n * 100) / 100;
+// হাতে দেওয়া মান থাকলে সেটা, নইলে ডিফল্ট — component-এর বাইরে, যাতে useMemo-র dependency শুধু ইনপুট map-গুলো হয়
+const inputOr = (map: Record<string, string>, id: string, fallback: number) =>
+  map[id] !== undefined && map[id] !== "" ? parseFloat(map[id]) || 0 : fallback;
 
 export default function OpeningInventoryForm({
   rmRows, fgRows, wipRows, balanceByCode, accountsByCode, equityAccounts,
@@ -38,15 +41,15 @@ export default function OpeningInventoryForm({
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const rmCostOf = (r: RmRow) => (rmCost[r.id] !== undefined && rmCost[r.id] !== "" ? parseFloat(rmCost[r.id]) || 0 : r.avgCost);
-  const fgCostOf = (r: FgRow) => (fgCost[r.id] !== undefined && fgCost[r.id] !== "" ? parseFloat(fgCost[r.id]) || 0 : r.avgCost);
-  const wipValOf = (r: WipRow) => (wipVal[r.id] !== undefined && wipVal[r.id] !== "" ? parseFloat(wipVal[r.id]) || 0 : r.value);
+  const rmCostOf = (r: RmRow) => inputOr(rmCost, r.id, r.avgCost);
+  const fgCostOf = (r: FgRow) => inputOr(fgCost, r.id, r.avgCost);
+  const wipValOf = (r: WipRow) => inputOr(wipVal, r.id, r.value);
 
   const plan = useMemo(() => {
     // target value per raw-material inventory account (grouped by account code)
     const rmTargetByCode: Record<string, number> = {};
     rmRows.forEach((r) => {
-      rmTargetByCode[r.accountCode] = round2((rmTargetByCode[r.accountCode] ?? 0) + r.qtyLbs * rmCostOf(r));
+      rmTargetByCode[r.accountCode] = round2((rmTargetByCode[r.accountCode] ?? 0) + r.qtyLbs * inputOr(rmCost, r.id, r.avgCost));
     });
 
     const lines: { code: string; name: string; debit: number; credit: number; note: string }[] = [];
@@ -64,7 +67,7 @@ export default function OpeningInventoryForm({
     });
 
     // Finished Goods Inventory (1210)
-    const fgTarget = round2(fgRows.reduce((s, r) => s + r.qtyPcs * fgCostOf(r), 0));
+    const fgTarget = round2(fgRows.reduce((s, r) => s + r.qtyPcs * inputOr(fgCost, r.id, r.avgCost), 0));
     const fgCur = balanceByCode[FG_CODE] ?? 0;
     const fgDelta = round2(fgTarget - fgCur);
     if (Math.abs(fgDelta) >= 0.005) {
@@ -76,7 +79,7 @@ export default function OpeningInventoryForm({
     }
 
     // WIP (1220) — শুধু পুরনো in-production order যোগ হয় (perpetual balance অক্ষত)
-    const wipAdd = round2(wipRows.reduce((s, r) => s + wipValOf(r), 0));
+    const wipAdd = round2(wipRows.reduce((s, r) => s + inputOr(wipVal, r.id, r.value), 0));
     if (wipAdd >= 0.005) {
       lines.push({
         code: WIP_CODE, name: accountsByCode[WIP_CODE]?.name ?? "Work-in-Process Inventory",

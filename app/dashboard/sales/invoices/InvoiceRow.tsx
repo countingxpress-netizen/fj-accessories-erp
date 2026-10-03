@@ -6,6 +6,7 @@ import { formatDate } from "@/lib/formatDate";
 import { deleteInvoiceCascade } from "@/lib/invoiceDelete";
 import GuardedAction from "@/app/dashboard/GuardedAction";
 import { money } from "@/lib/format";
+import { isDiscountLine } from "@/lib/bookingDiscount";
 
 export default function InvoiceRow({
   invoice, buyerNameMap = {}, selected, onToggleSelect,
@@ -14,8 +15,9 @@ export default function InvoiceRow({
   const supabase = createClient();
 
   const total = (invoice.sales_invoice_items ?? []).reduce((s: number, i: any) => s + (i.amount || 0), 0);
-  const qty = (invoice.sales_invoice_items ?? []).reduce((s: number, i: any) => s + (i.quantity_pcs || 0), 0);
-  const bookingNos = Array.from(new Set((invoice.sales_invoice_items ?? []).map((i: any) => i.bookings?.booking_no))).join(", ");
+  // Booking Discount লাইনের qty (1) Qty-তে যোগ হবে না
+  const qty = (invoice.sales_invoice_items ?? []).filter((i: any) => !isDiscountLine(i)).reduce((s: number, i: any) => s + (i.quantity_pcs || 0), 0);
+  const bookingNos = Array.from(new Set((invoice.sales_invoice_items ?? []).map((i: any) => i.bookings?.booking_no).filter(Boolean))).join(", ");
   const buyerNames = Array.from(
     new Set((invoice.sales_invoice_items ?? []).map((i: any) => i.bookings?.buyer_id).filter(Boolean).map((id: string) => buyerNameMap[id]).filter(Boolean))
   ).join(", ");

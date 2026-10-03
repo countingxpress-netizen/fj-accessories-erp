@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { hourlyRate, monthRange } from "@/lib/payroll";
 import { money } from "@/lib/format";
@@ -16,12 +16,14 @@ export default function OvertimeReport({ employees }: { employees: Employee[] })
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [year, setYear] = useState(now.getFullYear());
   const [hoursByEmp, setHoursByEmp] = useState<Record<string, number>>({});
-  const [loading, setLoading] = useState(false);
-  const supabase = createClient();
+  // কোন মাসের ডাটা লোড হয়ে আছে — বাছাই করা মাসের সাথে না মিললে "লোড হচ্ছে" (effect-এ setLoading না করে)
+  const [loadedKey, setLoadedKey] = useState("");
+  const monthKey = `${year}-${month}`;
+  const loading = loadedKey !== monthKey;
+  const supabase = useMemo(() => createClient(), []);
 
   useEffect(() => {
     let active = true;
-    setLoading(true);
     const { start, end } = monthRange(year, month);
     (async () => {
       const { data } = await supabase.from("overtime").select("employee_id, hours").gte("ot_date", start).lte("ot_date", end);
@@ -29,10 +31,10 @@ export default function OvertimeReport({ employees }: { employees: Employee[] })
       const m: Record<string, number> = {};
       (data ?? []).forEach((r: any) => { m[r.employee_id] = (m[r.employee_id] || 0) + (r.hours || 0); });
       setHoursByEmp(m);
-      setLoading(false);
+      setLoadedKey(`${year}-${month}`);
     })();
     return () => { active = false; };
-  }, [month, year]);
+  }, [supabase, month, year]);
 
   const rows = employees
     .map((e) => {

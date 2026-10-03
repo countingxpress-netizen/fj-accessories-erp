@@ -4,6 +4,8 @@
 // ব্যবহার আছে কিন্তু সেটা শুধু ফাংশন বডির ভেতরে, তাই সেটা এমনিতেই শুধু ক্লায়েন্ট কম্পোনেন্ট থেকে
 // (PrintButton/ChallanPrintButton — যাদের নিজস্ব "use client" আছে) কল হলে সমস্যা হয় না।
 
+import { prepareErpFolder, saveErpFile } from "@/lib/erpDownload";
+
 // Document No + Buyer + Merchant দিয়ে PDF ফাইলনেম বানানো
 export function buildPdfFilename(parts: (string | null | undefined)[]): string {
   const clean = parts
@@ -14,14 +16,17 @@ export function buildPdfFilename(parts: (string | null | undefined)[]): string {
 }
 
 // নির্দিষ্ট এলিমেন্ট (id দিয়ে) ক্যানভাসে রেন্ডার করে সরাসরি PDF হিসেবে সেভ করে —
-// ব্রাউজারের প্রিন্ট ডায়ালগ ছাড়াই। Chrome/Edge-এ showSaveFilePicker দিয়ে আসল
-// "কোথায় সেভ করবেন" ফোল্ডার-পিকার আসে; না থাকলে সাধারণ ডাউনলোড হয়ে যায়।
+// ব্রাউজারের প্রিন্ট ডায়ালগ ছাড়াই। ফাইল D:\000.ERP ফোল্ডারে অটো সেভ হয় (lib/erpDownload.ts);
+// সেটা সম্ভব না হলে সাধারণ ডাউনলোড।
 export async function saveElementAsPdf(elementId: string, filename: string) {
   const el = document.getElementById(elementId);
   if (!el) {
     window.alert("PDF তৈরি করা যায়নি — কন্টেন্ট খুঁজে পাওয়া যায়নি।");
     return;
   }
+
+  // ফোল্ডার পিকার/পারমিশন ক্লিকের কয়েক সেকেন্ডের মধ্যেই চাইতে হয় — তাই ভারী রেন্ডারের আগে
+  const folder = await prepareErpFolder();
 
   // সাধারণ html2canvas Tailwind v4-এর oklch()/lab() কালার ফাংশন পার্স করতে পারে না — তাই
   // এই fork (html2canvas-pro) ব্যবহার করা হচ্ছে, যেটা একই API-তে modern CSS color function সাপোর্ট করে।
@@ -69,30 +74,5 @@ export async function saveElementAsPdf(elementId: string, filename: string) {
   }
 
   const blob = pdf.output("blob") as Blob;
-  const safeName = `${filename || "document"}.pdf`;
-
-  if (typeof window !== "undefined" && "showSaveFilePicker" in window) {
-    try {
-      const handle = await (window as any).showSaveFilePicker({
-        suggestedName: safeName,
-        types: [{ description: "PDF ফাইল", accept: { "application/pdf": [".pdf"] } }],
-      });
-      const writable = await handle.createWritable();
-      await writable.write(blob);
-      await writable.close();
-      return;
-    } catch (err: any) {
-      if (err?.name === "AbortError") return; // ব্যবহারকারী ফোল্ডার বাছাই ক্যান্সেল করেছে
-      // অন্য কোনো এরর হলে নিচের সাধারণ ডাউনলোডে fallback
-    }
-  }
-
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = safeName;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
+  await saveErpFile(blob, `${filename || "document"}.pdf`, folder);
 }

@@ -8,6 +8,7 @@ import { buildPdfFilename } from "@/lib/saveAsPdf";
 import InvoiceSummary from "../InvoiceSummary";
 import InvoiceExcelButton from "../../InvoiceExcelButton";
 import { fetchAllRows } from "@/lib/fetchAll";
+import { isDiscountLine } from "@/lib/bookingDiscount";
 
 function fmt(n: number) {
   return n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -33,7 +34,7 @@ export default async function InvoicePrintPage({ params }: { params: Promise<{ i
     .from("sales_invoices")
     .select(`*, customers(name, code, address, phone, opening_balance, opening_balance_date),
       creator:app_users!sales_invoices_created_by_fkey(signature_url),
-      sales_invoice_items(quantity_pcs, unit_price, amount, line_label,
+      sales_invoice_items(quantity_pcs, unit_price, amount, line_label, line_type,
         bookings(booking_no, style, product_details, measurement_type, measurement_unit, length_val, width_val, flap_val, gusset_val, pillow_val, created_at),
         finished_goods(product_name))`)
     .eq("id", id)
@@ -49,14 +50,20 @@ export default async function InvoicePrintPage({ params }: { params: Promise<{ i
   // sales_invoice_items টেবিলে নিজস্ব কোনো order কলাম নেই, তাই read-এ sort করা হচ্ছে।
   // Style/Product-এ বুকিং-এ যা সরাসরি দেওয়া হয়েছে (style, product_details) তাই দেখানো হয় —
   // কিছু না থাকলে ব্ল্যাংক (booking_no বা generic "Product (WxH)" fallback-এর বদলে)।
+  // Booking Discount লাইন টেবিলের সারিতে নয় — নিচে Sub Total / (−) Discount / Total হিসেবে
+  const discountLines = (invoice.sales_invoice_items ?? []).filter(isDiscountLine);
+  const discountAmount = -discountLines.reduce((s: number, i: any) => s + (Number(i.amount) || 0), 0);
+  const discountText = discountLines[0]?.line_label || "Discount";
   const items = [...(invoice.sales_invoice_items ?? [])]
+    .filter((item: any) => !isDiscountLine(item))
     .sort((a: any, b: any) => (a.bookings?.created_at ?? "").localeCompare(b.bookings?.created_at ?? ""))
     .map((item: any) => ({
       ...item,
       styleLabel: item.bookings?.style || "",
       productLabel: item.bookings?.product_details || "",
     }));
-  const total = items.reduce((s: number, i: any) => s + (i.amount || 0), 0);
+  const subTotal = items.reduce((s: number, i: any) => s + (i.amount || 0), 0);
+  const total = subTotal - discountAmount;
   const totalQty = items.reduce((s: number, i: any) => s + (Number(i.quantity_pcs) || 0), 0);
 
   // পরপর একই Style একাধিক লাইনে থাকলে Style কলাম merge & center হবে (Booking View-এর মতোই)
@@ -105,11 +112,9 @@ export default async function InvoicePrintPage({ params }: { params: Promise<{ i
 
   const previousDue = openingBalance + sumInvoicesUpToPrevious - paymentsUpToPrevious;
   const thisBillAmount = total;
-  const totalDue = previousDue + thisBillAmount;
   const paidBetween = (payments ?? [])
     .filter((p: any) => p.payment_date > previousDate && p.payment_date <= invoice.invoice_date)
     .reduce((s: number, p: any) => s + p.amount, 0);
-  const runningDue = totalDue - paidBetween;
 
   const paymentDatesBetween = (payments ?? [])
     .filter((p: any) => p.payment_date > previousDate && p.payment_date <= invoice.invoice_date)
@@ -154,6 +159,7 @@ export default async function InvoicePrintPage({ params }: { params: Promise<{ i
               line_label: item.line_label,
             }))}
             total={total}
+            discount={discountAmount ? { label: discountText, amount: discountAmount } : null}
             amountInWordsText={amountInWords(total, "BDT")}
             summary={{
               previousLabel,
@@ -251,9 +257,23 @@ export default async function InvoicePrintPage({ params }: { params: Promise<{ i
           })}
         </tbody>
         <tfoot>
+          {discountAmount !== 0 && (
+            <>
+              <tr>
+                <td colSpan={isOther ? 2 : 4} className="border border-gray-800 px-2 py-2 text-right">Sub Total</td>
+                <td className="border border-gray-800 px-2 py-2 text-right">{totalQty}</td>
+                <td className="border border-gray-800 px-2 py-2"></td>
+                <td className="border border-gray-800 px-2 py-2 text-right">{fmt(subTotal)}</td>
+              </tr>
+              <tr>
+                <td colSpan={isOther ? 4 : 6} className="border border-gray-800 px-2 py-2 text-right">(−) {discountText}</td>
+                <td className="border border-gray-800 px-2 py-2 text-right">{fmt(discountAmount)}</td>
+              </tr>
+            </>
+          )}
           <tr className="font-semibold bg-gray-50">
             <td colSpan={isOther ? 2 : 4} className="border border-gray-800 px-2 py-2 text-right">Total</td>
-            <td className="border border-gray-800 px-2 py-2 text-right">{totalQty}</td>
+            <td className="border border-gray-800 px-2 py-2 text-right">{discountAmount !== 0 ? "" : totalQty}</td>
             <td className="border border-gray-800 px-2 py-2"></td>
             <td className="border border-gray-800 px-2 py-2 text-right">{fmt(total)}</td>
           </tr>

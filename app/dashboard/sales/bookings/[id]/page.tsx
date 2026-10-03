@@ -8,6 +8,7 @@ import PrintButton from "@/app/dashboard/PrintButton";
 import BookingViewActions from "./BookingViewActions";
 import BookingWastageSection from "./BookingWastageSection";
 import { money } from "@/lib/format";
+import { calcBookingDiscount, discountLabel } from "@/lib/bookingDiscount";
 
 export default async function BookingViewPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -96,7 +97,6 @@ export default async function BookingViewPage({ params }: { params: Promise<{ id
   const piNos = Object.keys(piMap).sort();
 
   // ── Wastage Register (Booking-এর বিপরীতে অতিরিক্ত ওয়েস্টেজ) ──────────────
-  const poIds = bookings.flatMap((b: any) => (b.production_orders ?? []).map((p: any) => p.id)).filter(Boolean);
   const [{ data: warehouses }, { data: extraWastages }] = await Promise.all([
     supabase.from("warehouses").select("id, name").order("name"),
     supabase.from("wastage")
@@ -144,11 +144,18 @@ export default async function BookingViewPage({ params }: { params: Promise<{ id
     nextScheduleLabel = "Create Cutting Schedule";
   }
 
-  // টেবিলের Total row-এর জন্য যোগফল
+  // টেবিলের Total row-এর জন্য যোগফল — render-এর আগেই (টেবিল আঁকার map-এর ভেতরে যোগ করলে
+  // React-এর নিয়ম ভাঙে: render শেষ হওয়ার পর variable বদলানো)
   let totalQuantity = 0;
   let totalAmountSum = 0;
   let totalOrderLbs = 0;
   let totalProductionLbs = 0;
+  for (const b of bookings) {
+    totalQuantity += b.quantity_pcs || 0;
+    totalAmountSum += priceByBooking[b.id]?.totalAmount || 0;
+    totalOrderLbs += calcRequiredLbs(b, b.thickness_mm) || 0;
+    totalProductionLbs += b.required_lbs || 0;
+  }
 
   // একই Style + Customer Booking Ref-এর টানা (consecutive) row-গুলো merge করার জন্য গ্রুপ করা
   // (এক Booking Group-এ একাধিক Style থাকতে পারে — শুধু একটা Style-এর একাধিক Measurement নয়)
@@ -166,6 +173,9 @@ export default async function BookingViewPage({ params }: { params: Promise<{ id
       }
     }
   }
+
+  // Booking Discount (group-এর মোট মূল্যের উপর — auto Sales Invoice-এ আলাদা লাইন; এখানে শুধু দেখানো)
+  const groupDiscount = calcBookingDiscount(totalAmountSum, bookings[0]?.discount_type, bookings[0]?.discount_value);
 
   return (
     <div>
@@ -261,11 +271,6 @@ export default async function BookingViewPage({ params }: { params: Promise<{ id
               const statusLabel = getBookingStatusLabel(b, deliveredMap[b.id] ?? 0, Array.from(challanNosByBooking[b.id] ?? [])).label;
               const styleRunSize = styleRunSizeByStart[i]; // undefined হলে এই row আগের Style-এর continuation
 
-              totalQuantity += b.quantity_pcs || 0;
-              totalAmountSum += price?.totalAmount || 0;
-              totalOrderLbs += orderLbs || 0;
-              totalProductionLbs += b.required_lbs || 0;
-
               return (
                 <tr key={b.id}>
                   <td className="border border-gray-800 px-2 py-2 text-center">{i + 1}</td>
@@ -310,6 +315,15 @@ export default async function BookingViewPage({ params }: { params: Promise<{ id
         </div>
 
         <div className="px-3 py-3 text-sm space-y-3">
+          {groupDiscount > 0 && (
+            <p>
+              মোট: <strong>{money(totalAmountSum)}</strong>
+              <span className="mx-2 text-gray-300">|</span>
+              <span className="text-red-700">(−) {discountLabel(bookings[0]?.discount_type, bookings[0]?.discount_value)}: <strong>{money(groupDiscount)}</strong></span>
+              <span className="mx-2 text-gray-300">|</span>
+              Net Total: <strong>{money(totalAmountSum - groupDiscount)}</strong>
+            </p>
+          )}
           <div>
             <p className="font-semibold mb-1">Sales Invoice No/Nos: -</p>
             {salesInvoiceNos.length > 0 ? (

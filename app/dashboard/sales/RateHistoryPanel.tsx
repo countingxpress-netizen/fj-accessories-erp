@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { getCurrentUserId } from "@/lib/currentUser";
@@ -40,7 +40,7 @@ export default function RateHistoryPanel({
   const cfg = CONFIG[kind];
   const rateColumn = rateColumnFor(kind, materialType);
   const rateLabel = kind === "customer" ? `${cfg.rateLabel} (${(materialType ?? "pe").toUpperCase()})` : cfg.rateLabel;
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
   const router = useRouter();
   const { allowed: canEdit } = usePermission(cfg.table, refId, "edit");
 
@@ -56,21 +56,33 @@ export default function RateHistoryPanel({
 
   // Customer-এর জন্য material_type-ও ফিল্টার করতে হয় (PE আর PP-র history আলাদা);
   // Buyer-এর জন্য material_type প্রযোজ্য না (সবসময় NULL)।
-  const load = useCallback(async () => {
-    setLoading(true);
+  // fetchRows শুধু ডাটা আনে; state বসে await/then-এর পরে (effect-এ সরাসরি setState নয়)
+  const fetchRows = useCallback(async () => {
     let q = supabase
       .from("rate_history")
       .select("id, rate, effective_from, note, created_at, creator:app_users!rate_history_created_by_fkey(full_name)")
       .eq(cfg.refColumn, refId);
     if (kind === "customer") q = q.eq("material_type", materialType ?? "pe");
-    const { data, error } = await q.order("effective_from", { ascending: false });
-    if (error) setError(error.message);
-    setRows((data ?? []) as any);
-    setLoading(false);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    return q.order("effective_from", { ascending: false });
   }, [supabase, cfg.refColumn, refId, kind, materialType]);
 
-  useEffect(() => { load(); }, [load]);
+  const applyRows = useCallback((res: { data: any[] | null; error: { message: string } | null }) => {
+    if (res.error) setError(res.error.message);
+    setRows((res.data ?? []) as any);
+    setLoading(false);
+  }, []);
+
+  // add/delete-এর পরে রিলোড (event handler থেকে)
+  const load = useCallback(async () => {
+    setLoading(true);
+    applyRows(await fetchRows());
+  }, [fetchRows, applyRows]);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchRows().then((res) => { if (!cancelled) applyRows(res); });
+    return () => { cancelled = true; };
+  }, [fetchRows, applyRows]);
 
   // row বদলের পর master টেবিলের cached rate কলাম re-sync
   async function syncCachedRate(freshRows: RateHistoryRow[]) {

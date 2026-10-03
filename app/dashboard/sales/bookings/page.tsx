@@ -2,6 +2,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import BookingsTable from "./BookingsTable";
 import { fetchAllRows } from "@/lib/fetchAll";
+import { bookingPricingSnapshot, type BookingPricingSnapshot } from "@/lib/bookingEditContext";
 
 export default async function BookingsListPage() {
   const supabase = await createClient();
@@ -18,6 +19,18 @@ export default async function BookingsListPage() {
 
   // PI No — pi_items দিয়ে (pi_bookings টেবিল কোথাও populate হয় না, তাই সেটা ব্যবহার করা যাবে না)
   const piItemRows = await fetchAllRows<any>(supabase, "pi_items", "booking_id, proforma_invoices(pi_no)");
+
+  // Hover কার্ডের Pricing System — Price/Lbs (customer + rate_history, booking date ধরে) আর implied Adjust/Pc
+  const [customers, priceHistory] = await Promise.all([
+    fetchAllRows<any>(supabase, "customers", "id, price_per_lbs_pe, price_per_lbs_pp"),
+    fetchAllRows<any>(supabase, "rate_history", "customer_id, effective_from, rate, material_type", (q) => q.not("customer_id", "is", null)),
+  ]);
+  const customerById: Record<string, any> = {};
+  customers.forEach((c: any) => { customerById[c.id] = c; });
+  const pricingByBooking: Record<string, BookingPricingSnapshot> = {};
+  (bookings ?? []).forEach((b: any) => {
+    pricingByBooking[b.id] = bookingPricingSnapshot(b, customerById[b.customer_id] ?? null, priceHistory);
+  });
 
   const piNoByBooking: Record<string, string> = {};
   (piItemRows ?? []).forEach((item: any) => {
@@ -61,7 +74,7 @@ export default async function BookingsListPage() {
         </Link>
       </div>
 
-      <BookingsTable groups={groups} deliveredMap={deliveredMap} challanNosByBooking={challanNosByBooking} piNoByBooking={piNoByBooking} />
+      <BookingsTable groups={groups} deliveredMap={deliveredMap} challanNosByBooking={challanNosByBooking} piNoByBooking={piNoByBooking} pricingByBooking={pricingByBooking} />
     </div>
   );
 }

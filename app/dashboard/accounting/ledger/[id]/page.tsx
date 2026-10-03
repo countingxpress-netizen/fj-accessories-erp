@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { notFound } from "next/navigation";
-import { formatDate } from "@/lib/formatDate";
 import { money } from "@/lib/format";
 import { fetchAllRows } from "@/lib/fetchAll";
 import { resolveDatePreset, datePresetLabel } from "@/lib/datePresets";
@@ -53,11 +52,13 @@ export default async function AccountLedgerPage({
   const openingBalance = from ? sorted.filter((l: any) => dateOf(l) < from).reduce((s: number, l: any) => s + signed(l), 0) : 0;
   const inRange = sorted.filter((l: any) => (!from || dateOf(l) >= from) && (!to || dateOf(l) <= to));
 
+  // চলতি ব্যালেন্স — সাধারণ loop-এ (map-এর callback-এর ভেতরে বাইরের variable বদলালে React-এর নিয়ম ভাঙে)
   let runningBalance = openingBalance;
-  const rows = inRange.map((l: any) => {
+  const rows: any[] = [];
+  for (const l of inRange as any[]) {
     runningBalance += signed(l);
-    return { ...l, runningBalance };
-  });
+    rows.push({ ...l, runningBalance });
+  }
 
   const totalDebit = inRange.reduce((sum: number, l: any) => sum + (l.debit || 0), 0);
   const totalCredit = inRange.reduce((sum: number, l: any) => sum + (l.credit || 0), 0);

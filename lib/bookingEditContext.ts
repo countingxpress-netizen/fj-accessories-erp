@@ -1,5 +1,6 @@
 import { resolveRate } from "@/lib/rateHistory";
-import { calcQuotedUnitPrice } from "@/lib/calcTubeCutting";
+import { calcQuotedUnitPrice, hasAdhesiveCharge } from "@/lib/calcTubeCutting";
+import { normalizeDiscountType } from "@/lib/bookingDiscount";
 
 // Booking Group → BookingForm-এর editContext (হেডার + প্রোডাক্ট তালিকা)। Booking Edit ও Booking
 // Clone — দুটোতেই একই হেল্পার (Clone-এ sourceBookingId/progress বাদ দিয়ে ব্যবহার হয়)।
@@ -13,25 +14,73 @@ export type BookingItemProgress = {
   producedPcs: number;
 };
 
+type CustomerPriceHistoryRow = { customer_id: string; effective_from: string; rate: number; material_type: string };
+
+// Booking Date-এ কার্যকর Price/Lbs (customer price_per_lbs_pe/pp + rate_history) — PP হলে PP-র
+// রেট, বাকি সব (PE/PE-RLD/Custom) PE-র রেট। Booking ফর্মে এন্ট্রির সময় যেভাবে বের হয়, সেভাবেই।
+export function bookingEffectivePricePerLbs(
+  booking: any, customer: any | null, priceHistory: CustomerPriceHistoryRow[],
+): number {
+  const bucket: "pe" | "pp" = booking?.material_type === "pp" ? "pp" : "pe";
+  const history = priceHistory.filter((h) => h.customer_id === booking?.customer_id && h.material_type === bucket);
+  const priceForBucket = bucket === "pp" ? customer?.price_per_lbs_pp : customer?.price_per_lbs_pe;
+  return resolveRate(history, booking?.booking_date, Number(priceForBucket ?? 0));
+}
+
+// Adjust/Pc আলাদা কলামে সেভ হয় না — quoted_unit_price − formula দাম থেকে implied ভাবে বের হয়
+export function bookingImpliedAdjustmentPerPc(booking: any, effRate: number): number {
+  const storedUnit = Number(booking.quoted_unit_price) || 0;
+  const formulaUnit = calcQuotedUnitPrice(booking, effRate, Number(booking.thickness_mm) || 0);
+  return formulaUnit > 0 && storedUnit > 0 ? Math.round((storedUnit - formulaUnit) * 100) / 100 : 0;
+}
+
+export type BookingPricingSnapshot = {
+  pricePerLbs: number;
+  orderThicknessMm: number;
+  productionThicknessMm: number;
+  piThicknessMm: number;
+  hasPrint: boolean;
+  printColors: number;
+  ratePerColor: number;
+  hasAdhesive: boolean;
+  ratePerInch: number;
+  adjustmentPerPc: number;
+};
+
+// Booking লিস্টের hover কার্ডের Pricing System — Booking Edit ফর্মে যে মান দেখাবে হুবহু সেটাই
+export function bookingPricingSnapshot(
+  booking: any, customer: any | null, priceHistory: CustomerPriceHistoryRow[],
+): BookingPricingSnapshot {
+  const effRate = bookingEffectivePricePerLbs(booking, customer, priceHistory);
+  return {
+    pricePerLbs: effRate,
+    orderThicknessMm: Number(booking.thickness_mm) || 0,
+    productionThicknessMm: Number(booking.production_thickness_mm) || 0,
+    piThicknessMm: Number(booking.pi_thickness_mm) || 0,
+    hasPrint: !!booking.has_print,
+    printColors: Number(booking.print_colors) || 0,
+    ratePerColor: Number(booking.rate_per_color) || 0.20,
+    hasAdhesive: hasAdhesiveCharge(booking.measurement_type),
+    ratePerInch: Number(booking.rate_per_inch) || 0.02,
+    adjustmentPerPc: bookingImpliedAdjustmentPerPc(booking, effRate),
+  };
+}
+
 export function buildBookingItems(
   bookings: any[],
   opts: {
     warehouses: { id: string; name: string }[];
     customer: any | null;
-    priceHistory: { customer_id: string; effective_from: string; rate: number; material_type: string }[];
+    priceHistory: CustomerPriceHistoryRow[];
     progressById?: Record<string, BookingItemProgress>;
   },
 ) {
   const warehouseName: Record<string, string> = {};
   opts.warehouses.forEach((w) => (warehouseName[w.id] = w.name));
 
-  const first = bookings[0];
   // Booking Date-এ কার্যকর Price/Lbs — পুরনো Adjust/Pc implied ভাবে বের করতে লাগে
   // (quoted_unit_price − formula দাম)। ফর্ম আলাদা adjustment কলাম রাখে না।
-  const bucket: "pe" | "pp" = first?.material_type === "pp" ? "pp" : "pe";
-  const history = opts.priceHistory.filter((h) => h.customer_id === first?.customer_id && h.material_type === bucket);
-  const priceForBucket = bucket === "pp" ? opts.customer?.price_per_lbs_pp : opts.customer?.price_per_lbs_pe;
-  const effRate = resolveRate(history, first?.booking_date, Number(priceForBucket ?? 0));
+  const effRate = bookingEffectivePricePerLbs(bookings[0], opts.customer, opts.priceHistory);
 
   return bookings.map((b: any) => {
     const fg = b.finished_goods;
@@ -39,9 +88,7 @@ export function buildBookingItems(
       .map((bm: any) => ({ name: bm.raw_materials?.material_name ?? "", qty: Number(bm.quantity_lbs) || 0 }))
       .filter((m: any) => m.name && m.qty > 0);
     const finalLbs = Number(b.required_lbs) || 0;
-    const storedUnit = Number(b.quoted_unit_price) || 0;
-    const formulaUnit = calcQuotedUnitPrice(b, effRate, Number(b.thickness_mm) || 0);
-    const impliedAdj = formulaUnit > 0 && storedUnit > 0 ? Math.round((storedUnit - formulaUnit) * 100) / 100 : 0;
+    const impliedAdj = bookingImpliedAdjustmentPerPc(b, effRate);
     return {
       sourceBookingId: b.id as string,
       progress: opts.progressById?.[b.id],
@@ -96,6 +143,8 @@ export function bookingHeader(first: any) {
     merchantId: first.merchant_id ?? null,
     merchantName: first.merchants?.name ?? null,
     deliveryPoint: first.delivery_point ?? "",
+    discountType: normalizeDiscountType(first.discount_type),
+    discountValue: Number(first.discount_value) || 0,
   };
 }
 

@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import NavIcon from "./NavIcon";
@@ -137,10 +137,13 @@ export default function SidebarMenu({ restrictedToPi = false }: { restrictedToPi
   const activeLabel = useMemo(() => activeGroupLabel(pathname), [pathname]);
   const [openGroup, setOpenGroup] = useState<string | null>(activeLabel);
 
-  // route বদলালে ওই section অটো খুলে দাও
-  useEffect(() => {
+  // route বদলালে ওই section অটো খুলে দাও — effect-এ না করে render-এই (React-এর "prop বদলালে
+  // state মেলানো" নিয়মে): আগের route মনে রেখে বদল দেখলেই একবার set
+  const [seenActiveLabel, setSeenActiveLabel] = useState(activeLabel);
+  if (seenActiveLabel !== activeLabel) {
+    setSeenActiveLabel(activeLabel);
     setOpenGroup(activeLabel);
-  }, [activeLabel]);
+  }
 
   // role='customer_pi_only' — শুধু Proforma Invoice-এর লিংক, বাকি কোনো মেনু না
   // (আসল নিরাপত্তা proxy.ts-এ, এটা শুধু UI)

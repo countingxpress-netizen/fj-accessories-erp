@@ -124,15 +124,18 @@ export default function AttendanceGrid({
   const eligible = (e: Employee, d: string) => !e.join_date || d >= e.join_date;
 
   // ── লোড ──
-  async function load() {
-    if (dates.length === 0) return;
-    setLoading(true);
-    setError("");
+  // fetchGrid শুধু ডাটা আনে; state বসে applyGrid-এ (await/then-এর পরে)। তারিখ বদলালে effect লোড করে —
+  // "লোড হচ্ছে" ভাব derive হয় (যে তারিখের ডাটা বসানো আছে ≠ বাছাই করা তারিখ), effect-এ setLoading লাগে না।
+  const rangeKey = `${from}|${to}`;
+  const [loadedRange, setLoadedRange] = useState("");
+  const busy = loading || (dates.length > 0 && loadedRange !== rangeKey);
+
+  async function fetchGrid(f: string, t: string) {
     const [att, ots] = await Promise.all([
       fetchAllRows<any>(supabase, "attendance", "id, employee_id, att_date, status, comments",
-        (q) => q.gte("att_date", from).lte("att_date", to)),
+        (q) => q.gte("att_date", f).lte("att_date", t)),
       fetchAllRows<any>(supabase, "overtime", "id, employee_id, ot_date, hours",
-        (q) => q.gte("ot_date", from).lte("ot_date", to)),
+        (q) => q.gte("ot_date", f).lte("ot_date", t)),
     ]);
     const c: Record<string, Cell> = {};
     att.forEach((r) => { c[key(r.employee_id, r.att_date)] = { status: r.status ?? "", comment: r.comments ?? "" }; });
@@ -141,10 +144,30 @@ export default function AttendanceGrid({
       const k = key(r.employee_id, r.ot_date);
       o[k] = String((parseFloat(o[k] || "0") || 0) + Number(r.hours));
     });
-    setCells(c); setOrigCells(c); setOt(o); setOrigOt(o);
+    return { c, o };
+  }
+  function applyGrid(g: { c: Record<string, Cell>; o: Record<string, string> }, range: string) {
+    setCells(g.c); setOrigCells(g.c); setOt(g.o); setOrigOt(g.o);
+    setLoadedRange(range);
+  }
+  // সেভের পরে রিলোড (event handler থেকে)
+  async function load() {
+    if (dates.length === 0) return;
+    setLoading(true);
+    setError("");
+    applyGrid(await fetchGrid(from, to), rangeKey);
     setLoading(false);
   }
-  useEffect(() => { load(); }, [from, to]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (dates.length === 0) return;
+    let cancelled = false;
+    fetchGrid(from, to).then((g) => {
+      if (cancelled) return;
+      setError("");
+      applyGrid(g, `${from}|${to}`);
+    });
+    return () => { cancelled = true; };
+  }, [from, to]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── বদলানো ঘর ──
   const dirtyKeys = useMemo(() => {
@@ -400,7 +423,7 @@ export default function AttendanceGrid({
 
       {/* ── Today ভিউ ── */}
       {todayView && dates.length === 1 && (
-        <div className={`overflow-auto rounded-lg border max-h-[70vh] ${loading ? "opacity-50" : ""}`}>
+        <div className={`overflow-auto rounded-lg border max-h-[70vh] ${busy ? "opacity-50" : ""}`}>
           <table className="w-full text-sm">
             <thead className="sticky top-0 z-10 bg-gray-50 text-left text-gray-600">
               <tr>
@@ -463,7 +486,7 @@ export default function AttendanceGrid({
 
       {/* ── গ্রিড ভিউ ── */}
       {!todayView && dates.length > 0 && (
-        <div className={`overflow-auto rounded-lg border max-h-[70vh] ${loading ? "opacity-50" : ""}`}>
+        <div className={`overflow-auto rounded-lg border max-h-[70vh] ${busy ? "opacity-50" : ""}`}>
           <table className="text-xs border-collapse">
             <thead className="sticky top-0 z-20 bg-gray-50 text-gray-600">
               <tr>

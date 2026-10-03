@@ -4,6 +4,7 @@ import { money } from "@/lib/format";
 import { formatDate } from "@/lib/formatDate";
 import { AT_DEFAULT_MARKUP_PERCENTAGE } from "@/lib/atCommission";
 import { calcInvoiceCommission } from "@/lib/commission";
+import { isDiscountLine } from "@/lib/bookingDiscount";
 import { loadGroupMap, displayEntity } from "@/lib/customerGroups";
 import CommissionRow from "./CommissionRow";
 import PrintButton from "@/app/dashboard/PrintButton";
@@ -31,7 +32,7 @@ export default async function CommissionReportPage({
     supabase, "sales_invoices",
     `id, invoice_no, invoice_date, customer_id, commission_adjustment, commission_note,
       customers(name, code, commission_enabled, commission_percentage),
-      sales_invoice_items(quantity_pcs, unit_price, amount, bookings(required_lbs, buyer_id, measurement_type, measurement_unit, length_val, width_val, flap_val, gusset_val))`,
+      sales_invoice_items(quantity_pcs, unit_price, amount, line_type, bookings(required_lbs, buyer_id, measurement_type, measurement_unit, length_val, width_val, flap_val, gusset_val))`,
     (q) => {
       q = q.order("invoice_date", { ascending: false }).order("invoice_no", { ascending: false });
       if (from) q = q.gte("invoice_date", from);
@@ -57,6 +58,7 @@ export default async function CommissionReportPage({
         unit_price: it.unit_price || 0,
         quantity_pcs: it.quantity_pcs || 0,
         amount: it.amount || 0,
+        pass_through: isDiscountLine(it),
         order_lbs: it.bookings?.required_lbs || 0,
         markup_pct: it.bookings?.buyer_id ? (markupMap[it.bookings.buyer_id] ?? AT_DEFAULT_MARKUP_PERCENTAGE) : AT_DEFAULT_MARKUP_PERCENTAGE,
         buyer_name: it.bookings?.buyer_id ? (buyerNameMap[it.bookings.buyer_id] ?? null) : null,

@@ -3,6 +3,7 @@ import { generateNextDocNo } from "@/lib/docNumber";
 import { getCurrentUserId } from "@/lib/currentUser";
 import { buildLbsLines, type LbsBooking } from "@/lib/lbsInvoice";
 import { syncInvoiceCogs, reverseInvoiceCogs } from "@/lib/invoiceCogs";
+import { calcBookingDiscount, discountLabel, DISCOUNT_LINE_TYPE } from "@/lib/bookingDiscount";
 
 type SupabaseClient = ReturnType<typeof createClient>;
 
@@ -12,6 +13,9 @@ type SupabaseClient = ReturnType<typeof createClient>;
 //
 // customers.lbs_invoicing_enabled = true হলে standard লাইনের বদলে LBS Invoice
 // (প্রোডাক্ট রো + Powder/Making/Printing/Non-Print/Adhesive চার্জ রো — lib/lbsInvoice.ts)।
+//
+// Booking group-এ Discount থাকলে (bookings.discount_type/value — lib/bookingDiscount.ts) শেষে একটা
+// "Discount" লাইন (line_type 'discount', qty 1, unit_price −টাকা) — invoice Total ও JV net অঙ্কে।
 //
 // JV:  Dr 1000 Cash / 1100 AR      Cr 4000 Sales Revenue-Local
 //      (Cash না Credit — paymentReceived অনুযায়ী)
@@ -228,7 +232,35 @@ export async function syncAutoInvoiceForGroup(
       rows.map((r: any) => ({
         invoice_id: invoiceId, product_id: r.product_id, booking_id: r.id,
         quantity_pcs: r.quantity_pcs, unit_price: r.quoted_unit_price,
+        // একসাথে insert-এ সব row-এর key একই হতে হয় — Discount লাইনে line_type থাকলে এখানে না দিলে
+        // PostgREST null পাঠায় (NOT NULL কলাম, default খাটে না)
+        line_type: "standard", line_label: null, required_lbs: null,
       }));
+  }
+
+  // ── Booking Discount (মোট মূল্যের উপর) → আলাদা "Discount" লাইন ──
+  // আলাদা query + এরর উপেক্ষা: discount_* কলাম মাইগ্রেশনের আগে থাকবে না — তখন উপরের booking select
+  // ভেঙে পুরো invoice মুছে যাওয়ার ঝুঁকি না নিয়ে শুধু Discount বাদ দেওয়া হয়।
+  const { data: discountRow } = await supabase
+    .from("bookings")
+    .select("discount_type, discount_value")
+    .eq("booking_group_id", groupId)
+    .neq("status", "cancelled")
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  const discount = calcBookingDiscount(totalAmount, (discountRow as any)?.discount_type, (discountRow as any)?.discount_value);
+  if (discount > 0) {
+    const baseItems = makeItems;
+    const label = discountLabel((discountRow as any)?.discount_type, (discountRow as any)?.discount_value);
+    makeItems = (invoiceId) => [
+      ...baseItems(invoiceId),
+      {
+        invoice_id: invoiceId, product_id: null, booking_id: null,
+        quantity_pcs: 1, unit_price: -discount, line_type: DISCOUNT_LINE_TYPE, line_label: label, required_lbs: null,
+      },
+    ];
+    totalAmount -= discount;
   }
 
   // ── invoice তৈরি / আপডেট ────────────────────────────────────────────────

@@ -3,11 +3,12 @@ import { formatDate } from "@/lib/formatDate";
 import { notFound } from "next/navigation";
 import PrintButton from "@/app/dashboard/PrintButton";
 import { amountInWords } from "@/lib/numberToWords";
-import { AT_DEFAULT_MARKUP_PERCENTAGE, calcAtCustomerLine } from "@/lib/atCommission";
+import { AT_CUSTOMER_LBS_DIVISOR, AT_DEFAULT_MARKUP_PERCENTAGE, calcAtCustomerLine } from "@/lib/atCommission";
 import { isCommissionExcludedLine } from "@/lib/commission";
 import { buildPdfFilename } from "@/lib/saveAsPdf";
 import InvoiceSummary from "../InvoiceSummary";
 import { fetchAllRows } from "@/lib/fetchAll";
+import { isDiscountLine } from "@/lib/bookingDiscount";
 
 function fmt(n: number) {
   return n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -33,7 +34,7 @@ export default async function InvoicePrintCustomerPage({ params }: { params: Pro
     .from("sales_invoices")
     .select(`*, customers(name, address, phone, opening_balance, opening_balance_date),
       creator:app_users!sales_invoices_created_by_fkey(signature_url),
-      sales_invoice_items(quantity_pcs, unit_price,
+      sales_invoice_items(quantity_pcs, unit_price, amount, line_type, line_label,
         bookings(booking_no, style, product_details, required_lbs, buyer_id, measurement_type, measurement_unit, length_val, width_val, flap_val, gusset_val, pillow_val, created_at),
         finished_goods(product_name))`)
     .eq("id", id)
@@ -59,7 +60,12 @@ export default async function InvoicePrintCustomerPage({ params }: { params: Pro
   // নির্দিষ্ট Buyer/Measurement-এ (lib/commission.ts) কোনো markup যোগ হবে না — আসল দামই দেখাবে।
   // Booking-এ যে সিরিয়ালে এন্ট্রি দেওয়া হয়েছে (created_at) সেই সিরিয়ালেই লাইন দেখাতে হবে।
   // Style/Product-এ বুকিং-এ যা সরাসরি দেওয়া হয়েছে তাই দেখানো হয় — কিছু না থাকলে ব্ল্যাংক।
+  // Booking Discount লাইন — markup ছাড়া হুবহু বিয়োগ (টেবিলের সারিতে নয়, নিচে Sub Total / Discount / Total)
+  const discountLines = (invoice.sales_invoice_items ?? []).filter(isDiscountLine);
+  const discountAmount = -discountLines.reduce((s: number, i: any) => s + (Number(i.amount) || 0), 0);
+  const discountText = discountLines[0]?.line_label || "Discount";
   const items = (invoice.sales_invoice_items ?? [])
+    .filter((item: any) => !isDiscountLine(item))
     .map((item: any) => {
       const actualPrice = item.unit_price || 0;
       const qty = item.quantity_pcs || 0;
@@ -81,8 +87,11 @@ export default async function InvoicePrintCustomerPage({ params }: { params: Pro
     })
     .sort((a: any, b: any) => (a.bookings?.created_at ?? "").localeCompare(b.bookings?.created_at ?? ""));
 
-  const total = items.reduce((s: number, i: any) => s + i.customerAmount, 0);
-  const totalOrderLbs = items.reduce((s: number, i: any) => s + i.orderLbs, 0);
+  const subTotal = items.reduce((s: number, i: any) => s + i.customerAmount, 0);
+  const total = subTotal - discountAmount;
+  // Customer-কে দেখানো Lbs = এই পেজের Total / 117 (বুকিং-এর required_lbs-এর যোগফল না) — render-time
+  // হিসাব, তাই আগের সব Submit to Customer invoice-এও একই নিয়মে দেখায়
+  const totalOrderLbs = total / AT_CUSTOMER_LBS_DIVISOR;
   const totalQty = items.reduce((s: number, i: any) => s + (Number(i.quantity_pcs) || 0), 0);
 
   // পরপর একই Style একাধিক লাইনে থাকলে Style কলাম merge & center হবে
@@ -161,7 +170,11 @@ export default async function InvoicePrintCustomerPage({ params }: { params: Pro
     ...items.map((item: any, i: number) => [
       i + 1, item.styleLabel, item.productLabel, formatMeasurement(item.bookings), item.quantity_pcs, Number(item.customerUnitPrice.toFixed(2)), Number(item.customerAmount.toFixed(2)),
     ]),
-    ["Total", "", "", "", totalQty, "", Number(total.toFixed(2))],
+    ...(discountAmount !== 0 ? [
+      ["Sub Total", "", "", "", totalQty, "", Number(subTotal.toFixed(2))],
+      [`(−) ${discountText}`, "", "", "", "", "", Number(discountAmount.toFixed(2))],
+    ] : []),
+    ["Total", "", "", "", discountAmount !== 0 ? "" : totalQty, "", Number(total.toFixed(2))],
     [],
     [`Total Order Lbs = ${fmt(totalOrderLbs)} Lbs`],
     [],
@@ -243,9 +256,23 @@ export default async function InvoicePrintCustomerPage({ params }: { params: Pro
           })}
         </tbody>
         <tfoot>
+          {discountAmount !== 0 && (
+            <>
+              <tr>
+                <td colSpan={4} className="border border-gray-800 px-2 py-2 text-right">Sub Total</td>
+                <td className="border border-gray-800 px-2 py-2 text-right">{totalQty}</td>
+                <td className="border border-gray-800 px-2 py-2"></td>
+                <td className="border border-gray-800 px-2 py-2 text-right">{fmt(subTotal)}</td>
+              </tr>
+              <tr>
+                <td colSpan={6} className="border border-gray-800 px-2 py-2 text-right">(−) {discountText}</td>
+                <td className="border border-gray-800 px-2 py-2 text-right">{fmt(discountAmount)}</td>
+              </tr>
+            </>
+          )}
           <tr className="font-semibold bg-gray-50">
             <td colSpan={4} className="border border-gray-800 px-2 py-2 text-right">Total</td>
-            <td className="border border-gray-800 px-2 py-2 text-right">{totalQty}</td>
+            <td className="border border-gray-800 px-2 py-2 text-right">{discountAmount !== 0 ? "" : totalQty}</td>
             <td className="border border-gray-800 px-2 py-2"></td>
             <td className="border border-gray-800 px-2 py-2 text-right">{fmt(total)}</td>
           </tr>

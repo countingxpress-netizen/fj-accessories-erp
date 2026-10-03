@@ -24,6 +24,8 @@ export type CommissionItem = {
   markup_pct: number;  // AT-এর জন্য: buyer.markup_percentage
   buyer_name?: string | null;
   measurement?: CommissionMeasurement | null;
+  /** Booking Discount লাইন — AT-এ markup ছাড়াই হুবহু (customer ও আসল দুই দিকেই একই অঙ্ক) */
+  pass_through?: boolean;
 };
 
 // এই বায়ারগুলোর কোনো লাইনেই কমিশন/Submit to Customer markup হবে না (ব্যবহারকারীর সরাসরি নির্দেশ)
@@ -67,6 +69,7 @@ export function calcInvoiceCommission(
     let real = 0;
     let cust = 0;
     for (const it of items) {
+      if (it.pass_through) continue; // Discount: real ও customer দুই দিকেই একই অঙ্ক বাদ — কমিশনে প্রভাব নেই
       if (isCommissionExcludedLine(it.buyer_name, it.measurement)) continue; // এই লাইনে কমিশন হবে না
       real += it.amount || 0;
       const { customerAmount } = calcAtCustomerLine(

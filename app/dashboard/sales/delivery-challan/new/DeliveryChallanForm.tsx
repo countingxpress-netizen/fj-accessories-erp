@@ -1,5 +1,5 @@
 "use client";
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { generateChallanNo } from "@/lib/docNumber";
@@ -37,7 +37,7 @@ export default function DeliveryChallanForm({
   customersWithChallans?: string[];
 }) {
   const isEdit = !!editChallan;
-  const editLines = editChallan?.lines ?? [];
+  const editLines = useMemo(() => editChallan?.lines ?? [], [editChallan]);
   const editBookingIds = useMemo(() => new Set(editLines.map((l) => l.bookingId)), [editLines]);
 
   const [customerId, setCustomerId] = useState(editChallan?.customerId ?? "");
@@ -61,6 +61,7 @@ export default function DeliveryChallanForm({
   );
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  // প্রথম চালানের সিরিয়াল — কাস্টমার বাছাইয়ের সময়ই hint বসে (নিচে selectCustomer)
   const [manualSerial, setManualSerial] = useState("");
   const router = useRouter();
   const supabase = createClient();
@@ -70,14 +71,15 @@ export default function DeliveryChallanForm({
   // এরপর থেকে স্বাভাবিক MAX-based auto-numbering এখান থেকেই এগোবে।
   const isFirstChallanForCustomer = !isEdit && !!customerId && !customersWithChallans.includes(customerId);
 
-  useEffect(() => {
-    if (isFirstChallanForCustomer && selectedCustomer?.challan_next_serial_hint) {
-      setManualSerial(String(selectedCustomer.challan_next_serial_hint));
-    } else {
-      setManualSerial("");
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [customerId]);
+  // কাস্টমার বদলালে বাছাই/ফিল্টার রিসেট + প্রথম চালান হলে সিরিয়াল hint (effect-এ নয়, বদলের সময়ই)
+  function selectCustomer(id: string) {
+    setCustomerId(id);
+    setSelectedQty({}); setSelectedPackets({}); setLineWarehouse({});
+    setBuyerFilter(""); setMerchantFilter(""); setStyleFilter(""); setGarmentsFilter("");
+    const c = customers.find((x) => x.id === id);
+    const firstChallan = !isEdit && !!id && !customersWithChallans.includes(id);
+    setManualSerial(firstChallan && c?.challan_next_serial_hint ? String(c.challan_next_serial_hint) : "");
+  }
 
   // একটি product-এর প্রতিটা warehouse-এ কত pcs আছে (সব warehouse দেখায়, না থাকলে 0)
   function warehouseRowsFor(productId: string) {
@@ -265,7 +267,7 @@ export default function DeliveryChallanForm({
           <select
             value={customerId}
             disabled={isEdit}
-            onChange={(e) => { setCustomerId(e.target.value); setSelectedQty({}); setSelectedPackets({}); setLineWarehouse({}); setBuyerFilter(""); setMerchantFilter(""); setStyleFilter(""); setGarmentsFilter(""); }}
+            onChange={(e) => selectCustomer(e.target.value)}
             className="w-full rounded-lg border px-3 py-2 text-sm disabled:bg-gray-100 disabled:text-gray-500"
             required
           >

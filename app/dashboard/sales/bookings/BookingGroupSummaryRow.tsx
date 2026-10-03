@@ -6,12 +6,14 @@ import { money } from "@/lib/format";
 
 export default function BookingGroupSummaryRow({
   items, serial, groupPiNo, deliveredMap, challanNosByBooking,
-  expanded, onToggleExpand, allSelected, someSelected, onToggleSelectGroup,
+  expanded, onToggleExpand, allSelected, someSelected, onToggleSelectGroup, rowHoverProps,
 }: {
   items: any[]; serial: number; groupPiNo: string;
   deliveredMap: Record<string, number>; challanNosByBooking: Record<string, string[]>;
   expanded: boolean; onToggleExpand: () => void;
   allSelected: boolean; someSelected: boolean; onToggleSelectGroup: () => void;
+  /** মাউস রাখলে গ্রুপের সব প্রোডাক্টের Pricing System কার্ড (BookingsTable থেকে) */
+  rowHoverProps?: React.HTMLAttributes<HTMLTableRowElement>;
 }) {
   const first = items[0];
   const totalQty = items.reduce((s, b) => s + (b.quantity_pcs || 0), 0);
@@ -19,8 +21,8 @@ export default function BookingGroupSummaryRow({
   const status = getGroupStatusSummary(items, deliveredMap, challanNosByBooking);
 
   return (
-    <tr className="border-t-2 border-t-blue-200 bg-blue-50/40">
-      <td className="px-4 py-1.5">
+    <tr className="border-t-2 border-t-blue-200 bg-blue-50/40" {...rowHoverProps}>
+      <td className="px-4 py-1.5" data-no-pricing-hover>
         <input
           type="checkbox"
           checked={allSelected}
@@ -55,7 +57,7 @@ export default function BookingGroupSummaryRow({
       <td className="px-4 py-1.5 font-medium text-xs">
         {groupPiNo ? <span className="text-blue-700">{groupPiNo}</span> : <span className="text-gray-400 font-normal">-</span>}
       </td>
-      <td className="px-4 py-1.5 text-right">
+      <td className="px-4 py-1.5 text-right" data-no-pricing-hover>
         <Link href={`/dashboard/sales/bookings/${first.id}`} className="rounded bg-gray-100 px-3 py-1 text-xs text-gray-700 hover:bg-gray-200">
           View
         </Link>

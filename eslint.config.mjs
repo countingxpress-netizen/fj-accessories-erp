@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Claude Code-এর ডাটা/plugin ফাইল — অ্যাপের কোড না
+    ".claude/**",
   ]),
 ]);
 

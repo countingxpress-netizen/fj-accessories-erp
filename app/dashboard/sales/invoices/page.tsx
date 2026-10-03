@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import InvoicesTable from "./InvoicesTable";
 import { AT_DEFAULT_MARKUP_PERCENTAGE } from "@/lib/atCommission";
 import { calcInvoiceCommission } from "@/lib/commission";
+import { isDiscountLine } from "@/lib/bookingDiscount";
 import { fetchAllRows } from "@/lib/fetchAll";
 
 export default async function SalesInvoiceListPage() {
@@ -10,7 +11,7 @@ export default async function SalesInvoiceListPage() {
   const invoices = await fetchAllRows<any>(
     supabase, "sales_invoices",
     `*, customers(name, code, commission_enabled, commission_percentage), creator:app_users!sales_invoices_created_by_fkey(full_name),
-      sales_invoice_items(quantity_pcs, unit_price, amount,
+      sales_invoice_items(quantity_pcs, unit_price, amount, line_type,
         bookings(booking_no, required_lbs, buyer_id, measurement_type, measurement_unit, length_val, width_val, flap_val, gusset_val))`,
     (q) => q.order("invoice_date", { ascending: false }).order("created_at", { ascending: false })
   );
@@ -42,6 +43,7 @@ export default async function SalesInvoiceListPage() {
       unit_price: item.unit_price || 0,
       quantity_pcs: item.quantity_pcs || 0,
       amount: item.amount || 0,
+      pass_through: isDiscountLine(item),
       order_lbs: item.bookings?.required_lbs || 0,
       markup_pct: item.bookings?.buyer_id ? (markupMap[item.bookings.buyer_id] ?? AT_DEFAULT_MARKUP_PERCENTAGE) : AT_DEFAULT_MARKUP_PERCENTAGE,
       buyer_name: item.bookings?.buyer_id ? (buyerNameMap[item.bookings.buyer_id] ?? null) : null,

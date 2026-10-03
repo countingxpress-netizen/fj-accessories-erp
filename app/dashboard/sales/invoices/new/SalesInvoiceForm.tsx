@@ -195,25 +195,21 @@ export default function SalesInvoiceForm({
   const totalAmount = lineItems.reduce((s, li) => s + li.amount, 0);
 
   // ── LBS Invoicing হিসাব ──────────────────────────────────────────────────
-  const lbsSelectedBookings = useMemo(
-    () =>
-      customerBookings
-        .filter((b) => selectedBookings[b.id])
-        .map((b) => ({ ...b, quantity_pcs: effectiveQty(b) })), // New: বাকি; Edit: Qty ইনপুট
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [customerBookings, selectedBookings, qtyOverride]
-  );
+  // হালকা হিসাব (এক কাস্টমারের কয়েকটা booking) — useMemo-র dependency effectiveQty (প্রতি render-এ নতুন
+  // function) ঠিকমতো ধরা যেত না, তাই সরাসরি হিসাব
+  const lbsSelectedBookings = customerBookings
+    .filter((b) => selectedBookings[b.id])
+    .map((b) => ({ ...b, quantity_pcs: effectiveQty(b) })); // New: বাকি; Edit: Qty ইনপুট
 
-  const lbsResult = useMemo(() => {
-    if (!showLbs || lbsSelectedBookings.length === 0) return null;
-    return buildLbsLines(lbsSelectedBookings as unknown as LbsBooking[], {
-      materialRatePerLbs: parseFloat(lbsPowderRate) || Number(selectedCustomer?.price_per_lbs ?? 0),
-      makingCuttingRate: parseFloat(lbsMakingRate) || Number(selectedCustomer?.making_cutting_rate ?? 0),
-      printRate: lbsPrintRate.trim() === "" ? undefined : parseFloat(lbsPrintRate) || 0,
-      adhesiveRate: lbsAdhesiveRate.trim() === "" ? undefined : parseFloat(lbsAdhesiveRate) || 0,
-      bigBagDoublePrint: true,
-    });
-  }, [showLbs, lbsSelectedBookings, lbsPowderRate, lbsMakingRate, lbsPrintRate, lbsAdhesiveRate, selectedCustomer]);
+  const lbsResult = !showLbs || lbsSelectedBookings.length === 0
+    ? null
+    : buildLbsLines(lbsSelectedBookings as unknown as LbsBooking[], {
+        materialRatePerLbs: parseFloat(lbsPowderRate) || Number(selectedCustomer?.price_per_lbs ?? 0),
+        makingCuttingRate: parseFloat(lbsMakingRate) || Number(selectedCustomer?.making_cutting_rate ?? 0),
+        printRate: lbsPrintRate.trim() === "" ? undefined : parseFloat(lbsPrintRate) || 0,
+        adhesiveRate: lbsAdhesiveRate.trim() === "" ? undefined : parseFloat(lbsAdhesiveRate) || 0,
+        bigBagDoublePrint: true,
+      });
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();

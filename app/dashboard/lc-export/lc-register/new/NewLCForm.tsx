@@ -79,7 +79,7 @@ export default function NewLCForm({
     { label: "", value: "" }, { label: "", value: "" }, { label: "", value: "" },
   ]);
 
-  const [amount, setAmount] = useState("");
+  const [amountInput, setAmount] = useState("");
   const [amountTouched, setAmountTouched] = useState(false);
   const [currency, setCurrency] = useState("USD"); // Import LC-তেই শুধু বদলানো যায়; Export সবসময় USD
   const [draftsAt, setDraftsAt] = useState("at_sight");
@@ -102,12 +102,22 @@ export default function NewLCForm({
 
   const availableGarments = garments.filter((g) => g.customer_id === customerId);
 
+  const selectedIdsKey = Object.entries(selectedPiIds).filter(([, v]) => v).map(([id]) => id).sort().join(",");
+
+  // Applicant বদলালে (Master PI হেডার হাতে বদলানো না হলে) Master PI-র Buyer-ও বদলায় — বদলের সময়ই
+  function changeApplicant(v: string) {
+    setApplicant(v);
+    if (masterHeaderTouched) return;
+    const selected = selectedIdsKey.split(",").map((id) => sourcePis[id]).filter(Boolean);
+    if (selected.length) setMasterHeader(buildMasterHeader(selected, v));
+  }
+
   function handleCustomerChange(id: string) {
     setCustomerId(id);
     setGarmentsId("");
     if (!applicantTouched) {
       const c = customers.find((x) => x.id === id);
-      setApplicant(c ? [c.name, c.address].filter(Boolean).join("\n") : "");
+      changeApplicant(c ? [c.name, c.address].filter(Boolean).join("\n") : "");
     }
   }
 
@@ -115,7 +125,7 @@ export default function NewLCForm({
     setGarmentsId(id);
     const g = garments.find((x) => x.id === id);
     if (g) {
-      setApplicant([g.name, g.address].filter(Boolean).join("\n"));
+      changeApplicant([g.name, g.address].filter(Boolean).join("\n"));
       setApplicantTouched(true);
     }
   }
@@ -141,9 +151,13 @@ export default function NewLCForm({
     () => pis.filter((p) => selectedPiIds[p.id]).reduce((s, p) => s + (Number(p.total_amount) || 0), 0),
     [pis, selectedPiIds],
   );
+  // PI বাছাই বদলালে LC Amount অটো — ইউজার হাতে বদলে থাকলে (amountTouched) হাতের মানই থাকে।
+  // effect দিয়ে state-এ বসানোর বদলে সরাসরি derive।
+  const amount = lcType === "export" && !amountTouched && selectedPiTotal > 0
+    ? String(Math.round(selectedPiTotal * 100) / 100)
+    : amountInput;
 
   // PI বাছাই বদলালে নতুন PI-গুলোর লাইন লোড করে Master PI আপডেট — আগে এডিট করা লাইন অক্ষুণ্ণ থাকে
-  const selectedIdsKey = Object.entries(selectedPiIds).filter(([, v]) => v).map(([id]) => id).sort().join(",");
   useEffect(() => {
     if (lcType !== "export") return;
     const ids = selectedIdsKey ? selectedIdsKey.split(",") : [];
@@ -169,14 +183,6 @@ export default function NewLCForm({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedIdsKey, lcType]);
 
-  // Applicant বদলালে (হেডার হাতে বদলানো না হলে) Master PI-র Buyer-ও বদলায়
-  useEffect(() => {
-    if (masterHeaderTouched) return;
-    const selected = selectedIdsKey.split(",").map((id) => sourcePis[id]).filter(Boolean);
-    if (selected.length) setMasterHeader(buildMasterHeader(selected, applicant));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [applicant]);
-
   const masterSummary = masterHeader ? masterTotals(masterHeader, masterLines) : null;
   const piNoById = useMemo(() => Object.fromEntries(pis.map((p) => [p.id, p.pi_no])), [pis]);
 
@@ -187,13 +193,6 @@ export default function NewLCForm({
     setMasterHeader(selected.length ? buildMasterHeader(selected, applicant) : null);
     setMasterLines(mergeLines([], selected));
   }
-
-  // PI বাছাই বদলালে LC Amount অটো বসে — ইউজার হাতে বদলে থাকলে (amountTouched) সেটা অক্ষুণ্ণ থাকে
-  useEffect(() => {
-    if (lcType === "export" && !amountTouched && selectedPiTotal > 0) {
-      setAmount(String(Math.round(selectedPiTotal * 100) / 100));
-    }
-  }, [selectedPiTotal, amountTouched, lcType]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -453,7 +452,7 @@ export default function NewLCForm({
               </select>
               <textarea
                 value={applicant}
-                onChange={(e) => { setApplicant(e.target.value); setApplicantTouched(true); }}
+                onChange={(e) => { changeApplicant(e.target.value); setApplicantTouched(true); }}
                 rows={2}
                 placeholder="Garments বাছলে অটো বসবে, দরকারে এডিট করুন"
                 className="w-full rounded-lg border px-3 py-2 text-sm"

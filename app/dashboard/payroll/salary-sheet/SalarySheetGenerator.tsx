@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import {
@@ -46,13 +46,16 @@ export default function SalarySheetGenerator({ employees }: { employees: Employe
   const router = useRouter();
   const supabase = createClient();
 
-  const { start: monthStart, end: monthEnd } = monthRange(year, month);
+  const { end: monthEnd } = monthRange(year, month);
 
-  // একবার Preview করার পর মাস/বছর বদলালে নতুন মাসের হিসাব নিজে থেকেই লোড হয়
+  // একবার Preview করার পর মাস/বছর বদলালে নতুন মাসের হিসাব নিজে থেকেই লোড হয় — মাস/বছর বদলের
+  // handler-এই (নিচে select/input-এর onChange), effect দিয়ে নয়
   const [previewed, setPreviewed] = useState(false);
-  useEffect(() => {
-    if (previewed) runPreview();
-  }, [month, year]); // eslint-disable-line react-hooks/exhaustive-deps
+  function changePeriod(y: number, m: number) {
+    setYear(y);
+    setMonth(m);
+    if (previewed) runPreview(y, m);
+  }
 
   async function handlePreview(e: React.FormEvent) {
     e.preventDefault();
@@ -60,7 +63,9 @@ export default function SalarySheetGenerator({ employees }: { employees: Employe
     await runPreview();
   }
 
-  async function runPreview() {
+  async function runPreview(y: number = year, m: number = month) {
+    // মাস বদলের সাথে সাথে ডাকা হলে state তখনো পুরনো — তাই মাস/বছর parameter হিসেবে
+    const { start: monthStart, end: monthEnd } = monthRange(y, m);
     setError("");
     setLoading(true);
     setRows(null);
@@ -84,7 +89,7 @@ export default function SalarySheetGenerator({ employees }: { employees: Employe
         if (s.employee_id) advDue.set(s.employee_id, (advDue.get(s.employee_id) ?? 0) - (Number(s.advance) || 0));
       });
 
-      const monthDays = daysInMonthOf(year, month);
+      const monthDays = daysInMonthOf(y, m);
       const out: PreviewRow[] = [];
       const initBasic: Record<string, string> = {};
       const initAdvance: Record<string, string> = {};
@@ -96,7 +101,7 @@ export default function SalarySheetGenerator({ employees }: { employees: Employe
         const employedDays = notJoined ? 0 : daysInclusive(start, monthEnd);
 
         const { data: existing } = await supabase
-          .from("salary_sheet").select("id").eq("employee_id", emp.id).eq("month", month).eq("year", year).maybeSingle();
+          .from("salary_sheet").select("id").eq("employee_id", emp.id).eq("month", m).eq("year", y).maybeSingle();
 
         const { data: att } = await supabase
           .from("attendance").select("status")
@@ -217,13 +222,13 @@ export default function SalarySheetGenerator({ employees }: { employees: Employe
       <form onSubmit={handlePreview} className="flex flex-wrap items-end gap-4">
         <div>
           <label className="block text-sm text-gray-600 mb-1">Month</label>
-          <select value={month} onChange={(e) => setMonth(parseInt(e.target.value))} className="rounded-lg border px-3 py-2 text-sm">
+          <select value={month} onChange={(e) => changePeriod(year, parseInt(e.target.value))} className="rounded-lg border px-3 py-2 text-sm">
             {monthNames.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
           </select>
         </div>
         <div>
           <label className="block text-sm text-gray-600 mb-1">Year</label>
-          <input type="number" value={year} onChange={(e) => setYear(parseInt(e.target.value))} className="rounded-lg border px-3 py-2 text-sm w-28" />
+          <input type="number" value={year} onChange={(e) => changePeriod(parseInt(e.target.value), month)} className="rounded-lg border px-3 py-2 text-sm w-28" />
         </div>
         <button type="submit" disabled={loading} className="rounded-lg bg-gray-700 px-5 py-2 text-sm text-white disabled:opacity-40">
           {loading ? "লোড হচ্ছে..." : "Preview / হিসাব দেখুন"}

@@ -1,9 +1,9 @@
 "use client";
-import { useState, useEffect, Fragment } from "react";
+import { useState, Fragment } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { generatePiNo } from "@/lib/docNumber";
-import { calcPiUnitPrice, calcPiUnitPriceBreakdown, calcPiUnitPriceWithMarkup, calcPiWeightLbs, calcTubeCutting, toInches, convertBreakdownToPrice } from "@/lib/calcTubeCutting";
+import { calcPiUnitPrice, calcPiUnitPriceBreakdown, calcPiUnitPriceWithMarkup, calcTubeCutting, toInches, convertBreakdownToPrice } from "@/lib/calcTubeCutting";
 import { resolveRate } from "@/lib/rateHistory";
 import { amountInWords } from "@/lib/numberToWords";
 import { getCurrentUserId } from "@/lib/currentUser";
@@ -107,7 +107,7 @@ export default function ProformaForm({
   const [styleFilter, setStyleFilter] = useState("");
   const today = new Date().toISOString().slice(0, 10);
   const [piDate, setPiDate] = useState(today);
-  const [validTill, setValidTill] = useState(addMonthsISO(today, 2));
+  const [validTillInput, setValidTill] = useState(addMonthsISO(today, 2));
   const [validTillTouched, setValidTillTouched] = useState(false);
   const [currency, setCurrency] = useState(c?.currency ?? "USD");
   const [exchangeRate, setExchangeRate] = useState(c?.exchangeRate ?? "107");
@@ -124,7 +124,7 @@ export default function ProformaForm({
   const [advisingBankBranch, setAdvisingBankBranch] = useState(c?.advisingBankBranch ?? "");
   const [advisingBankAddress, setAdvisingBankAddress] = useState(c?.advisingBankAddress ?? "");
   const [advisingBankSwift, setAdvisingBankSwift] = useState(c?.advisingBankSwift ?? "");
-  const [totalWeightKg, setTotalWeightKg] = useState("");
+  const [totalWeightInput, setTotalWeightKg] = useState("");
   const [weightTouched, setWeightTouched] = useState(false);
   const [hsCode, setHsCode] = useState(c?.hsCode ?? "3923.21.00");
   const [binNo, setBinNo] = useState(c?.binNo ?? "000113803-1201");
@@ -589,13 +589,10 @@ export default function ProformaForm({
     ? bookingLineItems.reduce((s, li) => s + lineWeightLbs(li.booking) / 2.2, 0)
     : manualLineItems.reduce((s, li) => s + li.weightLbs / 2.2, 0);
 
-  useEffect(() => {
-    if (!weightTouched && autoWeightKg > 0) setTotalWeightKg(String(Math.round(autoWeightKg)));
-  }, [autoWeightKg, weightTouched]);
-
-  useEffect(() => {
-    if (!validTillTouched) setValidTill(addMonthsISO(piDate, 2));
-  }, [piDate, validTillTouched]);
+  // হাতে না বদলালে Total Weight অটো (লাইনের ওজন থেকে), Valid Till = PI Date + ২ মাস —
+  // effect দিয়ে state-এ বসানোর বদলে সরাসরি derive
+  const totalWeightKg = !weightTouched && autoWeightKg > 0 ? String(Math.round(autoWeightKg)) : totalWeightInput;
+  const validTill = validTillTouched ? validTillInput : addMonthsISO(piDate, 2);
 
   const subtotal = mode === "booking"
     ? bookingLineItems.reduce((s, li) => s + li.amount, 0)

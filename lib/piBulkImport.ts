@@ -1,4 +1,5 @@
 import ExcelJS from "exceljs";
+import { prepareErpFolder, saveErpFile } from "@/lib/erpDownload";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { generatePiNo } from "./docNumber";
 import { recordPiMeasurementPrices } from "./measurementPrice";
@@ -63,17 +64,11 @@ export function buildPiImportTemplate(): ExcelJS.Workbook {
 }
 
 export async function downloadPiImportTemplate() {
+  const folder = await prepareErpFolder();
   const wb = buildPiImportTemplate();
   const buffer = await wb.xlsx.writeBuffer();
   const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = "PI-Bulk-Import-Template.xlsx";
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+  await saveErpFile(blob, "PI-Bulk-Import-Template.xlsx", folder);
 }
 
 export type ParsedPiItem = {

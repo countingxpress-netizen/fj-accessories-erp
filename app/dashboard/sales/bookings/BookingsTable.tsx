@@ -1,5 +1,5 @@
 "use client";
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { useBulkSelect } from "@/hooks/useBulkSelect";
@@ -9,14 +9,17 @@ import { useBulkDeletePermission } from "@/app/dashboard/PermissionProvider";
 import ListFilterBar from "@/components/ListFilterBar";
 import BookingRow from "./BookingRow";
 import BookingGroupSummaryRow from "./BookingGroupSummaryRow";
+import BookingPricingHover, { type BookingPricingHoverController } from "./BookingPricingHover";
+import type { BookingPricingSnapshot } from "@/lib/bookingEditContext";
 
 export default function BookingsTable({
-  groups: allGroups, deliveredMap, challanNosByBooking, piNoByBooking,
+  groups: allGroups, deliveredMap, challanNosByBooking, piNoByBooking, pricingByBooking,
 }: {
   groups: { groupId: string; items: any[] }[];
   deliveredMap: Record<string, number>;
   challanNosByBooking: Record<string, string[]>;
   piNoByBooking: Record<string, string>;
+  pricingByBooking: Record<string, BookingPricingSnapshot>;
 }) {
   const router = useRouter();
   const supabase = createClient();
@@ -88,6 +91,18 @@ export default function BookingsTable({
   }
 
   const allBookings = useMemo(() => groups.flatMap((g) => g.items), [groups]);
+
+  // রো-তে মাউস রাখলে Pricing System কার্ড — চেকবক্স আর Action সেলে (data-no-pricing-hover) দেখায় না
+  const pricingHover = useRef<BookingPricingHoverController | null>(null);
+  function rowHoverProps(list: any[]): React.HTMLAttributes<HTMLTableRowElement> {
+    return {
+      onMouseMove: (e) => {
+        if ((e.target as HTMLElement).closest("[data-no-pricing-hover]")) pricingHover.current?.hide();
+        else pricingHover.current?.show(list, e.clientX, e.clientY);
+      },
+      onMouseLeave: () => pricingHover.current?.hide(),
+    };
+  }
   const { partition, markFulfilled } = useBulkDeletePermission("bookings");
   const {
     selectedIds, selectedCount, isSelected, toggle, toggleMany, toggleAll, isAllSelected, isSomeSelected, clear,
@@ -177,6 +192,7 @@ export default function BookingsTable({
                     challanNos={challanNosByBooking[b.id] ?? []}
                     selected={isSelected(b.id)}
                     onToggleSelect={() => toggle(b.id)}
+                    rowHoverProps={rowHoverProps([b])}
                   />
                 );
               }
@@ -198,6 +214,7 @@ export default function BookingsTable({
                     allSelected={allSelected}
                     someSelected={someSelected}
                     onToggleSelectGroup={() => toggleMany(groupIds)}
+                    rowHoverProps={rowHoverProps(group.items)}
                   />
                   {expanded && group.items.map((b: any) => (
                     <BookingRow
@@ -209,6 +226,7 @@ export default function BookingsTable({
                       selected={isSelected(b.id)}
                       onToggleSelect={() => toggle(b.id)}
                       variant="detail"
+                      rowHoverProps={rowHoverProps([b])}
                     />
                   ))}
                 </React.Fragment>
@@ -222,6 +240,7 @@ export default function BookingsTable({
           </tbody>
         </table>
       </div>
+      <BookingPricingHover pricingByBooking={pricingByBooking} controllerRef={pricingHover} />
     </div>
   );
 }
